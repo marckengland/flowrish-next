@@ -192,6 +192,9 @@ export async function refreshTokenIfNeeded(
  * Replaces personalization tags in text with lead data.
  * Tags: {{FirstName}}, {{LastName}}, {{FullName}}, {{CompanyName}}, {{Title}}
  *
+ * Uses split/join instead of replaceAll to avoid special replacement patterns
+ * ($&, $`, $', $<n>) being interpreted in lead field values.
+ *
  * Validates: Requirements 7.2
  */
 export function replacePersonalizationTags(
@@ -200,7 +203,7 @@ export function replacePersonalizationTags(
 ): string {
   let result = text
   for (const [tag, accessor] of Object.entries(PERSONALIZATION_TAGS)) {
-    result = result.replaceAll(tag, accessor(lead))
+    result = result.split(tag).join(accessor(lead))
   }
   return result
 }
