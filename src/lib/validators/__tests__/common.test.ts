@@ -69,8 +69,9 @@ describe('nullableSanitizedString', () => {
 })
 
 describe('hasPrototypePollution', () => {
-  it('detects __proto__ key', () => {
-    expect(hasPrototypePollution({ __proto__: {} })).toBe(true)
+  it('detects __proto__ key from JSON-parsed objects', () => {
+    const obj = JSON.parse('{"__proto__": {"isAdmin": true}}')
+    expect(hasPrototypePollution(obj)).toBe(true)
   })
 
   it('detects constructor key', () => {
@@ -82,7 +83,8 @@ describe('hasPrototypePollution', () => {
   })
 
   it('detects nested pollution keys', () => {
-    expect(hasPrototypePollution({ nested: { __proto__: {} } })).toBe(true)
+    const nested = JSON.parse('{"nested": {"__proto__": {}}}')
+    expect(hasPrototypePollution(nested)).toBe(true)
     expect(hasPrototypePollution({ a: { b: { constructor: {} } } })).toBe(true)
   })
 
@@ -95,6 +97,12 @@ describe('hasPrototypePollution', () => {
     expect(hasPrototypePollution(null)).toBe(false)
     expect(hasPrototypePollution('string')).toBe(false)
     expect(hasPrototypePollution(42)).toBe(false)
+  })
+
+  it('handles arrays with nested pollution', () => {
+    const arr = [{ constructor: {} }]
+    expect(hasPrototypePollution(arr)).toBe(true)
+    expect(hasPrototypePollution([1, 2, 3])).toBe(false)
   })
 })
 

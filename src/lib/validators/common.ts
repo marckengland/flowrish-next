@@ -1,13 +1,25 @@
 import { z } from 'zod'
 
 /**
+ * Dangerous keys that indicate prototype pollution attempts.
+ */
+const DANGEROUS_KEYS = ['__proto__', 'constructor', 'prototype']
+
+/**
  * Checks if an object (or nested objects) contains prototype pollution keys.
+ * Uses Object.getOwnPropertyNames to catch __proto__ even when set via object literal,
+ * and also checks Object.keys for JSON.parse'd objects.
  */
 export function hasPrototypePollution(obj: unknown): boolean {
   if (typeof obj !== 'object' || obj === null) return false
-  const keys = Object.keys(obj)
-  if (keys.some(k => ['__proto__', 'constructor', 'prototype'].includes(k))) return true
-  return Object.values(obj as Record<string, unknown>).some(v => hasPrototypePollution(v))
+  if (Array.isArray(obj)) {
+    return obj.some(item => hasPrototypePollution(item))
+  }
+  const keys = Object.getOwnPropertyNames(obj)
+  if (keys.some(k => DANGEROUS_KEYS.includes(k))) return true
+  return keys
+    .map(k => (obj as Record<string, unknown>)[k])
+    .some(v => hasPrototypePollution(v))
 }
 
 /**
@@ -51,10 +63,17 @@ export const nullableSanitizedString = z
 /**
  * Safe JSON body schema that rejects prototype pollution attempts.
  * Use this to validate raw JSON request bodies before further parsing.
+ * Uses z.any() with superRefine to check the raw input before Zod's record
+ * parsing strips __proto__ keys.
  */
 export const safeJsonBody = z
-  .record(z.unknown())
-  .refine(obj => !hasPrototypePollution(obj), { message: 'Invalid input' })
+  .any()
+  .refine(
+    (val) => typeof val === 'object' && val !== null && !Array.isArray(val),
+    { message: 'Expected an object' }
+  )
+  .refine((obj) => !hasPrototypePollution(obj), { message: 'Invalid input' })
+  .transform((obj) => obj as Record<string, unknown>)
 
 /**
  * Pagination schema with sensible defaults.

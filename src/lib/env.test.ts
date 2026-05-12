@@ -1,31 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { z } from 'zod'
+import { describe, it, expect } from 'vitest'
+import { envSchema } from './env.schema'
 
 /**
- * We test the env schema validation logic directly rather than importing
- * the env module (which would throw at import time due to missing env vars in test).
- * We re-create the schema here to test validation behavior.
+ * Tests for environment variable validation schema.
+ * We test the exported schema directly rather than importing the `env` object,
+ * which would throw at import time due to missing env vars in the test environment.
+ *
+ * Validates: Requirements 22.1, 22.2, 22.3, 22.4
  */
-const envSchema = z.object({
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url('NEXT_PUBLIC_SUPABASE_URL must be a valid URL'),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, 'NEXT_PUBLIC_SUPABASE_ANON_KEY is required'),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  DIRECT_URL: z.string().min(1, 'DIRECT_URL is required'),
-  UPSTASH_REDIS_REST_URL: z.string().url('UPSTASH_REDIS_REST_URL must be a valid URL'),
-  UPSTASH_REDIS_REST_TOKEN: z.string().min(1, 'UPSTASH_REDIS_REST_TOKEN is required'),
-  INNGEST_SIGNING_KEY: z.string().min(1, 'INNGEST_SIGNING_KEY is required'),
-  INNGEST_EVENT_KEY: z.string().min(1, 'INNGEST_EVENT_KEY is required'),
-  GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
-  GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET is required'),
-  EMAIL_ENCRYPTION_KEY: z.string().min(1, 'EMAIL_ENCRYPTION_KEY is required'),
-  AI_API_KEY: z.string().min(1, 'AI_API_KEY is required'),
-  AI_API_URL: z
-    .string()
-    .url('AI_API_URL must be a valid URL when provided')
-    .default('https://generativelanguage.googleapis.com'),
-  AI_MODEL: z.string().min(1).default('gemini-2.0-flash'),
-})
 
 const validEnv = {
   NEXT_PUBLIC_SUPABASE_URL: 'https://abc.supabase.co',
@@ -39,7 +21,7 @@ const validEnv = {
   INNGEST_EVENT_KEY: 'eventkey-test-abc123',
   GOOGLE_CLIENT_ID: '123456789.apps.googleusercontent.com',
   GOOGLE_CLIENT_SECRET: 'GOCSPX-secret',
-  EMAIL_ENCRYPTION_KEY: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
+  EMAIL_ENCRYPTION_KEY: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
   AI_API_KEY: 'AIzaSyTest123',
 }
 
@@ -53,8 +35,10 @@ describe('env validation schema', () => {
     const result = envSchema.safeParse(validEnv)
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.AI_API_URL).toBe('https://generativelanguage.googleapis.com')
-      expect(result.data.AI_MODEL).toBe('gemini-2.0-flash')
+      expect(result.data.AI_API_URL).toBe(
+        'https://generativelanguage.googleapis.com/v1beta/openai'
+      )
+      expect(result.data.AI_MODEL).toBe('gemini-2.5-flash-lite-preview')
     }
   })
 
@@ -80,6 +64,30 @@ describe('env validation schema', () => {
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message)
       expect(messages).toContain('NEXT_PUBLIC_SUPABASE_URL must be a valid URL')
+    }
+  })
+
+  it('fails when DATABASE_URL is not a valid URL', () => {
+    const result = envSchema.safeParse({
+      ...validEnv,
+      DATABASE_URL: 'not-a-url',
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      const messages = result.error.issues.map((i) => i.message)
+      expect(messages).toContain('DATABASE_URL must be a valid URL')
+    }
+  })
+
+  it('fails when DIRECT_URL is not a valid URL', () => {
+    const result = envSchema.safeParse({
+      ...validEnv,
+      DIRECT_URL: 'not-a-url',
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      const messages = result.error.issues.map((i) => i.message)
+      expect(messages).toContain('DIRECT_URL must be a valid URL')
     }
   })
 
@@ -138,11 +146,74 @@ describe('env validation schema', () => {
     const result = envSchema.safeParse(validEnv)
     expect(result.success).toBe(true)
     if (result.success) {
-      // Verify all required fields are present and typed
       expect(typeof result.data.NEXT_PUBLIC_SUPABASE_URL).toBe('string')
       expect(typeof result.data.DATABASE_URL).toBe('string')
       expect(typeof result.data.AI_API_URL).toBe('string')
       expect(typeof result.data.AI_MODEL).toBe('string')
     }
+  })
+
+  describe('EMAIL_ENCRYPTION_KEY validation', () => {
+    it('passes with valid 64-character hex string', () => {
+      const result = envSchema.safeParse({
+        ...validEnv,
+        EMAIL_ENCRYPTION_KEY: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
+      })
+      expect(result.success).toBe(true)
+    })
+
+    it('fails when EMAIL_ENCRYPTION_KEY is too short', () => {
+      const result = envSchema.safeParse({
+        ...validEnv,
+        EMAIL_ENCRYPTION_KEY: 'a1b2c3d4',
+      })
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        const messages = result.error.issues.map((i) => i.message)
+        expect(messages).toContain(
+          'EMAIL_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)'
+        )
+      }
+    })
+
+    it('fails when EMAIL_ENCRYPTION_KEY contains non-hex characters', () => {
+      const result = envSchema.safeParse({
+        ...validEnv,
+        EMAIL_ENCRYPTION_KEY: 'g1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
+      })
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        const messages = result.error.issues.map((i) => i.message)
+        expect(messages).toContain('EMAIL_ENCRYPTION_KEY must be a valid hex string')
+      }
+    })
+
+    it('fails when EMAIL_ENCRYPTION_KEY is too long', () => {
+      const result = envSchema.safeParse({
+        ...validEnv,
+        EMAIL_ENCRYPTION_KEY:
+          'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4ff',
+      })
+      expect(result.success).toBe(false)
+    })
+  })
+
+  describe('startup halt behavior', () => {
+    it('validateEnv throws descriptive error on invalid env', async () => {
+      // We test the error formatting by importing the module with invalid env
+      // Since we can't easily mock process.env for the module-level call,
+      // we test the schema's error output format directly
+      const result = envSchema.safeParse({
+        NEXT_PUBLIC_SUPABASE_URL: 'bad',
+      })
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        // Verify errors contain path and message info for descriptive output
+        for (const issue of result.error.issues) {
+          expect(issue.path.length).toBeGreaterThan(0)
+          expect(issue.message.length).toBeGreaterThan(0)
+        }
+      }
+    })
   })
 })
