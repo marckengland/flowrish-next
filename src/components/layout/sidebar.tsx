@@ -15,6 +15,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ShieldCheck,
+  TrendingUp,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -62,6 +63,12 @@ const NAV_ITEMS: readonly NavItem[] = [
     label: 'Cadences',
     icon: Zap,
     permissions: ['cadences:read', 'cadences:manage'],
+  },
+  {
+    href: '/forecast',
+    label: 'Forecast',
+    icon: TrendingUp,
+    permissions: ['forecast:read'],
   },
   {
     href: '/csv',
