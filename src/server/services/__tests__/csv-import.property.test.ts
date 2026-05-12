@@ -23,6 +23,7 @@ const mockDb = {
     create: vi.fn(),
   },
   lead: {
+    findFirst: vi.fn(),
     create: vi.fn(),
   },
   contact: {
@@ -167,6 +168,9 @@ const invalidRowArb = fc.oneof(
 function setupHappyPathMocks() {
   vi.clearAllMocks()
 
+  // No duplicates by default — any generated row is treated as fresh.
+  mockDb.lead.findFirst.mockResolvedValue(null)
+
   mockDb.company.findFirst.mockResolvedValue(null)
   mockDb.company.create.mockImplementation(({ data }: any) =>
     Promise.resolve({ id: `company-${Math.random()}`, name: data.name }),
@@ -199,6 +203,7 @@ describe('CSV Import Service - Property Tests', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockDb.lead.findFirst.mockResolvedValue(null)
   })
 
   describe('Property: successCount + skipCount always equals totalRows', () => {

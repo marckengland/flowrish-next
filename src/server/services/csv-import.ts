@@ -2,15 +2,18 @@ import { createTenantPrisma } from '@/server/db/middleware'
 import { prisma } from '@/server/db/client'
 import { AppError } from '@/lib/errors'
 import { getOrCreateDefaultPipeline, createStageTransition } from '@/server/services/pipeline'
+import { logAudit } from '@/server/services/audit'
 import { z } from 'zod'
 
 /**
  * CSV Import Service
  *
- * Handles parsing CSV content, validating rows, creating companies/leads/contacts,
- * and logging audit entries for each imported lead.
+ * Handles parsing CSV content, validating rows, detecting duplicates,
+ * creating companies/leads/contacts, and logging audit entries for each
+ * imported lead. Also provides preview generation and persistent
+ * field-mapping management so mappings can be reused across imports.
  *
- * Validates: Requirements 11.1, 11.2, 11.3, 11.4, 11.5
+ * Validates: Requirements 11.1, 11.2, 11.3, 11.4, 11.5, 27.7
  */
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -35,6 +38,46 @@ export interface ImportResult {
   skipCount: number
   totalRows: number
   errors: ImportError[]
+}
+
+/**
+ * A single row's preview entry produced by `previewImport`.
+ *
+ * - `valid` indicates whether the mapped row would pass Zod validation.
+ * - `mapped` contains the field→value pairs the row would produce.
+ * - `error` is set when `valid === false` and carries the first failure
+ *   reason. This mirrors the reason that would end up in
+ *   `ImportResult.errors` if the row were actually imported.
+ */
+export interface ImportPreviewRow {
+  rowNumber: number
+  mapped: Record<string, string>
+  valid: boolean
+  error?: string
+}
+
+/**
+ * Preview returned to the UI before a real import is executed. Shows
+ * roughly what the first rows will look like under the current mapping
+ * so the user can confirm the column alignment.
+ */
+export interface ImportPreview {
+  headers: string[]
+  totalRows: number
+  previewRows: ImportPreviewRow[]
+  validCount: number
+  invalidCount: number
+}
+
+/**
+ * Persisted field mapping record shape returned by `getFieldMappings`.
+ */
+export interface SavedFieldMapping {
+  id: string
+  name: string
+  mapping: FieldMapping
+  createdById: string
+  createdAt: Date
 }
 
 /**
@@ -320,6 +363,61 @@ export async function importLeads(
         dealValue = parsed
       }
 
+      // Per-row duplicate detection: skip rows that would create a lead
+      // duplicating an existing active lead in the same organization.
+      //
+      // Match strategy:
+      //   1. If email is provided, an active lead with the same email
+      //      (case-insensitive) is a duplicate.
+      //   2. Otherwise, fall back to firstName + lastName + companyName
+      //      (all case-insensitive) to catch duplicates for leads without
+      //      an email.
+      //
+      // Soft-deleted leads (`deletedAt: not null`) are excluded — a
+      // previously deleted lead should not block a re-import.
+      const email = data.email?.trim()
+      const dupFirstName = data.firstName.trim()
+      const dupLastName = data.lastName.trim()
+      const dupCompanyName = data.companyName?.trim() || null
+
+      let existingLead: { id: string } | null = null
+      if (email && email.length > 0) {
+        existingLead = await db.lead.findFirst({
+          where: {
+            email: { equals: email, mode: 'insensitive' as any },
+            deletedAt: null,
+          } as any,
+          select: { id: true },
+        })
+      }
+      if (!existingLead) {
+        existingLead = await db.lead.findFirst({
+          where: {
+            firstName: { equals: dupFirstName, mode: 'insensitive' as any },
+            lastName: { equals: dupLastName, mode: 'insensitive' as any },
+            ...(dupCompanyName
+              ? {
+                  companyName: {
+                    equals: dupCompanyName,
+                    mode: 'insensitive' as any,
+                  },
+                }
+              : {}),
+            deletedAt: null,
+          } as any,
+          select: { id: true },
+        })
+      }
+      if (existingLead) {
+        errors.push({
+          row: rowNumber,
+          message: email
+            ? `Duplicate lead (email "${email}" already exists)`
+            : 'Duplicate lead (firstName + lastName + company already exists)',
+        })
+        continue
+      }
+
       // Create company if companyName is provided
       let companyId: string | null = null
       const companyName = data.companyName?.trim() || null
@@ -397,20 +495,8 @@ export async function importLeads(
         })
       }
 
-      // Log audit entry for the imported lead
-      try {
-        await db.auditEntry.create({
-          data: {
-            userId,
-            action: 'CREATE',
-            entityType: 'Lead',
-            entityId: lead.id,
-            changes: null,
-          } as any,
-        })
-      } catch {
-        // Audit failure should not block import
-      }
+      // Log audit entry for the imported lead (non-blocking, swallows errors)
+      await logAudit('IMPORT', 'Lead', lead.id, userId, orgId)
 
       successCount++
     } catch (error) {
@@ -429,4 +515,224 @@ export async function importLeads(
     totalRows,
     errors,
   }
+}
+
+// ─── Preview ─────────────────────────────────────────────────────────────────
+
+/**
+ * Maximum number of data rows returned in a preview. The full row count is
+ * still reported in `totalRows`, but only the first N rows are mapped and
+ * validated to keep the preview lightweight.
+ */
+export const IMPORT_PREVIEW_ROW_LIMIT = 5
+
+/**
+ * Generates a lightweight preview of what an import would produce under a
+ * given field mapping.
+ *
+ * The preview maps and validates the first `IMPORT_PREVIEW_ROW_LIMIT` rows
+ * of the CSV (5 by default) and returns a row-by-row breakdown the UI can
+ * show to the user before they commit to running the real import. The
+ * import itself is not executed — no leads, companies, contacts, or audit
+ * entries are created.
+ *
+ * `totalRows` reflects the full CSV, not just the previewed slice, so the
+ * caller can show things like "showing 5 of 120 rows".
+ *
+ * @param csvContent Raw CSV text (headers + data rows).
+ * @param mapping    CSV-header-to-system-field mapping.
+ * @returns          Preview rows with per-row validation status, plus
+ *                   aggregate valid/invalid counts across the previewed
+ *                   slice.
+ * @throws AppError  If the CSV is empty or malformed (propagated from
+ *                   `parseCSV`).
+ */
+export function previewImport(
+  csvContent: string,
+  mapping: FieldMapping,
+): ImportPreview {
+  const parsed = parseCSV(csvContent)
+  const slice = parsed.rows.slice(0, IMPORT_PREVIEW_ROW_LIMIT)
+
+  const previewRows: ImportPreviewRow[] = slice.map((row, index) => {
+    const mapped = mapRowToFields(row, parsed.headers, mapping)
+    const validation = csvRowSchema.safeParse(mapped)
+
+    if (!validation.success) {
+      const firstError = validation.error.errors[0]
+      return {
+        rowNumber: index + 2, // header is row 1, first data row is row 2
+        mapped,
+        valid: false,
+        error: firstError?.message ?? 'Validation failed',
+      }
+    }
+
+    // Mirror the extra required-field checks from `importLeads` so the
+    // preview matches what the real import would reject.
+    const data = validation.data
+    if (!data.firstName || data.firstName.trim().length === 0) {
+      return {
+        rowNumber: index + 2,
+        mapped,
+        valid: false,
+        error: 'First name is required',
+      }
+    }
+    if (!data.lastName || data.lastName.trim().length === 0) {
+      return {
+        rowNumber: index + 2,
+        mapped,
+        valid: false,
+        error: 'Last name is required',
+      }
+    }
+
+    return {
+      rowNumber: index + 2,
+      mapped,
+      valid: true,
+    }
+  })
+
+  const validCount = previewRows.filter((r) => r.valid).length
+  const invalidCount = previewRows.length - validCount
+
+  return {
+    headers: parsed.headers,
+    totalRows: parsed.totalRows,
+    previewRows,
+    validCount,
+    invalidCount,
+  }
+}
+
+// ─── Saved Field Mappings ────────────────────────────────────────────────────
+
+/**
+ * Schema for the mapping object persisted with `saveFieldMapping`.
+ *
+ * We only require that every mapped system field be a known
+ * `ImportableField`. The CSV header key is free-form (matches whatever
+ * the user's source file contains).
+ */
+const fieldMappingSchema = z
+  .record(
+    z.string().min(1, 'CSV header must be non-empty'),
+    z.enum(IMPORTABLE_FIELDS as unknown as [ImportableField, ...ImportableField[]]),
+  )
+  .refine((m) => Object.keys(m).length > 0, {
+    message: 'Mapping must contain at least one column',
+  })
+
+/**
+ * Persists a reusable field mapping so the same CSV column layout can be
+ * imported later without re-specifying the column-to-field mapping.
+ *
+ * The mapping is stored against the calling user's organization. The
+ * user identified by `userId` is recorded as the creator (`createdById`).
+ *
+ * @param name     Human-readable label for the mapping (e.g. "Salesforce
+ *                 export"). Must be non-empty and unique-ish (no uniqueness
+ *                 constraint is enforced at the DB level, so callers can
+ *                 freely re-save to the same name).
+ * @param mapping  CSV-header-to-system-field mapping. Every value must be
+ *                 a known `ImportableField`.
+ * @param userId   Creator user ID.
+ * @param orgId    Organization scope for the saved mapping.
+ * @returns        The persisted mapping record.
+ * @throws AppError on validation failure.
+ *
+ * Validates: Requirements 27.7
+ */
+export async function saveFieldMapping(
+  name: string,
+  mapping: unknown,
+  userId: string,
+  orgId: string,
+): Promise<SavedFieldMapping> {
+  if (!userId) {
+    throw new AppError('VALIDATION_ERROR', 'User ID is required', 400)
+  }
+  if (!orgId) {
+    throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
+  }
+
+  const trimmedName = typeof name === 'string' ? name.trim() : ''
+  if (trimmedName.length === 0) {
+    throw new AppError(
+      'VALIDATION_ERROR',
+      'Field mapping name is required',
+      400,
+    )
+  }
+  if (trimmedName.length > 200) {
+    throw new AppError(
+      'VALIDATION_ERROR',
+      'Field mapping name must be 200 characters or fewer',
+      400,
+    )
+  }
+
+  const validation = fieldMappingSchema.safeParse(mapping)
+  if (!validation.success) {
+    const firstError = validation.error.errors[0]
+    throw new AppError(
+      'VALIDATION_ERROR',
+      firstError?.message ?? 'Invalid field mapping',
+      400,
+    )
+  }
+
+  const db = createTenantPrisma(orgId)
+  const created = await db.fieldMapping.create({
+    data: {
+      name: trimmedName,
+      mapping: validation.data as Record<string, string>,
+      createdById: userId,
+    } as never,
+  })
+
+  return {
+    id: (created as { id: string }).id,
+    name: (created as { name: string }).name,
+    mapping: (created as { mapping: FieldMapping }).mapping,
+    createdById: (created as { createdById: string }).createdById,
+    createdAt: (created as { createdAt: Date }).createdAt,
+  }
+}
+
+/**
+ * Lists all saved field mappings for an organization, newest first.
+ *
+ * Mappings are scoped to the organization via the tenant-injected
+ * Prisma client so no cross-tenant leakage is possible.
+ *
+ * Validates: Requirements 27.7
+ */
+export async function getFieldMappings(
+  orgId: string,
+): Promise<SavedFieldMapping[]> {
+  if (!orgId) {
+    throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
+  }
+
+  const db = createTenantPrisma(orgId)
+  const mappings = await db.fieldMapping.findMany({
+    orderBy: { createdAt: 'desc' },
+  })
+
+  return (mappings as Array<{
+    id: string
+    name: string
+    mapping: FieldMapping
+    createdById: string
+    createdAt: Date
+  }>).map((m) => ({
+    id: m.id,
+    name: m.name,
+    mapping: m.mapping,
+    createdById: m.createdById,
+    createdAt: m.createdAt,
+  }))
 }

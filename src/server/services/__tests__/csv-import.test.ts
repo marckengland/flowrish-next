@@ -23,6 +23,7 @@ const mockDb = {
     create: vi.fn(),
   },
   lead: {
+    findFirst: vi.fn(),
     create: vi.fn(),
   },
   contact: {
@@ -33,6 +34,10 @@ const mockDb = {
   },
   stageTransition: {
     create: vi.fn(),
+  },
+  fieldMapping: {
+    create: vi.fn(),
+    findMany: vi.fn(),
   },
 }
 
@@ -71,7 +76,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServer: vi.fn(),
 }))
 
-import { parseCSV, importLeads } from '@/server/services/csv-import'
+import { parseCSV, importLeads, previewImport, saveFieldMapping, getFieldMappings } from '@/server/services/csv-import'
 import { prisma } from '@/server/db/client'
 
 const mockPrisma = vi.mocked(prisma)
@@ -84,6 +89,9 @@ describe('CSV Import Service', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // By default, duplicate detection returns no match — tests opt in when
+    // they want to simulate a duplicate.
+    mockDb.lead.findFirst.mockResolvedValue(null)
   })
 
   describe('parseCSV', () => {
@@ -258,7 +266,7 @@ describe('CSV Import Service', () => {
       expect(mockDb.auditEntry.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           userId,
-          action: 'CREATE',
+          action: 'IMPORT',
           entityType: 'Lead',
           entityId: 'lead-1',
         }),
@@ -331,6 +339,252 @@ describe('CSV Import Service', () => {
       ).rejects.toMatchObject({
         code: 'VALIDATION_ERROR',
         statusCode: 400,
+      })
+    })
+
+    it('skips rows that duplicate an existing lead by email (case-insensitive)', async () => {
+      const rows = [
+        ['John', 'Doe', 'existing@example.com', ''],
+        ['Jane', 'Smith', 'fresh@example.com', ''],
+      ]
+
+      // First row's email matches an active lead; second row does not.
+      mockDb.lead.findFirst
+        .mockResolvedValueOnce({ id: 'existing-lead' })
+        .mockResolvedValueOnce(null)
+
+      mockDb.lead.create.mockResolvedValue({ id: 'lead-jane' })
+      mockDb.contact.create.mockResolvedValue({ id: 'contact-1' })
+      mockDb.auditEntry.create.mockResolvedValue({})
+      mockPrisma.leadContact.create.mockResolvedValue({})
+
+      const result = await importLeads(rows, headers, mapping, userId, orgId)
+
+      expect(result.successCount).toBe(1)
+      expect(result.skipCount).toBe(1)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0].message).toContain('Duplicate lead')
+      expect(result.errors[0].message).toContain('existing@example.com')
+      // Only the non-duplicate row actually created a lead.
+      expect(mockDb.lead.create).toHaveBeenCalledTimes(1)
+    })
+
+    it('falls back to name + company dedup when no email is provided', async () => {
+      const rows = [
+        ['John', 'Doe', '', 'Acme Corp'],
+      ]
+
+      // No email lookup runs because email is empty, so findFirst is only
+      // called once for the name+company fallback path.
+      mockDb.lead.findFirst.mockResolvedValueOnce({ id: 'existing-namebased' })
+
+      const result = await importLeads(rows, headers, mapping, userId, orgId)
+
+      expect(result.successCount).toBe(0)
+      expect(result.skipCount).toBe(1)
+      expect(result.errors[0].message).toContain('firstName + lastName + company')
+      expect(mockDb.lead.create).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('previewImport', () => {
+    const mapping = {
+      'First Name': 'firstName',
+      'Last Name': 'lastName',
+      'Email': 'email',
+    }
+
+    it('returns mapped rows and full totalRows', () => {
+      const csv = [
+        'First Name,Last Name,Email',
+        'John,Doe,john@example.com',
+        'Jane,Smith,jane@example.com',
+      ].join('\n')
+
+      const preview = previewImport(csv, mapping)
+
+      expect(preview.headers).toEqual(['First Name', 'Last Name', 'Email'])
+      expect(preview.totalRows).toBe(2)
+      expect(preview.previewRows).toHaveLength(2)
+      expect(preview.previewRows[0]).toMatchObject({
+        rowNumber: 2,
+        valid: true,
+        mapped: {
+          firstName: 'John',
+          lastName: 'Doe',
+          email: 'john@example.com',
+        },
+      })
+      expect(preview.validCount).toBe(2)
+      expect(preview.invalidCount).toBe(0)
+    })
+
+    it('caps preview rows at 5 while reporting full totalRows', () => {
+      const lines = ['First Name,Last Name,Email']
+      for (let i = 0; i < 12; i++) {
+        lines.push(`First${i},Last${i},user${i}@example.com`)
+      }
+      const preview = previewImport(lines.join('\n'), mapping)
+
+      expect(preview.totalRows).toBe(12)
+      expect(preview.previewRows).toHaveLength(5)
+    })
+
+    it('marks invalid rows and reports the failure reason', () => {
+      const csv = [
+        'First Name,Last Name,Email',
+        ',Doe,john@example.com',
+        'Jane,Smith,not-an-email',
+      ].join('\n')
+
+      const preview = previewImport(csv, mapping)
+
+      expect(preview.validCount).toBe(0)
+      expect(preview.invalidCount).toBe(2)
+      expect(preview.previewRows[0]).toMatchObject({
+        valid: false,
+        error: expect.stringContaining('First name'),
+      })
+      expect(preview.previewRows[1]).toMatchObject({
+        valid: false,
+        error: expect.stringContaining('email'),
+      })
+    })
+
+    it('throws when csv content is empty', () => {
+      expect(() => previewImport('', mapping)).toThrow(/empty/i)
+    })
+  })
+
+  describe('saveFieldMapping', () => {
+    const validMapping = {
+      'First Name': 'firstName',
+      'Last Name': 'lastName',
+    }
+
+    it('persists a valid mapping and returns the created record', async () => {
+      const now = new Date('2026-05-13T12:00:00Z')
+      mockDb.fieldMapping.create.mockResolvedValue({
+        id: 'mapping-1',
+        name: 'My Salesforce export',
+        mapping: validMapping,
+        createdById: userId,
+        createdAt: now,
+      })
+
+      const result = await saveFieldMapping(
+        '  My Salesforce export  ',
+        validMapping,
+        userId,
+        orgId,
+      )
+
+      expect(mockDb.fieldMapping.create).toHaveBeenCalledWith({
+        data: {
+          name: 'My Salesforce export',
+          mapping: validMapping,
+          createdById: userId,
+        },
+      })
+      expect(result).toEqual({
+        id: 'mapping-1',
+        name: 'My Salesforce export',
+        mapping: validMapping,
+        createdById: userId,
+        createdAt: now,
+      })
+    })
+
+    it('rejects missing name', async () => {
+      await expect(
+        saveFieldMapping('   ', validMapping, userId, orgId),
+      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+
+      expect(mockDb.fieldMapping.create).not.toHaveBeenCalled()
+    })
+
+    it('rejects a mapping with an unknown system field', async () => {
+      await expect(
+        saveFieldMapping(
+          'Bad mapping',
+          { Foo: 'notARealField' },
+          userId,
+          orgId,
+        ),
+      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+
+      expect(mockDb.fieldMapping.create).not.toHaveBeenCalled()
+    })
+
+    it('rejects an empty mapping object', async () => {
+      await expect(
+        saveFieldMapping('Empty', {}, userId, orgId),
+      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+    })
+
+    it('throws when userId or orgId is missing', async () => {
+      await expect(
+        saveFieldMapping('x', validMapping, '', orgId),
+      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+      await expect(
+        saveFieldMapping('x', validMapping, userId, ''),
+      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+    })
+  })
+
+  describe('getFieldMappings', () => {
+    it('returns stored mappings ordered by createdAt desc', async () => {
+      const newer = new Date('2026-05-13T12:00:00Z')
+      const older = new Date('2026-05-12T12:00:00Z')
+      mockDb.fieldMapping.findMany.mockResolvedValue([
+        {
+          id: 'm-1',
+          name: 'Newer',
+          mapping: { A: 'firstName' },
+          createdById: userId,
+          createdAt: newer,
+        },
+        {
+          id: 'm-2',
+          name: 'Older',
+          mapping: { B: 'lastName' },
+          createdById: userId,
+          createdAt: older,
+        },
+      ])
+
+      const result = await getFieldMappings(orgId)
+
+      expect(mockDb.fieldMapping.findMany).toHaveBeenCalledWith({
+        orderBy: { createdAt: 'desc' },
+      })
+      expect(result).toEqual([
+        {
+          id: 'm-1',
+          name: 'Newer',
+          mapping: { A: 'firstName' },
+          createdById: userId,
+          createdAt: newer,
+        },
+        {
+          id: 'm-2',
+          name: 'Older',
+          mapping: { B: 'lastName' },
+          createdById: userId,
+          createdAt: older,
+        },
+      ])
+    })
+
+    it('returns an empty array when no mappings exist', async () => {
+      mockDb.fieldMapping.findMany.mockResolvedValue([])
+      const result = await getFieldMappings(orgId)
+      expect(result).toEqual([])
+    })
+
+    it('throws when orgId is missing', async () => {
+      await expect(getFieldMappings('')).rejects.toMatchObject({
+        code: 'VALIDATION_ERROR',
       })
     })
   })
