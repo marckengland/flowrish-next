@@ -1,0 +1,47 @@
+import type { ReactNode } from 'react'
+
+import { Header, type HeaderUser } from '@/components/layout/header'
+import { Sidebar } from '@/components/layout/sidebar'
+import type { Permission } from '@/types/permissions'
+
+export interface ShellProps {
+  /** Current authenticated user summary shown in the header. */
+  user: HeaderUser
+  /** Effective permissions used to filter sidebar items. */
+  permissions: readonly Permission[]
+  /** Organization display name shown in the sidebar brand area and header. */
+  organizationName?: string
+  children: ReactNode
+}
+
+/**
+ * Main dashboard shell: sidebar (primary navigation) on the left, header
+ * (user menu + chat toggle) on the top, and a scrollable content region
+ * for page children.
+ *
+ * The shell composes the Zustand-driven interactive pieces (`Sidebar`,
+ * `Header`) around server-rendered page content. It is itself a Server
+ * Component — no `'use client'` directive — because it only forwards
+ * already-resolved props and never reaches into browser APIs.
+ *
+ * Validates: Requirements 3.7, 26.4, 26.5
+ */
+export function Shell({
+  user,
+  permissions,
+  organizationName,
+  children,
+}: ShellProps): React.JSX.Element {
+  return (
+    <div className="flex h-screen overflow-hidden bg-background">
+      <Sidebar
+        permissions={permissions}
+        organizationName={organizationName}
+      />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <Header user={user} organizationName={organizationName} />
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+      </div>
+    </div>
+  )
+}
