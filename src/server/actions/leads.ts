@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
-import { createLead as createLeadService, updateLead as updateLeadService, softDeleteLead } from '@/server/services/leads'
+import { createLead as createLeadService, updateLead as updateLeadService, softDeleteLead, convertToContact as convertToContactService } from '@/server/services/leads'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { ZodError } from 'zod'
 
@@ -157,6 +157,57 @@ export async function deleteLead(id: string) {
       return { error: appErr.message }
     }
     return { error: 'Failed to delete lead. Please try again.' }
+  }
+}
+
+/**
+ * Converts a lead into a contact.
+ *
+ * - Creates a Contact record from the lead's personal data
+ * - Moves the lead to the "Closed Won" stage (isClosed=true, closeDate=now)
+ * - Links the contact to the lead via LeadContact
+ * - Exits all active cadence enrollments with reason "lead_converted"
+ *
+ * Validates: Requirements 29.1, 29.2, 29.3, 29.4, 29.5
+ */
+export async function convertLead(id: string) {
+  const session = await requireSession()
+  requirePermission(session.dbUser, 'leads:write')
+
+  if (!id) {
+    return { error: 'Lead ID is required' }
+  }
+
+  try {
+    const result = await convertToContactService(
+      id,
+      session.dbUser.id,
+      session.organizationId,
+    )
+
+    // Audit log: async, non-blocking
+    const db = createTenantPrisma(session.organizationId)
+    db.auditEntry.create({
+      data: {
+        userId: session.dbUser.id,
+        action: 'CONVERT',
+        entityType: 'Lead',
+        entityId: id,
+      } as any,
+    }).catch((err) => {
+      console.error('Audit log failed (convertLead):', err)
+    })
+
+    revalidatePath(`/leads/${id}`)
+    revalidatePath('/leads')
+    revalidatePath('/contacts')
+    return { data: result }
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'statusCode' in err) {
+      const appErr = err as { message: string; statusCode: number }
+      return { error: appErr.message }
+    }
+    return { error: 'Failed to convert lead. Please try again.' }
   }
 }
 
