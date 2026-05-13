@@ -1,0 +1,33 @@
+{
+  "buildCommand": "prisma generate && next build",
+  "installCommand": "npm ci",
+  "framework": "nextjs",
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "@next-public-supabase-url",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@next-public-supabase-anon-key",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase-service-role-key",
+    "DATABASE_URL": "@database-url",
+    "DIRECT_URL": "@direct-url",
+    "UPSTASH_REDIS_REST_URL": "@upstash-redis-rest-url",
+    "UPSTASH_REDIS_REST_TOKEN": "@upstash-redis-rest-token",
+    "INNGEST_SIGNING_KEY": "@inngest-signing-key",
+    "INNGEST_EVENT_KEY": "@inngest-event-key",
+    "GOOGLE_CLIENT_ID": "@google-client-id",
+    "GOOGLE_CLIENT_SECRET": "@google-client-secret",
+    "EMAIL_ENCRYPTION_KEY": "@email-encryption-key",
+    "AI_API_KEY": "@ai-api-key",
+    "AI_API_URL": "@ai-api-url",
+    "AI_MODEL": "@ai-model"
+  }
+}

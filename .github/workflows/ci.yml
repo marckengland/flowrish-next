@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  ci:
+    name: Lint, Type Check & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: TypeScript strict check
+        run: npx tsc --noEmit
+
+      - name: Run test suite
+        run: npx vitest --run
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/test
+          UPSTASH_REDIS_REST_URL: http://localhost:6379
+          UPSTASH_REDIS_REST_TOKEN: test-redis-token
+          INNGEST_SIGNING_KEY: test-inngest-signing-key
+          INNGEST_EVENT_KEY: test-inngest-event-key
+          EMAIL_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          AI_API_URL: http://localhost:8080
+          AI_API_KEY: test-ai-key
+          AI_MODEL: test-model
+
+  migrate:
+    name: Run Supabase Migrations
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Run migrations
+        run: supabase db push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
