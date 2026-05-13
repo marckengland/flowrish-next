@@ -55,9 +55,9 @@ vi.mock('@/server/services/cadences', () => ({
 const mockInngestSend = vi.fn()
 vi.mock('../client', () => ({
   inngest: {
-    createFunction: vi.fn((config, trigger, handler) => {
+    createFunction: vi.fn((config, handler) => {
       // Store the handler for testing
-      return { config, trigger, handler }
+      return { config, trigger: config.triggers?.[0], handler }
     }),
     send: (...args: unknown[]) => mockInngestSend(...args),
   },

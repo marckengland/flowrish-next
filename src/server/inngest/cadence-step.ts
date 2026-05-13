@@ -29,8 +29,8 @@ export const cadenceStepFunction = inngest.createFunction(
   {
     id: 'cadence-step-execution',
     retries: 3,
+    triggers: [{ event: 'cadence/step.execute' }],
   },
-  { event: 'cadence/step.execute' },
   async ({ event, step }) => {
     const { enrollmentId, stepId, cadenceId, leadId, organizationId } =
       event.data as CadenceStepEventData

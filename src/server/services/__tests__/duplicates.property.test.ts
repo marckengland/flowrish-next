@@ -208,7 +208,7 @@ describe('Duplicate Detection and Lead Merge - Property Tests', () => {
 
           // The total activities on the merged lead should be the union of both
           const totalExpectedActivities = primaryActivities.length + secondaryActivities.length
-          expect(result.activities.length).toBe(totalExpectedActivities)
+          expect(result!.activities.length).toBe(totalExpectedActivities)
 
           // The secondary lead should have been deleted
           expect(deletedLeadId).toBe(secondaryLeadId)

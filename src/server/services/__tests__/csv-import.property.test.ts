@@ -190,7 +190,7 @@ function setupHappyPathMocks() {
     Promise.resolve({ id: `contact-${Math.random()}`, ...data }),
   )
   mockDb.auditEntry.create.mockResolvedValue({})
-  mockPrisma.leadContact.create.mockResolvedValue({})
+  ;(mockPrisma.leadContact.create as any).mockResolvedValue({})
 
   return { getLeadCount: () => leadCounter }
 }

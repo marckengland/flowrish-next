@@ -66,15 +66,15 @@ export async function GET() {
 
     const snapshots = await db.forecastSnapshot.findMany({
       where: {
-        createdAt: { gte: thirtyDaysAgo },
+        snapshotDate: { gte: thirtyDaysAgo },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { snapshotDate: 'asc' },
       select: {
         id: true,
         totalPipeline: true,
         weightedPipeline: true,
         aiPredicted: true,
-        createdAt: true,
+        snapshotDate: true,
       },
     })
 

@@ -66,8 +66,8 @@ vi.mock('@/lib/encryption', () => ({
 
 vi.mock('../client', () => ({
   inngest: {
-    createFunction: vi.fn((config, trigger, handler) => {
-      return { config, trigger, handler }
+    createFunction: vi.fn((config, handler) => {
+      return { config, trigger: config.triggers?.[0], handler }
     }),
   },
 }))

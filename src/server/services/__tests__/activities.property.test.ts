@@ -320,8 +320,8 @@ describe('Activity Timeline - Property Tests', () => {
             expect(updatedLastActivityAt).toBeInstanceOf(Date)
 
             // lastActivityAt should be between timeBefore and timeAfter
-            expect((updatedLastActivityAt as Date).getTime()).toBeGreaterThanOrEqual(timeBefore.getTime())
-            expect((updatedLastActivityAt as Date).getTime()).toBeLessThanOrEqual(timeAfter.getTime())
+            expect((updatedLastActivityAt as unknown as Date).getTime()).toBeGreaterThanOrEqual(timeBefore.getTime())
+            expect((updatedLastActivityAt as unknown as Date).getTime()).toBeLessThanOrEqual(timeAfter.getTime())
           },
         ),
       )
@@ -381,7 +381,7 @@ describe('Activity Timeline - Property Tests', () => {
 
             // The new lastActivityAt should be more recent than the old one
             expect(newLastActivityAt).not.toBeNull()
-            expect((newLastActivityAt as Date).getTime()).toBeGreaterThan(oldLastActivityAt.getTime())
+            expect((newLastActivityAt as unknown as Date).getTime()).toBeGreaterThan(oldLastActivityAt.getTime())
           },
         ),
       )

@@ -132,13 +132,14 @@ export async function uploadFile(
 
   // 4. Create a FILE_ATTACHMENT activity so the upload shows in the timeline
   //    and the FileAttachment has an owning activity (required by schema).
+  // Note: organizationId is auto-injected by the tenant middleware at runtime
   const activity = await db.activity.create({
     data: {
       type: 'FILE_ATTACHMENT',
       leadId,
       createdById: userId,
       notes: `Uploaded ${file.fileName}`,
-    },
+    } as any,
   })
 
   // Update the lead's lastActivityAt to keep it consistent with other activities.
@@ -176,6 +177,7 @@ export async function uploadFile(
 
   // 7. Create the FileAttachment record.
   try {
+    // Note: organizationId is auto-injected by the tenant middleware at runtime
     const attachment = await db.fileAttachment.create({
       data: {
         activityId: activity.id,
@@ -184,7 +186,7 @@ export async function uploadFile(
         mimeType: file.mimeType,
         storagePath,
         uploadedById: userId,
-      },
+      } as any,
     })
 
     return {

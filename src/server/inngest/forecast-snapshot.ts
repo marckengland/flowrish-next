@@ -20,8 +20,8 @@ export const forecastSnapshotFunction = inngest.createFunction(
   {
     id: 'forecast-snapshot',
     retries: 3,
+    triggers: [{ cron: '0 1 * * *' }],
   },
-  { cron: '0 1 * * *' },
   async ({ step }) => {
     // Step 1: Fetch all organizations
     const organizations = await step.run('fetch-organizations', async () => {
@@ -74,6 +74,7 @@ export const forecastSnapshotFunction = inngest.createFunction(
           })
 
           // Create ForecastSnapshot record
+          // Note: organizationId is auto-injected by the tenant middleware at runtime
           await db.forecastSnapshot.create({
             data: {
               period,
@@ -82,7 +83,7 @@ export const forecastSnapshotFunction = inngest.createFunction(
               aiPredicted: metrics.aiPredicted,
               closedWon,
               closedLost,
-            },
+            } as any,
           })
 
           return { created: true }

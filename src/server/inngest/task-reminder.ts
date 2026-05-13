@@ -15,8 +15,8 @@ export const taskReminderFunction = inngest.createFunction(
   {
     id: 'task-reminder',
     retries: 3,
+    triggers: [{ cron: '0 * * * *' }],
   },
-  { cron: '0 * * * *' },
   async ({ step }) => {
     // Find all incomplete tasks due within the next 24 hours
     const upcomingTasks = await step.run('find-upcoming-tasks', async () => {

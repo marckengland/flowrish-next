@@ -65,8 +65,8 @@ vi.mock('@/server/services/scoring', () => ({
 
 vi.mock('../client', () => ({
   inngest: {
-    createFunction: vi.fn((config, trigger, handler) => {
-      return { config, trigger, handler }
+    createFunction: vi.fn((config, handler) => {
+      return { config, trigger: config.triggers?.[0], handler }
     }),
   },
 }))

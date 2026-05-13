@@ -102,6 +102,7 @@ export async function connectGmail(
   const tokenExpiry = new Date(Date.now() + tokenData.expires_in * 1000)
 
   // Create EmailAccount record
+  // Note: organizationId is auto-injected by the tenant middleware at runtime
   const db = createTenantPrisma(orgId)
   const account = await db.emailAccount.create({
     data: {
@@ -111,7 +112,7 @@ export async function connectGmail(
       accessToken: encryptedAccessToken,
       refreshToken: encryptedRefreshToken,
       tokenExpiry,
-    },
+    } as any,
   })
 
   return { email: profile.emailAddress, accountId: account.id }
@@ -336,6 +337,7 @@ export async function sendEmail(
   const sendData = (await sendResponse.json()) as GmailSendResponse
 
   // Create EmailMessage record
+  // Note: organizationId is auto-injected by the tenant middleware at runtime
   await db.emailMessage.create({
     data: {
       externalId: sendData.id,
@@ -345,7 +347,7 @@ export async function sendEmail(
       subject: personalizedSubject,
       bodyPreview: personalizedBody.substring(0, 200),
       sentAt: new Date(),
-    },
+    } as any,
   })
 
   return { messageId: sendData.id, threadId: sendData.threadId }

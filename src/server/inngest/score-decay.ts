@@ -29,8 +29,8 @@ export const scoreDecayFunction = inngest.createFunction(
   {
     id: 'score-decay',
     retries: 3,
+    triggers: [{ cron: '0 0 * * *' }],
   },
-  { cron: '0 0 * * *' },
   async ({ step }) => {
     // Step 1: Fetch all organizations with active ScoreDecayConfig
     const configs = await step.run('fetch-active-configs', async () => {

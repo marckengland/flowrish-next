@@ -72,6 +72,7 @@ export async function createTask(
   }
 
   // Create the task
+  // Note: organizationId is auto-injected by the tenant middleware at runtime
   const task = await db.task.create({
     data: {
       title: validated.title,
@@ -80,7 +81,7 @@ export async function createTask(
       dueDate: validated.dueDate,
       leadId: validated.leadId,
       assigneeId: validated.assigneeId,
-    },
+    } as any,
   })
 
   return task
@@ -127,13 +128,14 @@ export async function completeTask(
   })
 
   // Log an Activity of type NOTE on the lead
+  // Note: organizationId is auto-injected by the tenant middleware at runtime
   await db.activity.create({
     data: {
       type: 'NOTE',
       leadId: task.leadId,
       createdById: userId,
       notes: `Task completed: ${task.title}`,
-    },
+    } as any,
   })
 
   // Update the lead's lastActivityAt

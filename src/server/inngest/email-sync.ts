@@ -78,8 +78,8 @@ export const emailSyncFunction = inngest.createFunction(
   {
     id: 'email-sync',
     retries: 3,
+    triggers: [{ event: 'email/sync.requested' }],
   },
-  { event: 'email/sync.requested' },
   async ({ event, step }) => {
     const { accountId, organizationId } = event.data as EmailSyncEventData
 
@@ -178,6 +178,7 @@ export const emailSyncFunction = inngest.createFunction(
         const sentAt = new Date(parseInt(msgData.internalDate, 10))
 
         // Create EmailMessage record
+        // Note: organizationId is auto-injected by the tenant middleware at runtime
         await db.emailMessage.create({
           data: {
             externalId: msgData.id,
@@ -187,7 +188,7 @@ export const emailSyncFunction = inngest.createFunction(
             subject,
             bodyPreview: msgData.snippet?.substring(0, 200) ?? null,
             sentAt,
-          },
+          } as any,
         })
 
         // Link to lead by matching email address (from or to)

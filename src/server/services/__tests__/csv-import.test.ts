@@ -176,7 +176,7 @@ describe('CSV Import Service', () => {
         Promise.resolve({ id: `contact-${data.firstName}`, ...data }),
       )
       mockDb.auditEntry.create.mockResolvedValue({})
-      mockPrisma.leadContact.create.mockResolvedValue({})
+      ;(mockPrisma.leadContact.create as any).mockResolvedValue({})
 
       const result = await importLeads(rows, headers, mapping, userId, orgId)
 
@@ -222,7 +222,7 @@ describe('CSV Import Service', () => {
       mockDb.lead.create.mockResolvedValue({ id: 'lead-1', firstName: 'John', lastName: 'Doe' })
       mockDb.contact.create.mockResolvedValue({ id: 'contact-1' })
       mockDb.auditEntry.create.mockResolvedValue({})
-      mockPrisma.leadContact.create.mockResolvedValue({})
+      ;(mockPrisma.leadContact.create as any).mockResolvedValue({})
 
       await importLeads(rows, headers, mapping, userId, orgId)
 
@@ -240,7 +240,7 @@ describe('CSV Import Service', () => {
       mockDb.lead.create.mockResolvedValue({ id: 'lead-1', firstName: 'John', lastName: 'Doe' })
       mockDb.contact.create.mockResolvedValue({ id: 'contact-1' })
       mockDb.auditEntry.create.mockResolvedValue({})
-      mockPrisma.leadContact.create.mockResolvedValue({})
+      ;(mockPrisma.leadContact.create as any).mockResolvedValue({})
 
       await importLeads(rows, headers, mapping, userId, orgId)
 
@@ -258,7 +258,7 @@ describe('CSV Import Service', () => {
         .mockResolvedValueOnce({ id: 'lead-2', firstName: 'Jane', lastName: 'Smith' })
       mockDb.contact.create.mockResolvedValue({ id: 'contact-1' })
       mockDb.auditEntry.create.mockResolvedValue({})
-      mockPrisma.leadContact.create.mockResolvedValue({})
+      ;(mockPrisma.leadContact.create as any).mockResolvedValue({})
 
       await importLeads(rows, headers, mapping, userId, orgId)
 
@@ -285,7 +285,7 @@ describe('CSV Import Service', () => {
         .mockResolvedValueOnce({ id: 'lead-2', firstName: 'Jane', lastName: 'Smith' })
       mockDb.contact.create.mockResolvedValue({ id: 'contact-1' })
       mockDb.auditEntry.create.mockResolvedValue({})
-      mockPrisma.leadContact.create.mockResolvedValue({})
+      ;(mockPrisma.leadContact.create as any).mockResolvedValue({})
 
       const result = await importLeads(rows, headers, mapping, userId, orgId)
 
@@ -356,7 +356,7 @@ describe('CSV Import Service', () => {
       mockDb.lead.create.mockResolvedValue({ id: 'lead-jane' })
       mockDb.contact.create.mockResolvedValue({ id: 'contact-1' })
       mockDb.auditEntry.create.mockResolvedValue({})
-      mockPrisma.leadContact.create.mockResolvedValue({})
+      ;(mockPrisma.leadContact.create as any).mockResolvedValue({})
 
       const result = await importLeads(rows, headers, mapping, userId, orgId)
 
