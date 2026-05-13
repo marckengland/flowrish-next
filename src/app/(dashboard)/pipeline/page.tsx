@@ -63,7 +63,7 @@ export default async function PipelinePage(): Promise<React.JSX.Element> {
   // Fetch leads through the RBAC-scoped service. A pageSize of 200 is a
   // pragmatic upper bound for the Kanban view — larger orgs can layer on
   // virtualization later (Requirement 17.4 doesn't impose a hard limit).
-  const accessFilter = await getLeadAccessFilter(session.dbUser)
+  const accessFilter = await getLeadAccessFilter(session.dbUser, session.organizationId)
   const firstPage = await getLeads(
     {},
     { page: 1, pageSize: 200 },

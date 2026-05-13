@@ -113,6 +113,23 @@ export async function addTeamMember(
     throw new AppError('NOT_FOUND', 'User not found', 404)
   }
 
+  // Validate user is a member of the team's organization
+  const orgMembership = await prisma.organizationMember.findUnique({
+    where: {
+      userId_organizationId: {
+        userId,
+        organizationId: team.organizationId,
+      },
+    },
+  })
+  if (!orgMembership) {
+    throw new AppError(
+      'FORBIDDEN',
+      'User must be a member of the organization before joining a team',
+      403,
+    )
+  }
+
   // Validate role exists
   const role = await prisma.role.findUnique({
     where: { id: roleId },

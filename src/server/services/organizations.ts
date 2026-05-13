@@ -144,7 +144,7 @@ export async function inviteToOrganization(
     throw new AppError('NOT_FOUND', 'Organization not found', 404)
   }
 
-  // Verify the role exists and belongs to this organization (or is a system role)
+  // Verify the role exists and belongs to this organization
   const role = await prisma.role.findUnique({
     where: { id: roleId },
   })
@@ -153,6 +153,29 @@ export async function inviteToOrganization(
   }
   if (role.organizationId !== null && role.organizationId !== organizationId) {
     throw new AppError('FORBIDDEN', 'Role does not belong to this organization', 403)
+  }
+
+  // Prevent privilege escalation: the inviter must have a role with equal or
+  // higher privilege (lower hierarchy number) than the role being assigned.
+  const inviterMemberships = await prisma.teamMember.findMany({
+    where: {
+      userId: invitedById,
+      team: { organizationId },
+    },
+    include: { role: { select: { hierarchy: true } } },
+  })
+  if (inviterMemberships.length === 0) {
+    throw new AppError('FORBIDDEN', 'Inviter is not a member of this organization', 403)
+  }
+  const inviterHighestPrivilege = Math.min(
+    ...inviterMemberships.map((m) => m.role.hierarchy),
+  )
+  if (role.hierarchy < inviterHighestPrivilege) {
+    throw new AppError(
+      'FORBIDDEN',
+      'Cannot invite with a role that has higher privilege than your own',
+      403,
+    )
   }
 
   // Verify the team belongs to this organization (if provided)

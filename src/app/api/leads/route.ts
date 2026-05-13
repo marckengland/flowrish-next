@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get RBAC-scoped access filter
-    const accessFilter = await getLeadAccessFilter(session.dbUser)
+    const accessFilter = await getLeadAccessFilter(session.dbUser, session.organizationId)
 
     const result = await getLeads(filters, pagination, accessFilter, session.organizationId)
 

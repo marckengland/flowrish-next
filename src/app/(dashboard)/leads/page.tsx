@@ -66,7 +66,7 @@ export default async function LeadsPage(): Promise<React.JSX.Element> {
   }))
 
   // Pre-fetch the first page through the RBAC-scoped service.
-  const accessFilter = await getLeadAccessFilter(session.dbUser)
+  const accessFilter = await getLeadAccessFilter(session.dbUser, session.organizationId)
   const firstPage = await getLeads(
     {},
     { page: 1, pageSize: 20 },

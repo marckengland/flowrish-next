@@ -277,7 +277,7 @@ async function resolveEnrollableLeads(
   cadenceId: string,
 ): Promise<EnrollDialogLead[]> {
   const db = createTenantPrisma(orgId)
-  const accessFilter = await getLeadAccessFilter(user)
+  const accessFilter = await getLeadAccessFilter(user, orgId)
 
   const activeEnrollments = await db.cadenceEnrollment.findMany({
     where: { cadenceId, status: 'ACTIVE' },

@@ -11,6 +11,7 @@ const mockRoleFindUnique = vi.fn()
 const mockTeamMemberFindUnique = vi.fn()
 const mockTeamMemberFindMany = vi.fn()
 const mockTeamMemberCreate = vi.fn()
+const mockOrgMemberFindUnique = vi.fn()
 
 vi.mock('@/server/db/client', () => ({
   prisma: {
@@ -32,6 +33,9 @@ vi.mock('@/server/db/client', () => ({
       findUnique: (...args: any[]) => mockTeamMemberFindUnique(...args),
       findMany: (...args: any[]) => mockTeamMemberFindMany(...args),
       create: (...args: any[]) => mockTeamMemberCreate(...args),
+    },
+    organizationMember: {
+      findUnique: (...args: any[]) => mockOrgMemberFindUnique(...args),
     },
   },
 }))
@@ -143,6 +147,7 @@ describe('Team Hierarchy Service', () => {
     it('adds a user to a team with a role', async () => {
       mockTeamFindUnique.mockResolvedValueOnce({ id: 'team-1', organizationId: 'org-1' })
       mockUserFindUnique.mockResolvedValueOnce({ id: 'user-1' })
+      mockOrgMemberFindUnique.mockResolvedValueOnce({ id: 'om-1', userId: 'user-1', organizationId: 'org-1' })
       mockRoleFindUnique.mockResolvedValueOnce({ id: 'role-1' })
       mockTeamMemberFindUnique.mockResolvedValueOnce(null)
       mockTeamMemberCreate.mockResolvedValueOnce({
@@ -188,6 +193,7 @@ describe('Team Hierarchy Service', () => {
     it('throws NOT_FOUND when role does not exist', async () => {
       mockTeamFindUnique.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' })
       mockUserFindUnique.mockResolvedValue({ id: 'user-1' })
+      mockOrgMemberFindUnique.mockResolvedValueOnce({ id: 'om-1', userId: 'user-1', organizationId: 'org-1' })
       mockRoleFindUnique.mockResolvedValue(null)
 
       const error = await addTeamMember('user-1', 'team-1', 'nonexistent').catch((e) => e)
@@ -201,6 +207,7 @@ describe('Team Hierarchy Service', () => {
     it('throws CONFLICT when user is already a member of the team', async () => {
       mockTeamFindUnique.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' })
       mockUserFindUnique.mockResolvedValue({ id: 'user-1' })
+      mockOrgMemberFindUnique.mockResolvedValueOnce({ id: 'om-1', userId: 'user-1', organizationId: 'org-1' })
       mockRoleFindUnique.mockResolvedValue({ id: 'role-1' })
       mockTeamMemberFindUnique.mockResolvedValue({ id: 'existing-tm', userId: 'user-1', teamId: 'team-1' })
 

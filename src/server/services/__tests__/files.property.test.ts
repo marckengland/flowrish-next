@@ -530,6 +530,7 @@ describe('File Storage - Property Tests', () => {
             expect(mockGetLeadAccessFilter).toHaveBeenCalledTimes(1)
             expect(mockGetLeadAccessFilter).toHaveBeenCalledWith(
               expect.objectContaining({ id: scenario.userId }),
+              scenario.orgId,
             )
           },
         ),

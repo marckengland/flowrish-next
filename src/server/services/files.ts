@@ -246,7 +246,7 @@ export async function getFileUrl(
 
   // Verify the caller has access to the owning lead using the same RBAC filter
   // used for lead queries. This keeps file access consistent with lead access.
-  const accessFilter = await getLeadAccessFilter(session.dbUser)
+  const accessFilter = await getLeadAccessFilter(session.dbUser, session.organizationId)
   const accessibleLead = await db.lead.findFirst({
     where: { id: attachment.activity.leadId, ...accessFilter },
     select: { id: true },

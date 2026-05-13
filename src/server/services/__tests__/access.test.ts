@@ -84,7 +84,7 @@ describe('Lead Access Scoping Service', () => {
         { teamId: 'team-1', orgId: 'org-1', hierarchy: 0, roleName: 'OWNER' },
       ])
 
-      const filter = await getLeadAccessFilter(user)
+      const filter = await getLeadAccessFilter(user, 'org-1')
 
       expect(filter).toEqual({ deletedAt: null })
       expect(filter.assignedUserId).toBeUndefined()
@@ -97,7 +97,7 @@ describe('Lead Access Scoping Service', () => {
         { teamId: 'team-1', orgId: 'org-1', hierarchy: 1, roleName: 'ADMIN' },
       ])
 
-      const filter = await getLeadAccessFilter(user)
+      const filter = await getLeadAccessFilter(user, 'org-1')
 
       expect(filter).toEqual({ deletedAt: null })
       expect(filter.assignedUserId).toBeUndefined()
@@ -116,7 +116,7 @@ describe('Lead Access Scoping Service', () => {
         { userId: 'user-3' },
       ])
 
-      const filter = await getLeadAccessFilter(user)
+      const filter = await getLeadAccessFilter(user, 'org-1')
 
       expect(filter.deletedAt).toBeNull()
       expect(filter.assignedUserId).toEqual({ in: ['user-1', 'user-2', 'user-3'] })
@@ -132,7 +132,7 @@ describe('Lead Access Scoping Service', () => {
         { teamId: 'team-1', orgId: 'org-1', hierarchy: 3, roleName: 'MEMBER' },
       ])
 
-      const filter = await getLeadAccessFilter(user)
+      const filter = await getLeadAccessFilter(user, 'org-1')
 
       expect(filter.deletedAt).toBeNull()
       expect(filter.assignedUserId).toBe('user-1')
@@ -146,7 +146,7 @@ describe('Lead Access Scoping Service', () => {
         { teamId: 'team-2', orgId: 'org-1', hierarchy: 3, roleName: 'MEMBER' },
       ])
 
-      const filter = await getLeadAccessFilter(user)
+      const filter = await getLeadAccessFilter(user, 'org-1')
 
       // ADMIN privilege wins — all org leads
       expect(filter).toEqual({ deletedAt: null })
@@ -165,7 +165,7 @@ describe('Lead Access Scoping Service', () => {
         { userId: 'user-2' },
       ])
 
-      const filter = await getLeadAccessFilter(user)
+      const filter = await getLeadAccessFilter(user, 'org-1')
 
       // MANAGER privilege wins — team-scoped access
       expect(filter.deletedAt).toBeNull()
@@ -185,7 +185,7 @@ describe('Lead Access Scoping Service', () => {
         { userId: 'user-3' }, // duplicate
       ])
 
-      const filter = await getLeadAccessFilter(user)
+      const filter = await getLeadAccessFilter(user, 'org-1')
 
       expect(filter.deletedAt).toBeNull()
       const userIds = (filter.assignedUserId as { in: string[] }).in
@@ -199,13 +199,13 @@ describe('Lead Access Scoping Service', () => {
       const owner = createMockUser('user-1', [
         { teamId: 'team-1', orgId: 'org-1', hierarchy: 0, roleName: 'OWNER' },
       ])
-      expect((await getLeadAccessFilter(owner)).deletedAt).toBeNull()
+      expect((await getLeadAccessFilter(owner, 'org-1')).deletedAt).toBeNull()
 
       // Test ADMIN
       const admin = createMockUser('user-2', [
         { teamId: 'team-1', orgId: 'org-1', hierarchy: 1, roleName: 'ADMIN' },
       ])
-      expect((await getLeadAccessFilter(admin)).deletedAt).toBeNull()
+      expect((await getLeadAccessFilter(admin, 'org-1')).deletedAt).toBeNull()
 
       // Test MANAGER
       const manager = createMockUser('user-3', [
@@ -213,13 +213,13 @@ describe('Lead Access Scoping Service', () => {
       ])
       mockGetAccessibleTeamIds.mockResolvedValueOnce(['team-1'])
       mockTeamMemberFindMany.mockResolvedValueOnce([{ userId: 'user-3' }])
-      expect((await getLeadAccessFilter(manager)).deletedAt).toBeNull()
+      expect((await getLeadAccessFilter(manager, 'org-1')).deletedAt).toBeNull()
 
       // Test MEMBER
       const member = createMockUser('user-4', [
         { teamId: 'team-1', orgId: 'org-1', hierarchy: 3, roleName: 'MEMBER' },
       ])
-      expect((await getLeadAccessFilter(member)).deletedAt).toBeNull()
+      expect((await getLeadAccessFilter(member, 'org-1')).deletedAt).toBeNull()
     })
 
     it('handles user with no team memberships (returns own userId filter)', async () => {
@@ -235,7 +235,7 @@ describe('Lead Access Scoping Service', () => {
         teamMemberships: [],
       } as unknown as SessionUser
 
-      const filter = await getLeadAccessFilter(user)
+      const filter = await getLeadAccessFilter(user, 'org-1')
 
       // No memberships means lowest privilege — own leads only
       expect(filter.deletedAt).toBeNull()
@@ -247,7 +247,7 @@ describe('Lead Access Scoping Service', () => {
         { teamId: 'team-1', orgId: 'org-1', hierarchy: 5, roleName: 'CUSTOM_LOW' },
       ])
 
-      const filter = await getLeadAccessFilter(user)
+      const filter = await getLeadAccessFilter(user, 'org-1')
 
       expect(filter.deletedAt).toBeNull()
       expect(filter.assignedUserId).toBe('user-1')

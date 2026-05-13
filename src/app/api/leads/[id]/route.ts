@@ -25,7 +25,7 @@ export async function GET(
 
     const { id } = paramsSchema.parse(await params)
 
-    const accessFilter = await getLeadAccessFilter(session.dbUser)
+    const accessFilter = await getLeadAccessFilter(session.dbUser, session.organizationId)
     const lead = await getLeadById(id, accessFilter, session.organizationId)
 
     return NextResponse.json({ data: lead })

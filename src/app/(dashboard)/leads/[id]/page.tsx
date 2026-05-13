@@ -57,7 +57,7 @@ export default async function LeadDetailPage({
   // Coaching is a manager-level capability — Requirement 30.4.
   const canCoach = hasPermission(session.dbUser, 'leads:write')
 
-  const accessFilter = await getLeadAccessFilter(session.dbUser)
+  const accessFilter = await getLeadAccessFilter(session.dbUser, session.organizationId)
 
   let lead
   try {

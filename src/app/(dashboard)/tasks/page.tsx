@@ -68,7 +68,7 @@ export default async function TasksPage(): Promise<React.JSX.Element> {
   const [tasks, leadsPage, members] = await Promise.all([
     getTasks(session.dbUser.id, filters, session.organizationId),
     (async () => {
-      const accessFilter = await getLeadAccessFilter(session.dbUser)
+      const accessFilter = await getLeadAccessFilter(session.dbUser, session.organizationId)
       return getLeads(
         {},
         { page: 1, pageSize: 100 },

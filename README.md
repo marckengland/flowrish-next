@@ -1,36 +1,88 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Flowrish CRM — Next.js + Supabase
 
-## Getting Started
+A modern, multi-tenant CRM built with Next.js 15 (App Router), Supabase Auth, Prisma v6, and deployed to Vercel.
 
-First, run the development server:
+## Tech Stack
+
+- **Framework:** Next.js 15 (App Router, Server Components, Server Actions)
+- **Auth:** Supabase Auth (Magic Link + Google OAuth)
+- **Database:** PostgreSQL via Supabase + Prisma v6 ORM
+- **Background Jobs:** Inngest (durable functions, cron schedules)
+- **Rate Limiting:** Upstash Redis
+- **UI:** Tailwind CSS v4, Shadcn/ui, Lucide icons
+- **State:** TanStack Query v5 (server), Zustand v5 (client)
+- **Testing:** Vitest v3, fast-check v3 (property-based), Testing Library
+- **Deployment:** Vercel + Supabase Cloud
+
+## Quick Start
 
 ```bash
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.example .env
+# Fill in your Supabase, Upstash, Inngest, and AI API credentials
+
+# Generate Prisma client
+npx prisma generate
+
+# Run database migrations
+npx prisma migrate deploy
+
+# Seed default data (roles, pipeline)
+npx prisma db seed
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start Next.js dev server |
+| `npm run build` | Production build |
+| `npm run test` | Run all tests (Vitest) |
+| `npm run test:watch` | Run tests in watch mode |
+| `npm run lint` | ESLint check |
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+├── app/                    # Next.js App Router pages and API routes
+│   ├── (auth)/             # Auth pages (login, onboarding)
+│   ├── (dashboard)/        # Authenticated dashboard pages
+│   ├── api/                # REST API route handlers
+│   └── auth/               # OAuth callback and magic link confirm
+├── components/             # React components (Shadcn/ui based)
+├── hooks/                  # TanStack Query hooks
+├── lib/                    # Shared utilities (env, errors, encryption, validators)
+│   ├── supabase/           # Supabase client factories (server, browser, middleware)
+│   ├── upstash/            # Redis + rate limiting
+│   └── validators/         # Zod schemas for all entities
+├── server/                 # Server-only code
+│   ├── actions/            # Server Actions (form mutations)
+│   ├── auth/               # Session + RBAC permissions
+│   ├── db/                 # Prisma client + tenant isolation middleware
+│   ├── inngest/            # Background job functions
+│   └── services/           # Business logic services
+├── stores/                 # Zustand stores (layout, filters, kanban)
+└── types/                  # TypeScript type definitions
+prisma/
+├── schema.prisma           # Database schema
+└── seed.ts                 # Seed script (default roles, pipeline)
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Documentation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [Setup Guide](docs/SETUP_GUIDE.md) — Full environment setup and deployment
+- [Architecture](docs/ARCHITECTURE.md) — System design, multi-tenancy, RBAC
+- [User Manual](docs/USER_MANUAL.md) — Feature walkthrough and user flows
 
-## Deploy on Vercel
+## License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Private — All rights reserved.

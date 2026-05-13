@@ -8,6 +8,7 @@ const mockFindMany = vi.fn()
 const mockCreate = vi.fn()
 const mockUpdate = vi.fn()
 const mockTransaction = vi.fn()
+const mockTeamMemberFindMany = vi.fn()
 
 vi.mock('@/server/db/client', () => ({
   prisma: {
@@ -33,6 +34,9 @@ vi.mock('@/server/db/client', () => ({
     },
     role: {
       findUnique: (...args: any[]) => mockFindUnique(...args),
+    },
+    teamMember: {
+      findMany: (...args: any[]) => mockTeamMemberFindMany(...args),
     },
     $transaction: (...args: any[]) => mockTransaction(...args),
   },
@@ -192,8 +196,12 @@ describe('Organization Service', () => {
     it('throws CONFLICT when a pending invite already exists', async () => {
       // org findUnique → exists
       mockFindUnique.mockResolvedValueOnce({ id: 'org-1' })
-      // role findUnique → exists (system role, orgId null)
-      mockFindUnique.mockResolvedValueOnce({ id: 'role-1', organizationId: null })
+      // role findUnique → exists (system role, orgId null, hierarchy 3)
+      mockFindUnique.mockResolvedValueOnce({ id: 'role-1', organizationId: null, hierarchy: 3 })
+      // privilege escalation check: inviter has hierarchy 1 (ADMIN)
+      mockTeamMemberFindMany.mockResolvedValueOnce([
+        { id: 'tm-1', role: { hierarchy: 1 } },
+      ])
       // existing pending invite
       mockFindFirst.mockResolvedValueOnce({ id: 'invite-existing', status: 'pending' })
 
@@ -208,8 +216,12 @@ describe('Organization Service', () => {
     it('creates invite with 7-day expiration', async () => {
       // org findUnique → exists
       mockFindUnique.mockResolvedValueOnce({ id: 'org-1' })
-      // role findUnique → exists (belongs to org)
-      mockFindUnique.mockResolvedValueOnce({ id: 'role-1', organizationId: 'org-1' })
+      // role findUnique → exists (belongs to org, hierarchy 3)
+      mockFindUnique.mockResolvedValueOnce({ id: 'role-1', organizationId: 'org-1', hierarchy: 3 })
+      // privilege escalation check: inviter has hierarchy 1 (ADMIN)
+      mockTeamMemberFindMany.mockResolvedValueOnce([
+        { id: 'tm-1', role: { hierarchy: 1 } },
+      ])
       // no existing pending invite
       mockFindFirst.mockResolvedValueOnce(null)
       // no existing user with that email

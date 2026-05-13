@@ -24,7 +24,7 @@ export async function GET() {
     const session = await requireSession()
     requirePermission(session.dbUser, 'leads:read')
 
-    const accessFilter = await getLeadAccessFilter(session.dbUser)
+    const accessFilter = await getLeadAccessFilter(session.dbUser, session.organizationId)
     const csv = await exportLeads(session.organizationId, accessFilter)
 
     const filename = `leads-${new Date().toISOString().slice(0, 10)}.csv`

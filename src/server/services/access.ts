@@ -28,6 +28,7 @@ export interface LeadAccessFilter {
  */
 export async function getLeadAccessFilter(
   user: SessionUser,
+  organizationId: string,
 ): Promise<LeadAccessFilter> {
   // Determine the highest privilege level (lowest hierarchy number)
   const highestPrivilege = getHighestPrivilege(user)
@@ -46,7 +47,6 @@ export async function getLeadAccessFilter(
   }
 
   // MANAGER (hierarchy = 2): leads assigned to users in accessible teams
-  const organizationId = getOrganizationId(user)
   const accessibleTeamIds = await getAccessibleTeamIds(user.id, organizationId)
 
   // Get all user IDs that are members of the accessible teams
@@ -77,16 +77,4 @@ function getHighestPrivilege(user: SessionUser): number {
   }
 
   return Math.min(...user.teamMemberships.map((m) => m.role.hierarchy))
-}
-
-/**
- * Resolves the organization ID from the user's team memberships.
- * Falls back to the first team's organizationId.
- */
-function getOrganizationId(user: SessionUser): string {
-  const firstMembership = user.teamMemberships[0]
-  if (!firstMembership) {
-    throw new Error('User has no team memberships')
-  }
-  return firstMembership.team.organizationId
 }
