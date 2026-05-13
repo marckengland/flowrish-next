@@ -400,6 +400,12 @@ model Activity {
   emailMessageId String?       @unique
   emailMessage   EmailMessage? @relation(fields: [emailMessageId], references: [id])
 
+  // AI Summary fields (populated on-demand via conversation intelligence)
+  aiSummary   String?
+  keyTopics   String[] @default([])
+  actionItems String[] @default([])
+  sentiment   String?  // "positive" | "neutral" | "negative"
+
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
 

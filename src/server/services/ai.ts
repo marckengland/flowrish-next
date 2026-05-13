@@ -30,6 +30,25 @@ export interface ChatResponse {
   message: string
 }
 
+export interface TrackerMatch {
+  keyword: string
+  context: string
+}
+
+export interface MeetingSummary {
+  id: string
+  leadId: string
+  leadName: string
+  meetingDate: string
+  attendees: string[]
+  rawNotes: string
+  aiSummary: string | null
+  keyTopics: string[]
+  actionItems: string[]
+  sentiment: 'positive' | 'neutral' | 'negative' | null
+  trackers: TrackerMatch[]
+}
+
 interface ChatCompletionResponse {
   choices: Array<{ message: { content: string } }>
 }
@@ -320,4 +339,248 @@ export async function chatMessage(
     console.error('[AI Service] chatMessage failed:', error)
     throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
   }
+}
+
+// ─── Conversation Intelligence ───────────────────────────────────────────────
+
+/** Default tracker keywords for sales conversations */
+const DEFAULT_TRACKERS = [
+  'pricing', 'budget', 'competitor', 'timeline', 'decision maker',
+  'next steps', 'objection', 'contract', 'demo', 'trial',
+  'pain point', 'roi', 'implementation', 'integration', 'security',
+]
+
+/**
+ * Detects tracker keyword matches in meeting notes and returns matched contexts.
+ */
+function detectTrackers(notes: string): TrackerMatch[] {
+  const trackers: TrackerMatch[] = []
+  const notesLower = notes.toLowerCase()
+
+  for (const keyword of DEFAULT_TRACKERS) {
+    if (notesLower.includes(keyword)) {
+      const idx = notesLower.indexOf(keyword)
+      const start = Math.max(0, idx - 50)
+      const end = Math.min(notes.length, idx + keyword.length + 50)
+      trackers.push({
+        keyword,
+        context: notes.slice(start, end).trim(),
+      })
+    }
+  }
+
+  return trackers
+}
+
+/**
+ * Summarizes a meeting activity using AI.
+ *
+ * Sends meeting data (notes, attendees, date) to the AI provider and returns
+ * a structured summary with aiSummary, keyTopics, actionItems, sentiment, and trackers.
+ * Stores the generated summary on the activity for future retrieval.
+ *
+ * Idempotent: if the activity already has an aiSummary, returns the stored data
+ * without calling the AI again.
+ *
+ * Validates: Requirements 31.1, 31.2, 31.4
+ */
+export async function summarizeMeeting(
+  activityId: string,
+  orgId: string,
+): Promise<MeetingSummary> {
+  try {
+    const db = createTenantPrisma(orgId)
+
+    const activity = await db.activity.findFirst({
+      where: { id: activityId },
+      include: {
+        lead: { select: { id: true, firstName: true, lastName: true, companyName: true } },
+      },
+    })
+
+    if (!activity) {
+      throw new AppError('ACTIVITY_NOT_FOUND', 'Activity not found', 404)
+    }
+
+    if (activity.type !== 'MEETING' && activity.type !== 'CALL') {
+      throw new AppError('INVALID_ACTIVITY_TYPE', 'Activity must be a meeting or call', 400)
+    }
+
+    const notes = activity.notes ?? ''
+    if (!notes.trim()) {
+      throw new AppError('NO_NOTES', 'No notes to summarize', 400)
+    }
+
+    const leadName = `${activity.lead.firstName} ${activity.lead.lastName}`.trim()
+    const attendees: string[] = activity.attendees
+      ? (JSON.parse(activity.attendees) as string[])
+      : []
+    const meetingDate = (
+      activity.meetingDate ?? activity.callDate ?? activity.createdAt
+    ).toISOString()
+
+    // Detect tracker keyword matches
+    const trackers = detectTrackers(notes)
+
+    // Idempotent: return stored summary if already generated
+    if (activity.aiSummary) {
+      return {
+        id: activity.id,
+        leadId: activity.lead.id,
+        leadName,
+        meetingDate,
+        attendees,
+        rawNotes: notes,
+        aiSummary: activity.aiSummary,
+        keyTopics: activity.keyTopics ?? [],
+        actionItems: activity.actionItems ?? [],
+        sentiment: (['positive', 'neutral', 'negative'].includes(activity.sentiment ?? '')
+          ? (activity.sentiment as MeetingSummary['sentiment'])
+          : null),
+        trackers,
+      }
+    }
+
+    // AI summarization
+    const systemPrompt = 'You are a sales meeting analyst. Summarize meeting notes into actionable insights. Be concise and specific. Output JSON format.'
+    const userPrompt = [
+      'Summarize the following meeting/call notes:',
+      '',
+      `Lead: ${leadName}`,
+      activity.lead.companyName ? `Company: ${activity.lead.companyName}` : '',
+      attendees.length > 0 ? `Attendees: ${attendees.join(', ')}` : '',
+      `Date: ${meetingDate.split('T')[0]}`,
+      '',
+      'Notes:',
+      notes,
+      '',
+      'Respond in JSON:',
+      '{',
+      '  "summary": "2-3 sentence summary of the meeting",',
+      '  "keyTopics": ["topic1", "topic2", "topic3"],',
+      '  "actionItems": ["action1", "action2"],',
+      '  "sentiment": "positive" | "neutral" | "negative"',
+      '}',
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    // Include active system prompt if configured
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = []
+
+    const activePrompt = await getActiveSystemPrompt('meeting_summary', orgId)
+    if (activePrompt) {
+      messages.push({ role: 'system', content: activePrompt })
+    } else {
+      messages.push({ role: 'system', content: systemPrompt })
+    }
+
+    messages.push({ role: 'user', content: userPrompt })
+
+    let aiSummary: string | null = null
+    let keyTopics: string[] = []
+    let actionItems: string[] = []
+    let sentiment: MeetingSummary['sentiment'] = null
+
+    const raw = await callAI(messages, 0.3, 1500)
+    const jsonMatch = raw.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]) as {
+        summary?: string
+        keyTopics?: string[]
+        actionItems?: string[]
+        sentiment?: string
+      }
+      aiSummary = parsed.summary ?? null
+      keyTopics = Array.isArray(parsed.keyTopics) ? parsed.keyTopics : []
+      actionItems = Array.isArray(parsed.actionItems) ? parsed.actionItems : []
+      sentiment = ['positive', 'neutral', 'negative'].includes(parsed.sentiment ?? '')
+        ? (parsed.sentiment as MeetingSummary['sentiment'])
+        : null
+    }
+
+    // Store the summary on the activity for future retrieval (Requirement 31.2)
+    await db.activity.update({
+      where: { id: activityId },
+      data: {
+        aiSummary,
+        keyTopics,
+        actionItems,
+        sentiment,
+      },
+    })
+
+    return {
+      id: activity.id,
+      leadId: activity.lead.id,
+      leadName,
+      meetingDate,
+      attendees,
+      rawNotes: notes,
+      aiSummary,
+      keyTopics,
+      actionItems,
+      sentiment,
+      trackers,
+    }
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error
+    }
+    console.error('[AI Service] summarizeMeeting failed:', error)
+    throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
+  }
+}
+
+/**
+ * Lists all meeting/call summaries for a lead (conversation history).
+ *
+ * Returns activities of type MEETING or CALL with their stored summaries
+ * and detected tracker keywords. Summaries are only populated for activities
+ * that have been previously summarized via summarizeMeeting.
+ *
+ * Validates: Requirement 31.3
+ */
+export async function getLeadConversations(
+  leadId: string,
+  orgId: string,
+): Promise<MeetingSummary[]> {
+  const db = createTenantPrisma(orgId)
+
+  const activities = await db.activity.findMany({
+    where: {
+      leadId,
+      type: { in: ['MEETING', 'CALL'] },
+    },
+    include: {
+      lead: { select: { id: true, firstName: true, lastName: true, companyName: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  })
+
+  return activities.map((activity) => {
+    const notes = activity.notes ?? ''
+    const trackers = detectTrackers(notes)
+
+    return {
+      id: activity.id,
+      leadId: activity.lead.id,
+      leadName: `${activity.lead.firstName} ${activity.lead.lastName}`.trim(),
+      meetingDate: (
+        activity.meetingDate ?? activity.callDate ?? activity.createdAt
+      ).toISOString(),
+      attendees: activity.attendees
+        ? (JSON.parse(activity.attendees) as string[])
+        : [],
+      rawNotes: notes,
+      aiSummary: activity.aiSummary ?? null,
+      keyTopics: activity.keyTopics ?? [],
+      actionItems: activity.actionItems ?? [],
+      sentiment: (['positive', 'neutral', 'negative'].includes(activity.sentiment ?? '')
+        ? (activity.sentiment as MeetingSummary['sentiment'])
+        : null),
+      trackers,
+    }
+  })
 }
