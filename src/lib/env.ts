@@ -25,6 +25,23 @@ export function validateEnv(): Env {
 
 /**
  * Typed, validated environment variables.
- * Importing this module will halt startup if any required variable is missing or invalid.
+ *
+ * Uses a lazy proxy so that validation only runs on first property access
+ * at runtime — not at import/build time. This allows `next build` to
+ * collect pages without requiring all env vars to be present during the
+ * static analysis phase.
+ *
+ * At runtime (server start, request handling), the first access triggers
+ * validation and caches the result. If any required variable is missing,
+ * the process halts with a descriptive error.
  */
-export const env = validateEnv()
+let _cachedEnv: Env | null = null
+
+export const env: Env = new Proxy({} as Env, {
+  get(_target, prop: string) {
+    if (!_cachedEnv) {
+      _cachedEnv = validateEnv()
+    }
+    return _cachedEnv[prop as keyof Env]
+  },
+})
