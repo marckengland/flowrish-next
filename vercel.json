@@ -12,22 +12,5 @@
         }
       ]
     }
-  ],
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "@next-public-supabase-url",
-    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "@next-public-supabase-publishable-key",
-    "SUPABASE_SECRET_KEY": "@supabase-secret-key",
-    "DATABASE_URL": "@database-url",
-    "DIRECT_URL": "@direct-url",
-    "UPSTASH_REDIS_REST_URL": "@upstash-redis-rest-url",
-    "UPSTASH_REDIS_REST_TOKEN": "@upstash-redis-rest-token",
-    "INNGEST_SIGNING_KEY": "@inngest-signing-key",
-    "INNGEST_EVENT_KEY": "@inngest-event-key",
-    "GOOGLE_CLIENT_ID": "@google-client-id",
-    "GOOGLE_CLIENT_SECRET": "@google-client-secret",
-    "EMAIL_ENCRYPTION_KEY": "@email-encryption-key",
-    "AI_API_KEY": "@ai-api-key",
-    "AI_API_URL": "@ai-api-url",
-    "AI_MODEL": "@ai-model"
-  }
+  ]
 }
