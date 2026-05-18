@@ -11,8 +11,8 @@ import { envSchema } from './env.schema'
 
 const validEnv = {
   NEXT_PUBLIC_SUPABASE_URL: 'https://abc.supabase.co',
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test',
-  SUPABASE_SERVICE_ROLE_KEY: 'service-role-key-value',
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test',
+  SUPABASE_SECRET_KEY: 'service-role-key-value',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   DIRECT_URL: 'postgresql://user:pass@localhost:5432/db',
   UPSTASH_REDIS_REST_URL: 'https://us1-redis.upstash.io',

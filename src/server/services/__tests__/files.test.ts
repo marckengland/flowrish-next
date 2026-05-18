@@ -75,7 +75,7 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/env', () => ({
   env: {
     NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co',
-    SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
+    SUPABASE_SECRET_KEY: 'service-role-key',
   },
 }))
 

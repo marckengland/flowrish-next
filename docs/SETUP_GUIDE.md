@@ -32,8 +32,8 @@ cp .env.example .env
 | `DATABASE_URL` | Supabase pooled connection string (Transaction mode) |
 | `DIRECT_URL` | Supabase direct connection string (for migrations) |
 | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-only) |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key (safe for browser) |
+| `SUPABASE_SECRET_KEY` | Supabase secret key (server-only, never expose) |
 | `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL |
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token |
 | `INNGEST_EVENT_KEY` | Inngest event key |
