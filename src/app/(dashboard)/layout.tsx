@@ -54,6 +54,34 @@ export default async function DashboardLayout({
     }
   }
 
+  // Safety net: if user has an org membership but no team memberships
+  // (incomplete onboarding from a partial failure), repair by adding them
+  // to the General team with OWNER role.
+  if (permissionSet.size === 0) {
+    const generalTeam = await prisma.team.findFirst({
+      where: { organizationId: session.organizationId, name: 'General', parentTeamId: null },
+    })
+    const ownerRole = await prisma.role.findFirst({
+      where: { organizationId: session.organizationId, name: 'OWNER' },
+    })
+    if (generalTeam && ownerRole) {
+      const existingTm = await prisma.teamMember.findUnique({
+        where: { userId_teamId: { userId: session.dbUser.id, teamId: generalTeam.id } },
+      })
+      if (!existingTm) {
+        await prisma.teamMember.create({
+          data: {
+            userId: session.dbUser.id,
+            teamId: generalTeam.id,
+            roleId: ownerRole.id,
+          },
+        })
+      }
+      // Reload the page to pick up the new permissions
+      redirect('/')
+    }
+  }
+
   const organization = await prisma.organization.findUnique({
     where: { id: session.organizationId },
     select: { name: true },
