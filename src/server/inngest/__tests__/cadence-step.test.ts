@@ -26,6 +26,15 @@ const mockDb = {
   stepExecutionLog: {
     create: vi.fn(),
   },
+  activity: {
+    create: vi.fn(),
+  },
+  lead: {
+    update: vi.fn(),
+  },
+  task: {
+    create: vi.fn(),
+  },
 }
 
 vi.mock('@/server/db/middleware', () => ({
@@ -172,11 +181,15 @@ describe('Cadence Step Execution Function', () => {
   describe('step execution', () => {
     it('should execute EMAIL action and create execution log', async () => {
       const mockStep = createMockStep()
-      mockDb.cadenceEnrollment.findFirst.mockResolvedValue({
-        id: enrollmentId,
-        status: 'ACTIVE',
-        currentStepOrder: 1,
-      })
+      // First call: enrollment verification
+      mockDb.cadenceEnrollment.findFirst
+        .mockResolvedValueOnce({
+          id: enrollmentId,
+          status: 'ACTIVE',
+          currentStepOrder: 1,
+        })
+        // Second call: inside EMAIL action handler to get enrolledById
+        .mockResolvedValueOnce({ enrolledById: 'user-1' })
       mockDb.cadenceStep.findFirst
         .mockResolvedValueOnce({
           id: stepId,
@@ -187,6 +200,8 @@ describe('Cadence Step Execution Function', () => {
           taskDescription: null,
         })
         .mockResolvedValueOnce(null) // no next step
+      mockDb.activity.create.mockResolvedValue({ id: 'activity-1' })
+      mockDb.lead.update.mockResolvedValue({})
       mockDb.stepExecutionLog.create.mockResolvedValue({ id: 'log-1' })
       mockDb.cadenceEnrollment.update.mockResolvedValue({})
       mockCompleteEnrollment.mockResolvedValue({})
@@ -211,6 +226,7 @@ describe('Cadence Step Execution Function', () => {
         id: enrollmentId,
         status: 'ACTIVE',
         currentStepOrder: 1,
+        enrolledById: 'user-1',
       })
       mockDb.cadenceStep.findFirst
         .mockResolvedValueOnce({
@@ -222,6 +238,7 @@ describe('Cadence Step Execution Function', () => {
           taskDescription: null,
         })
         .mockResolvedValueOnce(null) // no next step
+      mockDb.task.create.mockResolvedValue({})
       mockDb.stepExecutionLog.create.mockResolvedValue({ id: 'log-1' })
       mockDb.cadenceEnrollment.update.mockResolvedValue({})
       mockCompleteEnrollment.mockResolvedValue({})
@@ -246,6 +263,7 @@ describe('Cadence Step Execution Function', () => {
         id: enrollmentId,
         status: 'ACTIVE',
         currentStepOrder: 1,
+        enrolledById: 'user-1',
       })
       mockDb.cadenceStep.findFirst.mockResolvedValueOnce(null)
 
@@ -262,6 +280,7 @@ describe('Cadence Step Execution Function', () => {
         id: enrollmentId,
         status: 'ACTIVE',
         currentStepOrder: 2,
+        enrolledById: 'user-1',
       })
       mockDb.cadenceStep.findFirst
         .mockResolvedValueOnce({
@@ -273,6 +292,7 @@ describe('Cadence Step Execution Function', () => {
           taskDescription: null,
         })
         .mockResolvedValueOnce(null) // no next step
+      mockDb.task.create.mockResolvedValue({})
       mockDb.stepExecutionLog.create.mockResolvedValue({ id: 'log-1' })
       mockDb.cadenceEnrollment.update.mockResolvedValue({})
       mockCompleteEnrollment.mockResolvedValue({})
@@ -294,6 +314,7 @@ describe('Cadence Step Execution Function', () => {
         id: enrollmentId,
         status: 'ACTIVE',
         currentStepOrder: 1,
+        enrolledById: 'user-1',
       })
       mockDb.cadenceStep.findFirst
         .mockResolvedValueOnce({
@@ -308,6 +329,8 @@ describe('Cadence Step Execution Function', () => {
           id: nextStepId,
           delayHours: 24,
         })
+      mockDb.activity.create.mockResolvedValue({})
+      mockDb.lead.update.mockResolvedValue({})
       mockDb.stepExecutionLog.create.mockResolvedValue({ id: 'log-1' })
       mockDb.cadenceEnrollment.update.mockResolvedValue({})
       mockInngestSend.mockResolvedValue({})
@@ -339,6 +362,7 @@ describe('Cadence Step Execution Function', () => {
         id: enrollmentId,
         status: 'ACTIVE',
         currentStepOrder: 1,
+        enrolledById: 'user-1',
       })
       mockDb.cadenceStep.findFirst
         .mockResolvedValueOnce({
@@ -353,6 +377,7 @@ describe('Cadence Step Execution Function', () => {
           id: nextStepId,
           delayHours: 0,
         })
+      mockDb.task.create.mockResolvedValue({})
       mockDb.stepExecutionLog.create.mockResolvedValue({ id: 'log-1' })
       mockDb.cadenceEnrollment.update.mockResolvedValue({})
       mockInngestSend.mockResolvedValue({})
@@ -371,6 +396,7 @@ describe('Cadence Step Execution Function', () => {
         id: enrollmentId,
         status: 'ACTIVE',
         currentStepOrder: 3,
+        enrolledById: 'user-1',
       })
       mockDb.cadenceStep.findFirst
         .mockResolvedValueOnce({
@@ -382,6 +408,8 @@ describe('Cadence Step Execution Function', () => {
           taskDescription: null,
         })
         .mockResolvedValueOnce(null) // no next step
+      mockDb.activity.create.mockResolvedValue({})
+      mockDb.lead.update.mockResolvedValue({})
       mockDb.stepExecutionLog.create.mockResolvedValue({ id: 'log-1' })
       mockDb.cadenceEnrollment.update.mockResolvedValue({})
       mockCompleteEnrollment.mockResolvedValue({})

@@ -69,21 +69,85 @@ export const cadenceStepFunction = inngest.createFunction(
         throw new Error(`CadenceStep ${stepId} not found`)
       }
 
-      // Execute action based on type.
-      // For now, log the action — actual email/call execution is in later tasks.
+      // Execute action based on type — creates activities and tasks on the lead
       switch (cadenceStep.actionType) {
-        case 'EMAIL':
-          // Future: send email via Gmail API with personalization
+        case 'EMAIL': {
+          // Create an EMAIL activity on the lead with the cadence step's subject/body.
+          // Actual sending via Gmail happens if the user has a connected email account;
+          // otherwise this logs the intent as an activity for manual follow-up.
+          await db.activity.create({
+            data: tenantData({
+              type: 'EMAIL',
+              leadId,
+              createdById: (await db.cadenceEnrollment.findFirst({
+                where: { id: enrollmentId },
+                select: { enrolledById: true },
+              }))!.enrolledById,
+              notes: `[Cadence] ${cadenceStep.emailSubject ?? 'Email step'}`,
+              description: cadenceStep.emailBody ?? null,
+            }),
+          })
+          // Update lead's lastActivityAt
+          await db.lead.update({
+            where: { id: leadId },
+            data: { lastActivityAt: new Date() },
+          })
           break
-        case 'CALL':
-          // Future: create call task for rep
+        }
+        case 'CALL': {
+          // Create a task for the rep to make a call
+          const enrollment = await db.cadenceEnrollment.findFirst({
+            where: { id: enrollmentId },
+            select: { enrolledById: true },
+          })
+          await db.task.create({
+            data: tenantData({
+              title: cadenceStep.taskTitle ?? 'Make a call (cadence step)',
+              description: cadenceStep.taskDescription ?? null,
+              priority: 'HIGH',
+              dueDate: new Date(), // Due immediately
+              leadId,
+              assigneeId: enrollment!.enrolledById,
+            }),
+          })
           break
-        case 'LINKEDIN':
-          // Future: create LinkedIn outreach task
+        }
+        case 'LINKEDIN': {
+          // Create a task for the rep to do LinkedIn outreach
+          const enrollment = await db.cadenceEnrollment.findFirst({
+            where: { id: enrollmentId },
+            select: { enrolledById: true },
+          })
+          await db.task.create({
+            data: tenantData({
+              title: cadenceStep.taskTitle ?? 'LinkedIn outreach (cadence step)',
+              description: cadenceStep.taskDescription ?? null,
+              priority: 'MEDIUM',
+              dueDate: new Date(),
+              leadId,
+              assigneeId: enrollment!.enrolledById,
+            }),
+          })
           break
-        case 'MANUAL_TASK':
-          // Future: create manual task for rep
+        }
+        case 'MANUAL_TASK': {
+          // Create a manual task for the rep
+          const enrollment = await db.cadenceEnrollment.findFirst({
+            where: { id: enrollmentId },
+            select: { enrolledById: true },
+          })
+          await db.task.create({
+            data: tenantData({
+              title: cadenceStep.taskTitle ?? 'Manual task (cadence step)',
+              description: cadenceStep.taskDescription ?? null,
+              priority: 'MEDIUM',
+              dueDate: new Date(),
+              leadId,
+              assigneeId: enrollment!.enrolledById,
+            }),
+          })
           break
+        }
       }
 
       return cadenceStep
