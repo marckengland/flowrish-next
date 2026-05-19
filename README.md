@@ -27,14 +27,20 @@ cp .env.example .env
 # Generate Prisma client
 npx prisma generate
 
-# Run database migrations
-npx prisma migrate deploy
-
-# Seed default data (roles, pipeline)
-npx prisma db seed
+# Create database tables
+npx prisma migrate dev --name init
 
 # Start development server
 npm run dev
+```
+
+Or use the start script:
+```bash
+# Linux/macOS
+chmod +x start.sh && ./start.sh
+
+# Windows
+start.bat
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
@@ -45,7 +51,7 @@ Open [http://localhost:3000](http://localhost:3000).
 |---------|-------------|
 | `npm run dev` | Start Next.js dev server |
 | `npm run build` | Production build |
-| `npm run test` | Run all tests (Vitest) |
+| `npm run test` | Run all tests (836 tests) |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run lint` | ESLint check |
 
@@ -60,7 +66,7 @@ src/
 │   └── auth/               # OAuth callback and magic link confirm
 ├── components/             # React components (Shadcn/ui based)
 ├── hooks/                  # TanStack Query hooks
-├── lib/                    # Shared utilities (env, errors, encryption, validators)
+├── lib/                    # Shared utilities
 │   ├── supabase/           # Supabase client factories (server, browser, middleware)
 │   ├── upstash/            # Redis + rate limiting
 │   └── validators/         # Zod schemas for all entities
@@ -73,15 +79,34 @@ src/
 ├── stores/                 # Zustand stores (layout, filters, kanban)
 └── types/                  # TypeScript type definitions
 prisma/
-├── schema.prisma           # Database schema
-└── seed.ts                 # Seed script (default roles, pipeline)
+├── schema.prisma           # Database schema (28 tenant-scoped models)
+└── seed.ts                 # Seed script
 ```
+
+## Key Features
+
+- **Multi-tenancy** — Complete data isolation between organizations via tenant middleware
+- **RBAC** — 4-tier role system (Owner, Admin, Manager, Member) with permission-based access
+- **Lead Management** — Full lifecycle with pipeline stages, soft-delete, and conversion to contacts
+- **Cadence Engine** — Multi-step sales sequences with automated task/email creation
+- **Rhythm Engine** — Priority-scored daily actions based on deal value, urgency, and engagement
+- **Revenue Forecasting** — Pipeline metrics, AI predictions, and commit vs. actual tracking
+- **Email Integration** — Gmail OAuth with personalization tags and inbox sync
+- **AI Features** — Email generation, account research, and chatbot (Gemini/OpenAI)
+- **CSV Import/Export** — Bulk lead import with duplicate detection and field mapping
+- **Full-text Search** — PostgreSQL tsvector across leads, contacts, and companies
+- **Audit Logging** — Immutable trail of all CUD operations
+- **Score Decay** — Automated daily score reduction for inactive leads
 
 ## Documentation
 
 - [Setup Guide](docs/SETUP_GUIDE.md) — Full environment setup and deployment
-- [Architecture](docs/ARCHITECTURE.md) — System design, multi-tenancy, RBAC
+- [Architecture](docs/ARCHITECTURE.md) — System design, multi-tenancy, RBAC, data flow
 - [User Manual](docs/USER_MANUAL.md) — Feature walkthrough and user flows
+
+## Deployment
+
+Deployed on Vercel with Supabase Cloud. See [Setup Guide](docs/SETUP_GUIDE.md) for full deployment instructions.
 
 ## License
 

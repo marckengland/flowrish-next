@@ -6,7 +6,7 @@ Flowrish CRM is a single Next.js 15 application using the App Router pattern. Al
 
 ## Multi-Tenancy
 
-Every data model (except User, Organization, and auth-related tables) is scoped to an organization via an `organizationId` foreign key.
+Every data model (except User, Organization, and auth-related tables) is scoped to an organization via an `organizationId` foreign key. There are 28 tenant-scoped models in total.
 
 ### Tenant Isolation Middleware
 
@@ -18,7 +18,7 @@ This creates a Prisma client extension that automatically:
 - **Injects `organizationId`** into all `create` operations
 - **Filters by `organizationId`** on all `find`, `update`, `delete`, `count`, and `aggregate` operations
 
-This means services never need to manually add `organizationId` to queries — it's enforced at the data layer.
+Services never manually add `organizationId` to queries — it's enforced at the data layer.
 
 ### Organization ID Resolution
 
@@ -46,9 +46,9 @@ Session → OrganizationMember (isDefault: true) → organizationId
                                     ▼              ▼               │
                            ┌────────────┐  ┌──────────────┐       │
                            │ Onboarding │  │  Dashboard   │       │
-                           │ (create org │  │  (redirect)  │       │
-                           │  or join)   │  └──────────────┘       │
-                           └────────────┘                          │
+                           │ (create org │  │  (or onboard │       │
+                           │  or join)   │  │  if no org)  │       │
+                           └────────────┘  └──────────────┘       │
 ```
 
 ### Session Structure
@@ -61,11 +61,17 @@ interface Session {
 }
 ```
 
+### Edge Cases Handled
+
+- User authenticated but no org → redirected to `/onboarding`
+- User on `/onboarding` but already has org → redirected to `/`
+- Incomplete onboarding (org exists but no team membership) → auto-repaired in dashboard layout
+
 ## Organization & Team Model
 
 ### Creation Flow
 
-When a user creates an organization:
+When a user creates an organization (sequential operations, PgBouncer-compatible):
 
 1. **Organization** record is created (name, slug)
 2. **Default "General" team** is created under the org
@@ -76,45 +82,57 @@ When a user creates an organization:
 
 ### Invite Flow
 
-When inviting a new user:
-
-1. Inviter's privilege is checked (cannot invite with a higher-privilege role than your own)
-2. An **OrganizationInvite** is created with 7-day expiration
-3. When the invitee accepts:
-   - Email match is verified
-   - **OrganizationMember** is created
-   - **TeamMember** is created (on specified team, or default "General" team)
-   - Invite is marked as accepted
+1. Inviter's privilege is checked (cannot invite with a higher-privilege role)
+2. **OrganizationInvite** is created with 7-day expiration
+3. On acceptance: email match verified, OrganizationMember + TeamMember created
 
 ### Team Hierarchy
 
-Teams support parent-child relationships via `parentTeamId`. This enables:
-- Nested team structures (e.g., Sales → Sales West → Sales West LA)
-- MANAGER inheritance: a manager of a parent team has access to all sub-teams
+Teams support parent-child relationships via `parentTeamId`. A manager of a parent team has access to all sub-teams (recursive BFS traversal).
 
 ## RBAC (Role-Based Access Control)
 
 ### Role Hierarchy
 
-| Role | Hierarchy | Lead Access |
-|------|-----------|-------------|
-| OWNER | 0 | All org leads |
-| ADMIN | 1 | All org leads |
-| MANAGER | 2 | Leads assigned to users in their teams + sub-teams |
-| MEMBER | 3 | Only their own assigned leads |
+| Role | Hierarchy | Lead Access | Key Permissions |
+|------|-----------|-------------|-----------------|
+| OWNER | 0 | All org leads | Everything (14 permissions) |
+| ADMIN | 1 | All org leads | Everything except billing |
+| MANAGER | 2 | Leads in their teams + sub-teams | Leads, cadences, forecast |
+| MEMBER | 3 | Only their own assigned leads | Read leads, contacts, cadences |
 
 ### Permission System
 
-Permissions are string keys (e.g., `leads:read`, `cadences:manage`) stored as RolePermission records. A user's effective permissions are the **union** of all permissions from all their team memberships.
+Permissions are string keys (e.g., `leads:read`, `cadences:manage`). A user's effective permissions are the **union** of all permissions from all their team memberships.
 
-Permission checks happen at two levels:
-1. **Route level:** `requirePermission(user, 'leads:write')` — throws 403 before any business logic
-2. **Data level:** `getLeadAccessFilter(user, orgId)` — returns a Prisma `where` clause that scopes queries
+### Access Filter
 
-### Privilege Escalation Prevention
+`getLeadAccessFilter(user, organizationId)` returns a Prisma `where` clause:
+- OWNER/ADMIN: `{ deletedAt: null }` (all leads)
+- MANAGER: `{ deletedAt: null, assignedUserId: { in: [team member IDs] } }`
+- MEMBER: `{ deletedAt: null, assignedUserId: userId }`
 
-- Inviting: You cannot assign a role with higher privilege than your own
-- Team membership: Users must be an OrganizationMember before joining any team
+### Security Guards
+
+- Privilege escalation prevention: cannot invite with a role higher than your own
+- Org membership required before team membership
+- organizationId always server-derived, never from client
+
+## Feature Interconnections
+
+These features are automatically triggered by other features:
+
+| Trigger | Effect |
+|---------|--------|
+| Lead created (no assignee) | Assignment rules evaluated automatically |
+| Activity logged on a lead | Lead score recalculated, lastActivityAt updated |
+| Email sent to a lead | EMAIL activity created on timeline, lastActivityAt updated |
+| Task completed | NOTE activity created on lead timeline |
+| Lead moved to terminal stage | isClosed + closeDate set |
+| Lead converted to contact | Contact created, cadence enrollments exited |
+| Cadence step executed | Task or activity created on lead (EMAIL/CALL/LINKEDIN/MANUAL_TASK) |
+| Score decay (daily cron) | Inactive lead scores reduced, ScoreHistory entries created |
+| Forecast snapshot (daily cron) | Pipeline metrics calculated and stored |
 
 ## Data Flow
 
@@ -141,16 +159,8 @@ Client Component
 
 ### Background Jobs (Inngest)
 
-```
-Event/Cron trigger
-  → Inngest function
-    → step.run('step-name', async () => { ... })
-    → Uses tenant-scoped Prisma for each org
-    → Retries on failure (3 attempts, exponential backoff)
-```
-
-Registered functions:
-- **cadence-step-execution** — Executes cadence steps (email, call, LinkedIn, manual task)
+5 registered functions:
+- **cadence-step-execution** — Executes cadence steps (creates tasks/activities)
 - **email-sync** — Syncs Gmail inbox on demand
 - **score-decay** — Daily lead score decay for inactive leads
 - **task-reminder** — Hourly check for tasks due within 24 hours
@@ -162,42 +172,43 @@ Registered functions:
 
 Three tiers enforced in Next.js middleware:
 - **General:** 100 requests/minute per IP
-- **Auth:** 10 requests/minute per IP (login, signup)
-- **Write:** 30 requests/minute per IP (mutations)
+- **Auth:** 10 requests/minute per IP
+- **Write:** 30 requests/minute per IP
 
 ### Brute-Force Protection
 
-- 5 failed login attempts in 15 minutes → account lockout
-- Lockout persists for full duration regardless of subsequent attempts
-- Successful login resets the counter
+5 failed login attempts in 15 minutes → account lockout for full duration.
 
 ### Input Validation
 
-All inputs are validated with Zod schemas that include:
-- Null byte stripping
-- Path traversal detection
-- Prototype pollution key rejection
-- Type coercion and sanitization
+All inputs validated with Zod schemas including null byte stripping, path traversal detection, and prototype pollution key rejection.
 
 ### Security Headers
 
-Set via Next.js middleware:
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
-- `Strict-Transport-Security` (HSTS)
-- `Referrer-Policy: strict-origin-when-cross-origin`
-- `Permissions-Policy` (restrictive)
+Set via middleware: X-Content-Type-Options, X-Frame-Options, HSTS, Referrer-Policy, Permissions-Policy.
 
-## Soft Delete & Audit
+## Database Considerations
 
-- Leads use soft delete (`deletedAt` timestamp) — never appear in queries
-- All CUD operations create immutable **AuditEntry** records
-- Deletion requests go through an approval workflow (MEMBER requests, MANAGER/ADMIN approves)
+### PgBouncer Compatibility
 
-## Pipeline & Stages
+Supabase uses PgBouncer in transaction mode. This means:
+- **No interactive transactions** (`$transaction(async (tx) => {...})`) — use sequential operations instead
+- **`?pgbouncer=true`** required on DATABASE_URL to disable prepared statements
+- Connection pooling is handled by PgBouncer, not Prisma
 
-- Each org gets a default pipeline with 6 stages on first lead creation
-- Stages have `isClosedWon` and `isClosedLost` flags for terminal states
-- Moving a lead to a terminal stage sets `isClosed: true` and `closeDate`
-- Moving back to an open stage clears `isClosed`
-- All stage transitions are recorded in StageTransition for analytics
+### Prisma Configuration
+
+```prisma
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+```
+
+- `prisma-client-js` (not `prisma-client`) for Vercel compatibility
+- `rhel-openssl-3.0.x` binary target for Vercel's Linux runtime
+- Default output path (`node_modules/.prisma/client`) for reliable bundling
+
+### Type Safety
+
+The `tenantData()` helper (`src/server/db/types.ts`) provides type-safe Prisma create operations without `as any` casts. It bridges the gap between Prisma's types (which require organizationId) and the tenant middleware (which injects it automatically).

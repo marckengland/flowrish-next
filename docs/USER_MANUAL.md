@@ -12,15 +12,14 @@
 
 ### First-Time User: Onboarding
 
-If you're new (no organization membership), you'll land on the onboarding page with two options:
+If you're new (no organization membership), you'll land on the onboarding page:
 
 **Option A: Create an Organization**
 1. Enter an organization name (e.g., "Acme Corp")
 2. Enter a URL-safe slug (e.g., "acme-corp") — must be unique
 3. Click "Create Organization"
 4. You become the OWNER with full permissions
-5. A default "General" team is created automatically
-6. A default sales pipeline with 6 stages is created on your first lead
+5. A default "General" team and sales pipeline are created automatically
 
 **Option B: Join via Invite**
 1. Get an invite code from your team admin
@@ -30,7 +29,7 @@ If you're new (no organization membership), you'll land on the onboarding page w
 
 ### Returning User
 
-If you already have an organization, you're redirected straight to the dashboard.
+Redirected straight to the dashboard. If you previously started but didn't finish onboarding, you'll be sent back to complete it.
 
 ---
 
@@ -38,13 +37,13 @@ If you already have an organization, you're redirected straight to the dashboard
 
 The dashboard is your home base with tabbed views:
 
-- **Today's Rhythm** — Priority-sorted actions for the day
+- **Today's Rhythm** — Priority-sorted actions for the day (overdue tasks highlighted)
 - **Team View** (Managers only) — Overdue counts and top 3 urgent items per rep
 - **Deal Health** — Engagement scores with Healthy/At Risk/Critical classification
 - **Deal Gaps** — Leads missing recent activity, future meetings, or multi-threading
-- **Forecast** — Pipeline value, weighted pipeline, AI predicted
-- **Commit vs AI** (Managers) — Your forecast commit compared to AI prediction
-- **Pipeline Metrics** — Value per stage, conversion rates, stage duration, lead counts
+- **Forecast** — Pipeline value, weighted pipeline, AI predicted, win rate
+- **Commit vs AI** (Managers) — Your forecast commit compared to AI prediction with risk level
+- **Pipeline Metrics** — Value per stage, conversion rates, stage duration (with date range filter)
 
 ---
 
@@ -58,20 +57,19 @@ The dashboard is your home base with tabbed views:
 4. Optional: email, phone, deal value, company info
 5. Click "Create"
 
-The lead is automatically scoped to your organization. If no assignee is specified, assignment rules run automatically.
+If no assignee is specified, **assignment rules** run automatically to assign the lead based on territory, deal size, or round-robin distribution.
 
 ### Lead Detail Page
 
 Click any lead to see:
 - **Lead info** — Editable fields, stage, deal value, score
 - **Activity Timeline** — All interactions (calls, meetings, notes, emails, files)
-- **Conversation Intelligence** — AI meeting summaries (if meetings are logged)
+- **Conversation Intelligence** — AI meeting summaries
 - **Coaching Comments** — Manager feedback on activities
 
 ### Moving Leads Through Pipeline
 
 - Use the **Pipeline** (Kanban) view to drag leads between stages
-- Or use the stage dropdown on the lead detail page
 - Moving to "Closed Won" or "Closed Lost" marks the lead as closed with a close date
 - Moving back to an open stage reopens the lead
 
@@ -80,11 +78,11 @@ Click any lead to see:
 1. On the lead detail page, click "Convert to Contact"
 2. A Contact record is created from the lead's data
 3. The lead moves to Closed Won
-4. Any active cadence enrollments are exited
+4. Any active cadence enrollments are automatically exited
 
 ### Soft Delete
 
-- Deleting a lead sets a `deletedAt` timestamp — it's hidden from all views
+- Deleting a lead sets a `deletedAt` timestamp — hidden from all views and search
 - MEMBER role users must submit a deletion request (approved by MANAGER/ADMIN)
 - MANAGER/ADMIN can delete directly
 
@@ -92,7 +90,6 @@ Click any lead to see:
 
 ## Pipeline (Kanban Board)
 
-The pipeline view shows leads as cards in stage columns:
 - Drag cards between columns to move leads through stages
 - Cards show deal value and lead score
 - MEMBER users only see their assigned leads
@@ -112,7 +109,10 @@ Log interactions on any lead:
 | Email | Sent via Gmail integration |
 | File | Upload attachment (max 25 MB) |
 
-Each activity updates the lead's `lastActivityAt` timestamp, which feeds into scoring and rhythm.
+Each activity:
+- Updates the lead's `lastActivityAt` timestamp
+- Triggers automatic **lead score recalculation**
+- Feeds into the rhythm engine's priority scoring
 
 ---
 
@@ -120,8 +120,8 @@ Each activity updates the lead's `lastActivityAt` timestamp, which feeds into sc
 
 - Create tasks linked to leads with a due date, priority (Low/Medium/High), and assignee
 - Tasks are sorted by due date (most urgent first)
-- Overdue tasks are highlighted
-- Completing a task logs a "Task completed" activity on the lead
+- Overdue tasks are highlighted in the rhythm dashboard
+- Completing a task automatically logs a "Task completed" activity on the lead
 
 ---
 
@@ -130,7 +130,11 @@ Each activity updates the lead's `lastActivityAt` timestamp, which feeds into sc
 ### Creating a Cadence
 
 1. Go to **Cadences** → "New Cadence"
-2. Add steps (Email, Call, LinkedIn, Manual Task) with delays between them
+2. Add steps with delays between them:
+   - **Email** — Creates an email activity on the lead
+   - **Call** — Creates a high-priority call task for the rep
+   - **LinkedIn** — Creates a LinkedIn outreach task
+   - **Manual Task** — Creates a custom task for the rep
 3. Cadence starts in DRAFT status
 4. Click "Activate" (requires at least one step)
 
@@ -144,13 +148,21 @@ Each activity updates the lead's `lastActivityAt` timestamp, which feeds into sc
 
 ```
 ACTIVE → PAUSED → ACTIVE (resume)
-ACTIVE → EXITED (manual exit, reply received, meeting booked)
+ACTIVE → EXITED (manual exit, reply received, meeting booked, lead converted)
 ACTIVE → COMPLETED (all steps executed)
 ```
 
+### What Happens When a Step Executes
+
+| Step Type | Action |
+|-----------|--------|
+| EMAIL | Creates an EMAIL activity on the lead timeline |
+| CALL | Creates a high-priority task "Make a call" assigned to the rep |
+| LINKEDIN | Creates a medium-priority task "LinkedIn outreach" assigned to the rep |
+| MANUAL_TASK | Creates a task with the configured title/description |
+
 ### Cadence Analytics
 
-The cadence detail page shows:
 - Total enrollments, active/completed/exited counts
 - Completion rate and average completion time
 - Per-step metrics (reached, completed, exited at each step)
@@ -164,13 +176,14 @@ The cadence detail page shows:
 1. Go to **Settings** → Email
 2. Click "Connect Gmail"
 3. Authorize via Google OAuth
-4. Your tokens are encrypted (AES-256-CBC) and stored securely
+4. Tokens are encrypted (AES-256-CBC) and stored securely
 
 ### Sending Emails
 
 - Compose from the lead detail page
 - Use personalization tags: `{{FirstName}}`, `{{LastName}}`, `{{FullName}}`, `{{CompanyName}}`, `{{Title}}`
 - Tags are replaced with lead data before sending
+- **Sent emails automatically appear in the lead's activity timeline**
 
 ### Email Sync
 
@@ -188,12 +201,29 @@ Leads are scored 0–100 based on configurable rules:
 - Stage progression
 - Email engagement
 
+**Scores are automatically recalculated** whenever an activity is logged on a lead.
+
 ### Score Decay
 
 A daily background job reduces scores for inactive leads:
 - Configure inactivity threshold (days) and point reduction
 - Leads inactive beyond the threshold lose points daily
 - Scores are clamped to [0, 100]
+- ScoreHistory entries track all changes
+
+---
+
+## Assignment Rules
+
+When a lead is created without an assignee, assignment rules are evaluated automatically:
+
+| Rule Type | How it works |
+|-----------|-------------|
+| TERRITORY | Matches lead's company/region against configured patterns |
+| DEAL_SIZE | Matches lead's deal value against min/max range |
+| ROUND_ROBIN | Distributes evenly across configured team members (Redis counter) |
+
+Rules are evaluated in priority order (lowest number first). First match wins.
 
 ---
 
@@ -211,7 +241,7 @@ The rhythm engine prioritizes your daily actions based on weighted signals:
 
 ### Deal Health
 
-Each deal gets an engagement score (1–100) based on:
+Each deal gets an engagement score (1–100):
 - Activity recency (0–25)
 - Stakeholder count (0–20)
 - Activity volume in last 30 days (0–20)
@@ -233,7 +263,7 @@ Automatically identified issues:
 
 - **Total Pipeline:** Sum of all open deal values
 - **Weighted Pipeline:** Deal value × stage win probability
-- **AI Predicted:** 70% weighted + 30% monthly run rate (last 30 days closed won)
+- **AI Predicted:** 70% weighted + 30% monthly run rate
 - **Forecast Submission:** Submit your commit amount for a YYYY-MM period
 - **Risk Assessment:** On Track (<15% gap), At Risk (15–30%), High Risk (>30%)
 
@@ -247,16 +277,19 @@ Daily snapshots track pipeline trends over time.
 
 1. Go to **CSV** → Import
 2. Upload a CSV file
-3. Map columns to lead fields (firstName, lastName, email, companyName, etc.)
+3. Map columns to lead fields
 4. Preview the first 5 rows
 5. Click "Import"
-6. Results: success count + skip count (invalid/duplicate rows)
 
-Save field mappings for reuse on future imports.
+Features:
+- Automatic duplicate detection (by email, case-insensitive)
+- Company creation/reuse by name
+- Save field mappings for reuse
+- Results: success count + skip count (invalid/duplicate rows)
 
 ### Export
 
-- Click "Export" to download all accessible leads as CSV
+- Downloads all accessible leads as CSV
 - Respects RBAC — you only export leads you can see
 - Soft-deleted leads are excluded
 
@@ -265,10 +298,9 @@ Save field mappings for reuse on future imports.
 ## Search
 
 Full-text search across Leads, Contacts, and Companies using PostgreSQL tsvector:
-- Type in the global search bar
-- Results are ranked by relevance
+- Results ranked by relevance
 - Filter by entity type, date range, or assigned user
-- Soft-deleted leads are excluded
+- Soft-deleted leads excluded
 
 ---
 
@@ -276,34 +308,38 @@ Full-text search across Leads, Contacts, and Companies using PostgreSQL tsvector
 
 ### Email Generation
 
-- Click "Generate Email" on a lead
 - AI uses lead context (name, title, company, last 5 interactions) + admin-configured system prompt
-- Returns a structured draft (subject + body) you can edit before sending
+- Returns structured draft (subject + body) you can edit before sending
 
 ### Account Research
 
-- Click "Research" on a company
-- AI returns: executive summary, strategic goals, sales angles, challenges
+- Returns: executive summary, strategic goals, sales angles, challenges
 
 ### Chatbot
 
 - Accessible from every page via the sidebar
-- Ask questions about your pipeline, get suggestions, analyze deals
+- Ask questions about your pipeline, get suggestions
 
 ---
 
-## Admin & Settings
+## Admin (Owner/Admin only)
 
-### User Management (ADMIN/OWNER)
+### User Management
 
 - Invite users with specific roles and team assignments
-- Manage existing members' roles
-- View and manage teams (create, nest, assign members)
+- Privilege escalation prevention (can't invite with higher role than yours)
+- View and manage existing members
 
-### Audit Log (ADMIN/OWNER)
+### Team Management
+
+- Create teams with parent-child hierarchy
+- Assign members to teams with roles
+- Users must be org members before joining teams
+
+### Audit Log
 
 - Immutable record of all create/update/delete operations
-- Filter by entity type, user, date range
+- Filter by entity type, user, date range, action
 - Shows old/new values for updates
 
 ### Deletion Requests
@@ -312,21 +348,14 @@ Full-text search across Leads, Contacts, and Companies using PostgreSQL tsvector
 - MANAGER/ADMIN review and approve/reject
 - Approved deletions execute immediately
 
-### Scoring Rules
-
-- Configure which signals contribute to lead scores
-- Set weights and thresholds
-
 ### Assignment Rules
 
-- TERRITORY: Match by company/region
-- DEAL_SIZE: Match by min/max deal value range
-- ROUND_ROBIN: Distribute evenly across team members
+- Configure TERRITORY, DEAL_SIZE, and ROUND_ROBIN rules
+- Set priority order and enable/disable rules
 
 ### AI Prompt Configuration
 
 - Customize system prompts for email generation and account research
-- Only active prompts are included in AI requests
 
 ---
 
