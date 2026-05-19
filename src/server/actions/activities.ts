@@ -7,6 +7,7 @@ import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { createActivity as createActivityService } from '@/server/services/activities'
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 
 /**
  * Server Actions for activity logging mutations.
@@ -63,12 +64,12 @@ export async function createActivity(
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry
       .create({
-        data: {
+        data: tenantData({
           userId: session.dbUser.id,
           action: 'CREATE',
           entityType: 'Activity',
           entityId: activity.id,
-        } as any,
+        }),
       })
       .catch((err) => {
         console.error('Audit log failed (createActivity):', err)

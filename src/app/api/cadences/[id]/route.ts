@@ -115,7 +115,7 @@ export async function DELETE(
       include: {
         _count: {
           select: {
-            enrollments: { where: { status: 'ACTIVE' } } as any,
+            enrollments: { where: { status: 'ACTIVE' } } as Record<string, unknown>,
           },
         },
       },
@@ -140,7 +140,7 @@ export async function DELETE(
 
     // Delete related records then the cadence itself
     await db.stepExecutionLog.deleteMany({
-      where: { enrollment: { cadenceId: id } } as any,
+      where: { enrollment: { cadenceId: id } } as Record<string, unknown>,
     })
     await db.cadenceEnrollment.deleteMany({ where: { cadenceId: id } })
     await db.cadenceStep.deleteMany({ where: { cadenceId: id } })

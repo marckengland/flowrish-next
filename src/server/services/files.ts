@@ -1,4 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { AppError } from '@/lib/errors'
 import { getLeadAccessFilter } from '@/server/services/access'
@@ -134,12 +135,12 @@ export async function uploadFile(
   //    and the FileAttachment has an owning activity (required by schema).
   // Note: organizationId is auto-injected by the tenant middleware at runtime
   const activity = await db.activity.create({
-    data: {
+    data: tenantData({
       type: 'FILE_ATTACHMENT',
       leadId,
       createdById: userId,
       notes: `Uploaded ${file.fileName}`,
-    } as any,
+    }),
   })
 
   // Update the lead's lastActivityAt to keep it consistent with other activities.
@@ -179,14 +180,14 @@ export async function uploadFile(
   try {
     // Note: organizationId is auto-injected by the tenant middleware at runtime
     const attachment = await db.fileAttachment.create({
-      data: {
+      data: tenantData({
         activityId: activity.id,
         fileName: file.fileName,
         fileSize: file.size,
         mimeType: file.mimeType,
         storagePath,
         uploadedById: userId,
-      } as any,
+      }),
     })
 
     return {

@@ -1,5 +1,6 @@
 import { inngest } from './client'
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { completeEnrollment } from '@/server/services/cadences'
 
 /**
@@ -91,13 +92,13 @@ export const cadenceStepFunction = inngest.createFunction(
     // Step 3: Create StepExecutionLog entry with outcome SUCCESS
     await step.run('create-execution-log', async () => {
       await db.stepExecutionLog.create({
-        data: {
+        data: tenantData({
           enrollmentId,
           stepId,
           actionType: stepRecord.actionType,
           outcome: 'SUCCESS',
           attemptCount: 1,
-        } as any,
+        }),
       })
     })
 

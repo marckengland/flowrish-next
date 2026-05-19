@@ -5,6 +5,7 @@ import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { createLead as createLeadService, updateLead as updateLeadService, softDeleteLead, convertToContact as convertToContactService } from '@/server/services/leads'
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { ZodError } from 'zod'
 
 /**
@@ -44,12 +45,12 @@ export async function createLead(formData: FormData) {
     // Note: organizationId is auto-injected by the tenant middleware at runtime
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'CREATE',
         entityType: 'Lead',
         entityId: lead.id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (createLead):', err)
     })
@@ -94,12 +95,12 @@ export async function updateLead(formData: FormData) {
     // Note: organizationId is auto-injected by the tenant middleware at runtime
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'UPDATE',
         entityType: 'Lead',
         entityId: id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (updateLead):', err)
     })
@@ -139,12 +140,12 @@ export async function deleteLead(id: string) {
     // Note: organizationId is auto-injected by the tenant middleware at runtime
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'DELETE',
         entityType: 'Lead',
         entityId: id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (deleteLead):', err)
     })
@@ -188,12 +189,12 @@ export async function convertLead(id: string) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
-        action: 'CONVERT',
+        action: 'UPDATE',
         entityType: 'Lead',
         entityId: id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (convertLead):', err)
     })

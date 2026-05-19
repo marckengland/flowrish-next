@@ -1,4 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { prisma } from '@/server/db/client'
 import { cadenceCreateSchema, stepCreateSchema } from '@/lib/validators/cadences'
 import { AppError } from '@/lib/errors'
@@ -50,11 +51,11 @@ export async function createCadence(
   const db = createTenantPrisma(orgId)
 
   const cadence = await db.cadence.create({
-    data: {
+    data: tenantData({
       name: validated.name,
       status: 'DRAFT',
       createdById: userId,
-    } as any,
+    }),
     include: { steps: true },
   })
 
@@ -229,7 +230,7 @@ export async function addStep(
   const nextOrder = maxOrder + 1
 
   const step = await db.cadenceStep.create({
-    data: {
+    data: tenantData({
       cadenceId,
       stepOrder: nextOrder,
       actionType: validated.actionType,
@@ -238,7 +239,7 @@ export async function addStep(
       emailBody: validated.body ?? null,
       taskTitle: validated.instructions ?? null,
       taskDescription: null,
-    } as any,
+    }),
   })
 
   return step
@@ -433,13 +434,13 @@ export async function enrollLead(
 
   // Create enrollment with status ACTIVE and currentStepOrder 1
   const enrollment = await db.cadenceEnrollment.create({
-    data: {
+    data: tenantData({
       cadenceId,
       leadId,
       enrolledById: userId,
       status: 'ACTIVE',
       currentStepOrder: 1,
-    } as any,
+    }),
   })
 
   return enrollment
@@ -519,13 +520,13 @@ export async function bulkEnroll(
 
   for (const leadId of leadsToEnroll) {
     const enrollment = await db.cadenceEnrollment.create({
-      data: {
+      data: tenantData({
         cadenceId,
         leadId,
         enrolledById: userId,
         status: 'ACTIVE',
         currentStepOrder: 1,
-      } as any,
+      }),
     })
     enrolled.push(enrollment)
   }

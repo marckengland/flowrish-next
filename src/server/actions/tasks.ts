@@ -9,6 +9,7 @@ import {
   reassignTask,
 } from '@/server/services/tasks'
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { ZodError } from 'zod'
 
 /**
@@ -45,12 +46,12 @@ export async function createTask(formData: FormData) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'CREATE',
         entityType: 'Task',
         entityId: task.id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (createTask):', err)
     })
@@ -89,13 +90,13 @@ export async function completeTask(id: string) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'UPDATE',
         entityType: 'Task',
         entityId: id,
         metadata: JSON.stringify({ action: 'complete' }),
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (completeTask):', err)
     })
@@ -159,12 +160,12 @@ export async function updateTask(formData: FormData) {
 
     // Audit log: async, non-blocking
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'UPDATE',
         entityType: 'Task',
         entityId: id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (updateTask):', err)
     })

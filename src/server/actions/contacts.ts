@@ -12,6 +12,7 @@ import {
   deleteCompany as deleteCompanyService,
 } from '@/server/services/contacts'
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { ZodError } from 'zod'
 
 /**
@@ -47,12 +48,12 @@ export async function createContact(formData: FormData) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'CREATE',
         entityType: 'Contact',
         entityId: contact.id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (createContact):', err)
     })
@@ -94,12 +95,12 @@ export async function updateContact(formData: FormData) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'UPDATE',
         entityType: 'Contact',
         entityId: id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (updateContact):', err)
     })
@@ -135,12 +136,12 @@ export async function deleteContactAction(id: string) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'DELETE',
         entityType: 'Contact',
         entityId: id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (deleteContact):', err)
     })
@@ -174,12 +175,12 @@ export async function createCompany(formData: FormData) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'CREATE',
         entityType: 'Company',
         entityId: company.id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (createCompany):', err)
     })
@@ -221,12 +222,12 @@ export async function updateCompany(formData: FormData) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'UPDATE',
         entityType: 'Company',
         entityId: id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (updateCompany):', err)
     })
@@ -262,12 +263,12 @@ export async function deleteCompanyAction(id: string) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'DELETE',
         entityType: 'Company',
         entityId: id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (deleteCompany):', err)
     })

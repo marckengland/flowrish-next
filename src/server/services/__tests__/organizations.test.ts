@@ -7,13 +7,19 @@ const mockFindFirst = vi.fn()
 const mockFindMany = vi.fn()
 const mockCreate = vi.fn()
 const mockUpdate = vi.fn()
-const mockTransaction = vi.fn()
 const mockTeamMemberFindMany = vi.fn()
+
+const mockOrgCreate = vi.fn()
+const mockTeamCreate = vi.fn()
+const mockRoleCreate = vi.fn()
+const mockOrgMemberCreate = vi.fn()
+const mockTeamMemberCreate = vi.fn()
 
 vi.mock('@/server/db/client', () => ({
   prisma: {
     organization: {
       findUnique: (...args: any[]) => mockFindUnique(...args),
+      create: (...args: any[]) => mockOrgCreate(...args),
     },
     user: {
       findUnique: (...args: any[]) => mockFindUnique(...args),
@@ -21,6 +27,7 @@ vi.mock('@/server/db/client', () => ({
     organizationMember: {
       findUnique: (...args: any[]) => mockFindUnique(...args),
       findMany: (...args: any[]) => mockFindMany(...args),
+      create: (...args: any[]) => mockOrgMemberCreate(...args),
     },
     organizationInvite: {
       findUnique: (...args: any[]) => mockFindUnique(...args),
@@ -31,14 +38,16 @@ vi.mock('@/server/db/client', () => ({
     team: {
       findUnique: (...args: any[]) => mockFindUnique(...args),
       findFirst: (...args: any[]) => mockFindFirst(...args),
+      create: (...args: any[]) => mockTeamCreate(...args),
     },
     role: {
       findUnique: (...args: any[]) => mockFindUnique(...args),
+      create: (...args: any[]) => mockRoleCreate(...args),
     },
     teamMember: {
       findMany: (...args: any[]) => mockTeamMemberFindMany(...args),
+      create: (...args: any[]) => mockTeamMemberCreate(...args),
     },
-    $transaction: (...args: any[]) => mockTransaction(...args),
   },
 }))
 
@@ -100,7 +109,7 @@ describe('Organization Service', () => {
       })
     })
 
-    it('creates org, default team, roles, and memberships in a transaction', async () => {
+    it('creates org, default team, roles, and memberships sequentially', async () => {
       const mockOrg = { id: 'org-1', name: 'Acme', slug: 'acme' }
       const mockTeam = { id: 'team-1', name: 'General', organizationId: 'org-1' }
       const mockRoles = [
@@ -115,24 +124,16 @@ describe('Organization Service', () => {
       // user check → exists
       mockFindUnique.mockResolvedValueOnce({ id: 'owner-1', email: 'owner@acme.com' })
 
-      // Transaction callback
-      mockTransaction.mockImplementation(async (callback: any) => {
-        const tx = {
-          organization: { create: vi.fn().mockResolvedValue(mockOrg) },
-          team: { create: vi.fn().mockResolvedValue(mockTeam) },
-          role: { create: vi.fn() },
-          organizationMember: { create: vi.fn().mockResolvedValue({}) },
-          teamMember: { create: vi.fn().mockResolvedValue({}) },
-        }
-        // Mock role creation for each of the 4 roles
-        tx.role.create
-          .mockResolvedValueOnce(mockRoles[0])
-          .mockResolvedValueOnce(mockRoles[1])
-          .mockResolvedValueOnce(mockRoles[2])
-          .mockResolvedValueOnce(mockRoles[3])
-
-        return callback(tx)
-      })
+      // Direct create calls (no transaction)
+      mockOrgCreate.mockResolvedValueOnce(mockOrg)
+      mockTeamCreate.mockResolvedValueOnce(mockTeam)
+      mockRoleCreate
+        .mockResolvedValueOnce(mockRoles[0])
+        .mockResolvedValueOnce(mockRoles[1])
+        .mockResolvedValueOnce(mockRoles[2])
+        .mockResolvedValueOnce(mockRoles[3])
+      mockOrgMemberCreate.mockResolvedValueOnce({})
+      mockTeamMemberCreate.mockResolvedValueOnce({})
 
       const result = await createOrganization('Acme', 'acme', 'owner-1')
 
@@ -367,24 +368,15 @@ describe('Organization Service', () => {
       const mockMembership = { id: 'om-1', userId: 'user-1', organizationId: 'org-1' }
       const mockTeamMember = { id: 'tm-1', userId: 'user-1', teamId: 'team-1', roleId: 'role-1' }
 
-      mockTransaction.mockImplementation(async (callback: any) => {
-        const tx = {
-          organizationMember: {
-            findMany: vi.fn().mockResolvedValue([]),
-            create: vi.fn().mockResolvedValue(mockMembership),
-          },
-          teamMember: {
-            create: vi.fn().mockResolvedValue(mockTeamMember),
-          },
-          team: {
-            findFirst: vi.fn().mockResolvedValue(null),
-          },
-          organizationInvite: {
-            update: vi.fn().mockResolvedValue({}),
-          },
-        }
-        return callback(tx)
-      })
+      // Sequential calls (no transaction)
+      // findMany for existing memberships check
+      mockFindMany.mockResolvedValueOnce([])
+      // organizationMember.create
+      mockOrgMemberCreate.mockResolvedValueOnce(mockMembership)
+      // teamMember.create (invite has teamId)
+      mockTeamMemberCreate.mockResolvedValueOnce(mockTeamMember)
+      // organizationInvite.update
+      mockUpdate.mockResolvedValueOnce({})
 
       const result = await acceptInvite('invite-1', 'user-1')
 

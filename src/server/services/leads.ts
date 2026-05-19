@@ -1,4 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { leadCreateSchema, leadUpdateSchema } from '@/lib/validators/leads'
 import { AppError } from '@/lib/errors'
 import { getOrCreateDefaultPipeline, createStageTransition } from '@/server/services/pipeline'
@@ -58,7 +59,7 @@ export async function createLead(
   // Create the lead
   // Note: organizationId is auto-injected by the tenant middleware at runtime
   const lead = await db.lead.create({
-    data: {
+    data: tenantData({
       firstName: validated.firstName,
       lastName: validated.lastName,
       email: validated.email || null,
@@ -80,7 +81,7 @@ export async function createLead(
       stageId: validated.stageId,
       // Assignment rules will be triggered in task 11.2
       // For now, leave unassigned if no assignee provided
-    } as any,
+    }),
   })
 
   return lead
@@ -284,7 +285,7 @@ export async function convertToContact(
   // Create contact from lead data
   // Note: organizationId is auto-injected by the tenant middleware at runtime
   const contact = await db.contact.create({
-    data: {
+    data: tenantData({
       firstName: existing.firstName,
       lastName: existing.lastName,
       email: existing.email,
@@ -294,7 +295,7 @@ export async function convertToContact(
       country: existing.country,
       state: existing.state,
       companyId: existing.companyId,
-    } as any,
+    }),
   })
 
   // Link contact to lead via LeadContact

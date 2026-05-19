@@ -1,4 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { prisma } from '@/server/db/client'
 import { contactCreateSchema, companyCreateSchema } from '@/lib/validators/contacts'
 import { AppError } from '@/lib/errors'
@@ -51,7 +52,7 @@ export async function createContact(data: unknown, orgId: string) {
   }
 
   const contact = await db.contact.create({
-    data: {
+    data: tenantData({
       firstName: validated.firstName,
       lastName: validated.lastName,
       email: validated.email || null,
@@ -61,7 +62,7 @@ export async function createContact(data: unknown, orgId: string) {
       country: validated.country ?? null,
       state: validated.state ?? null,
       companyId: validated.companyId ?? null,
-    } as any,
+    }),
   })
 
   // Update tsvector search field
@@ -85,11 +86,11 @@ export async function createCompany(data: unknown, orgId: string) {
   const db = createTenantPrisma(orgId)
 
   const company = await db.company.create({
-    data: {
+    data: tenantData({
       name: validated.name,
       industry: validated.industry ?? null,
       website: validated.website || null,
-    } as any,
+    }),
   })
 
   // Update tsvector search field

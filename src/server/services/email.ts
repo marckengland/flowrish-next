@@ -1,4 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { encrypt, decrypt } from '@/lib/encryption'
 import { env } from '@/lib/env'
 import { AppError } from '@/lib/errors'
@@ -105,14 +106,14 @@ export async function connectGmail(
   // Note: organizationId is auto-injected by the tenant middleware at runtime
   const db = createTenantPrisma(orgId)
   const account = await db.emailAccount.create({
-    data: {
+    data: tenantData({
       userId,
       provider: 'gmail',
       email: profile.emailAddress,
       accessToken: encryptedAccessToken,
       refreshToken: encryptedRefreshToken,
       tokenExpiry,
-    } as any,
+    }),
   })
 
   return { email: profile.emailAddress, accountId: account.id }
@@ -339,7 +340,7 @@ export async function sendEmail(
   // Create EmailMessage record
   // Note: organizationId is auto-injected by the tenant middleware at runtime
   await db.emailMessage.create({
-    data: {
+    data: tenantData({
       externalId: sendData.id,
       threadId: sendData.threadId,
       fromEmail: updatedAccount.email,
@@ -347,7 +348,7 @@ export async function sendEmail(
       subject: personalizedSubject,
       bodyPreview: personalizedBody.substring(0, 200),
       sentAt: new Date(),
-    } as any,
+    }),
   })
 
   return { messageId: sendData.id, threadId: sendData.threadId }

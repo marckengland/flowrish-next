@@ -1,4 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { AppError } from '@/lib/errors'
 
 /**
@@ -127,12 +128,12 @@ export async function submitForecast(
   const db = createTenantPrisma(orgId)
 
   const submission = await db.forecastSubmission.create({
-    data: {
+    data: tenantData({
       userId,
       period,
       commitAmount,
       notes: notes ?? null,
-    } as any,
+    }),
   })
 
   return { id: submission.id }

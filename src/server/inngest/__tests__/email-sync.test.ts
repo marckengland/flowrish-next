@@ -379,7 +379,7 @@ describe('Email Sync Function', () => {
         data: expect.objectContaining({
           type: 'EMAIL',
           leadId,
-          userId,
+          createdById: userId,
         }),
       })
       expect(mockDb.lead.update).toHaveBeenCalledWith({

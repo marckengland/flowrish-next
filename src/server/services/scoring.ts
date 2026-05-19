@@ -1,4 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { AppError } from '@/lib/errors'
 
 /**
@@ -127,12 +128,12 @@ export async function recordScoreChange(
   const db = createTenantPrisma(orgId)
 
   await db.scoreHistory.create({
-    data: {
+    data: tenantData({
       leadId,
       previousScore,
       newScore: clampScore(newScore),
       reason,
-    } as any,
+    }),
   })
 }
 

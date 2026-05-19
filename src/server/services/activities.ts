@@ -1,4 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { activityCreateSchema } from '@/lib/validators/activities'
 import { AppError } from '@/lib/errors'
 
@@ -59,8 +60,11 @@ export async function createActivity(
   }
 
   // Create the activity
+  // The data object is built dynamically based on activity type.
+  // We use tenantData() to signal that organizationId is injected by middleware,
+  // then assert to the expected Prisma input type.
   const activity = await db.activity.create({
-    data: activityData as any,
+    data: tenantData(activityData) as Parameters<typeof db.activity.create>[0]['data'],
   })
 
   // Update the lead's lastActivityAt to the current timestamp

@@ -1,5 +1,6 @@
 import { inngest } from './client'
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { refreshTokenIfNeeded } from '@/server/services/email'
 import { decrypt } from '@/lib/encryption'
 
@@ -180,7 +181,7 @@ export const emailSyncFunction = inngest.createFunction(
         // Create EmailMessage record
         // Note: organizationId is auto-injected by the tenant middleware at runtime
         await db.emailMessage.create({
-          data: {
+          data: tenantData({
             externalId: msgData.id,
             threadId: msgData.threadId,
             fromEmail,
@@ -188,7 +189,7 @@ export const emailSyncFunction = inngest.createFunction(
             subject,
             bodyPreview: msgData.snippet?.substring(0, 200) ?? null,
             sentAt,
-          } as any,
+          }),
         })
 
         // Link to lead by matching email address (from or to)
@@ -208,15 +209,15 @@ export const emailSyncFunction = inngest.createFunction(
           if (lead) {
             // Create an EMAIL activity linked to this lead
             await db.activity.create({
-              data: {
+              data: tenantData({
                 type: 'EMAIL',
                 leadId: lead.id,
-                userId: (await db.emailAccount.findFirst({
+                createdById: (await db.emailAccount.findFirst({
                   where: { id: accountId },
                   select: { userId: true },
                 }))!.userId,
                 description: `Email: ${subject}`,
-              } as any,
+              }),
             })
 
             // Update lead's lastActivityAt

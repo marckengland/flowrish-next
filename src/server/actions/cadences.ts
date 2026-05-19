@@ -16,6 +16,7 @@ import {
   reorderSteps as reorderStepsService,
 } from '@/server/services/cadences'
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { ZodError } from 'zod'
 
 /**
@@ -54,12 +55,12 @@ export async function createCadence(formData: FormData) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'CREATE',
         entityType: 'Cadence',
         entityId: cadence.id,
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (createCadence):', err)
     })
@@ -97,13 +98,13 @@ export async function activateCadence(id: string) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'UPDATE',
         entityType: 'Cadence',
         entityId: id,
         metadata: JSON.stringify({ action: 'activate' }),
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (activateCadence):', err)
     })
@@ -138,13 +139,13 @@ export async function archiveCadence(id: string) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'UPDATE',
         entityType: 'Cadence',
         entityId: id,
         metadata: JSON.stringify({ action: 'archive' }),
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (archiveCadence):', err)
     })
@@ -190,13 +191,13 @@ export async function addStep(formData: FormData) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'CREATE',
         entityType: 'CadenceStep',
         entityId: step.id,
         metadata: JSON.stringify({ cadenceId }),
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (addStep):', err)
     })
@@ -238,13 +239,13 @@ export async function reorderSteps(cadenceId: string, stepIds: string[]) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'UPDATE',
         entityType: 'Cadence',
         entityId: cadenceId,
         metadata: JSON.stringify({ action: 'reorder_steps' }),
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (reorderSteps):', err)
     })
@@ -288,13 +289,13 @@ export async function enrollLead(cadenceId: string, leadId: string) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'CREATE',
         entityType: 'CadenceEnrollment',
         entityId: enrollment.id,
         metadata: JSON.stringify({ cadenceId, leadId }),
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (enrollLead):', err)
     })
@@ -338,7 +339,7 @@ export async function bulkEnrollLeads(cadenceId: string, leadIds: string[]) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'CREATE',
         entityType: 'CadenceEnrollment',
@@ -348,7 +349,7 @@ export async function bulkEnrollLeads(cadenceId: string, leadIds: string[]) {
           enrolledCount: result.enrolledCount,
           skippedCount: result.skippedCount,
         }),
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (bulkEnrollLeads):', err)
     })
@@ -387,13 +388,13 @@ export async function pauseEnrollment(enrollmentId: string) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'UPDATE',
         entityType: 'CadenceEnrollment',
         entityId: enrollmentId,
         metadata: JSON.stringify({ action: 'pause' }),
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (pauseEnrollment):', err)
     })
@@ -432,13 +433,13 @@ export async function resumeEnrollment(enrollmentId: string) {
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'UPDATE',
         entityType: 'CadenceEnrollment',
         entityId: enrollmentId,
         metadata: JSON.stringify({ action: 'resume' }),
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (resumeEnrollment):', err)
     })
@@ -484,13 +485,13 @@ export async function exitEnrollment(
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry.create({
-      data: {
+      data: tenantData({
         userId: session.dbUser.id,
         action: 'UPDATE',
         entityType: 'CadenceEnrollment',
         entityId: enrollmentId,
         metadata: JSON.stringify({ action: 'exit', reason }),
-      } as any,
+      }),
     }).catch((err) => {
       console.error('Audit log failed (exitEnrollment):', err)
     })

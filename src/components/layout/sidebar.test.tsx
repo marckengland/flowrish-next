@@ -79,14 +79,14 @@ describe('Sidebar', () => {
     unmount()
   })
 
-  it('shows Audit Log only when user has audit:read', () => {
+  it('shows Admin only when user has users:manage', () => {
     const { container, rerender, unmount } = mount(
       <Sidebar permissions={['leads:read'] satisfies Permission[]} />,
     )
-    expect(linkLabels(container)).not.toContain('Audit Log')
+    expect(linkLabels(container)).not.toContain('Admin')
 
-    rerender(<Sidebar permissions={['audit:read'] satisfies Permission[]} />)
-    expect(linkLabels(container)).toContain('Audit Log')
+    rerender(<Sidebar permissions={['users:manage'] satisfies Permission[]} />)
+    expect(linkLabels(container)).toContain('Admin')
     unmount()
   })
 
@@ -111,7 +111,7 @@ describe('Sidebar', () => {
       'contacts:read',
       'cadences:manage',
       'cadences:read',
-      'audit:read',
+      'users:manage',
       'settings:manage',
     ]
     const { container, unmount } = mount(<Sidebar permissions={allPerms} />)
@@ -126,7 +126,7 @@ describe('Sidebar', () => {
       'Cadences',
       'CSV Import/Export',
       'Search',
-      'Audit Log',
+      'Admin',
       'Settings',
     ]) {
       expect(labels).toContain(label)

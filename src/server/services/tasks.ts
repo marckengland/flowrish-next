@@ -1,4 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { prisma } from '@/server/db/client'
 import { taskCreateSchema } from '@/lib/validators/tasks'
 import { AppError } from '@/lib/errors'
@@ -74,14 +75,14 @@ export async function createTask(
   // Create the task
   // Note: organizationId is auto-injected by the tenant middleware at runtime
   const task = await db.task.create({
-    data: {
+    data: tenantData({
       title: validated.title,
       description: validated.description ?? null,
       priority: validated.priority,
       dueDate: validated.dueDate,
       leadId: validated.leadId,
       assigneeId: validated.assigneeId,
-    } as any,
+    }),
   })
 
   return task
@@ -130,12 +131,12 @@ export async function completeTask(
   // Log an Activity of type NOTE on the lead
   // Note: organizationId is auto-injected by the tenant middleware at runtime
   await db.activity.create({
-    data: {
+    data: tenantData({
       type: 'NOTE',
       leadId: task.leadId,
       createdById: userId,
       notes: `Task completed: ${task.title}`,
-    } as any,
+    }),
   })
 
   // Update the lead's lastActivityAt

@@ -1,4 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { AppError } from '@/lib/errors'
 import type { SessionUser } from '@/server/auth/session'
 import { sanitizedString, nullableSanitizedString } from '@/lib/validators/common'
@@ -106,14 +107,14 @@ export async function requestDeletion(
   }
 
   const request = await db.deletionRequest.create({
-    data: {
+    data: tenantData({
       entityType: validated.entityType,
       entityId: validated.entityId,
       entityName: validated.entityName,
       reason: validated.reason ?? null,
       requestedById: userId,
       status: 'pending',
-    } as any,
+    }),
   })
 
   return request

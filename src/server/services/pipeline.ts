@@ -1,4 +1,5 @@
 import { createTenantPrisma, type TenantPrismaClient } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { prisma } from '@/server/db/client'
 import { AppError } from '@/lib/errors'
 
@@ -204,13 +205,15 @@ export async function createStageTransition(
     ? createTenantPrisma(orgOrDb)
     : orgOrDb
 
+  // Intentional `as any`: TenantPrismaClient's inferred type from $extends doesn't
+  // expose all model accessors. The stageTransition model is available at runtime.
   const transition = await (db as any).stageTransition.create({
-    data: {
+    data: tenantData({
       leadId,
       fromStageId: fromStageId ?? null,
       toStageId,
       userId: userId ?? null,
-    },
+    }),
   })
 
   return transition

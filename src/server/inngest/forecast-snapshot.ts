@@ -1,6 +1,7 @@
 import { inngest } from './client'
 import { prisma } from '@/server/db/client'
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { calculatePipelineMetrics } from '@/server/services/forecast'
 
 /**
@@ -76,14 +77,14 @@ export const forecastSnapshotFunction = inngest.createFunction(
           // Create ForecastSnapshot record
           // Note: organizationId is auto-injected by the tenant middleware at runtime
           await db.forecastSnapshot.create({
-            data: {
+            data: tenantData({
               period,
               totalPipeline: metrics.totalPipeline,
               weightedPipeline: metrics.weightedPipeline,
               aiPredicted: metrics.aiPredicted,
               closedWon,
               closedLost,
-            } as any,
+            }),
           })
 
           return { created: true }

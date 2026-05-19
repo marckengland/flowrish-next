@@ -78,10 +78,10 @@ const NAV_ITEMS: readonly NavItem[] = [
   },
   { href: '/search', label: 'Search', icon: Search },
   {
-    href: '/audit',
-    label: 'Audit Log',
+    href: '/admin',
+    label: 'Admin',
     icon: ShieldCheck,
-    permissions: ['audit:read'],
+    permissions: ['users:manage'],
   },
   {
     href: '/settings',

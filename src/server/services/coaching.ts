@@ -1,4 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { AppError } from '@/lib/errors'
 import type { SessionUser } from '@/server/auth/session'
 
@@ -47,12 +48,12 @@ export async function addComment(
   }
 
   const comment = await db.coachingComment.create({
-    data: {
+    data: tenantData({
       activityId,
       authorId,
       content: content.trim(),
       mentionedUserId: mentionedUserId ?? null,
-    } as any,
+    }),
   })
 
   return comment

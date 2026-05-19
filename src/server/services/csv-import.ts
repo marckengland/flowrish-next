@@ -1,4 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 import { prisma } from '@/server/db/client'
 import { AppError } from '@/lib/errors'
 import { getOrCreateDefaultPipeline, createStageTransition } from '@/server/services/pipeline'
@@ -384,27 +385,27 @@ export async function importLeads(
       if (email && email.length > 0) {
         existingLead = await db.lead.findFirst({
           where: {
-            email: { equals: email, mode: 'insensitive' as any },
+            email: { equals: email, mode: 'insensitive' },
             deletedAt: null,
-          } as any,
+          } as Record<string, unknown>,
           select: { id: true },
         })
       }
       if (!existingLead) {
         existingLead = await db.lead.findFirst({
           where: {
-            firstName: { equals: dupFirstName, mode: 'insensitive' as any },
-            lastName: { equals: dupLastName, mode: 'insensitive' as any },
+            firstName: { equals: dupFirstName, mode: 'insensitive' },
+            lastName: { equals: dupLastName, mode: 'insensitive' },
             ...(dupCompanyName
               ? {
                   companyName: {
                     equals: dupCompanyName,
-                    mode: 'insensitive' as any,
+                    mode: 'insensitive',
                   },
                 }
               : {}),
             deletedAt: null,
-          } as any,
+          } as Record<string, unknown>,
           select: { id: true },
         })
       }
@@ -426,8 +427,8 @@ export async function importLeads(
         // Check if company already exists (case-insensitive match)
         const existingCompany = await db.company.findFirst({
           where: {
-            name: { equals: companyName, mode: 'insensitive' as any },
-          },
+            name: { equals: companyName, mode: 'insensitive' },
+          } as Record<string, unknown>,
         })
 
         if (existingCompany) {
@@ -435,11 +436,11 @@ export async function importLeads(
         } else {
           // Create new company
           const newCompany = await db.company.create({
-            data: {
+            data: tenantData({
               name: companyName,
               industry: data.companyIndustry?.trim() || null,
               website: data.companyWebsite?.trim() || null,
-            } as any,
+            }),
           })
           companyId = newCompany.id
         }
@@ -447,7 +448,7 @@ export async function importLeads(
 
       // Create the lead
       const lead = await db.lead.create({
-        data: {
+        data: tenantData({
           firstName: data.firstName.trim(),
           lastName: data.lastName.trim(),
           email: data.email?.trim() || null,
@@ -467,7 +468,7 @@ export async function importLeads(
           companyWebsite: data.companyWebsite?.trim() || null,
           stageId,
           companyId,
-        } as any,
+        }),
       })
 
       // Create initial stage transition
@@ -476,14 +477,14 @@ export async function importLeads(
       // Link contact if email is provided
       if (data.email && data.email.trim().length > 0) {
         const contact = await db.contact.create({
-          data: {
+          data: tenantData({
             firstName: data.firstName.trim(),
             lastName: data.lastName.trim(),
             email: data.email.trim(),
             phone: data.phone?.trim() || null,
             jobTitle: data.title?.trim() || null,
             companyId,
-          } as any,
+          }),
         })
 
         // Link contact to lead

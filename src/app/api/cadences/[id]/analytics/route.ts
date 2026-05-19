@@ -53,8 +53,8 @@ export async function GET(
     return NextResponse.json({
       data: {
         cadenceId: id,
-        cadenceName: (cadence as any).name,
-        cadenceStatus: (cadence as any).status,
+        cadenceName: (cadence as { name: string }).name,
+        cadenceStatus: (cadence as { status: string }).status,
         totalEnrollments: total,
         activeEnrollments: active,
         completedEnrollments: completed,

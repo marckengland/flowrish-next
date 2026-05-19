@@ -7,6 +7,7 @@ import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { submitForecast as submitForecastService } from '@/server/services/forecast'
 import { createTenantPrisma } from '@/server/db/middleware'
+import { tenantData } from '@/server/db/types'
 
 /**
  * Server Action form wrapper for submitting a forecast commit.
@@ -69,12 +70,12 @@ export async function submitForecast(
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry
       .create({
-        data: {
+        data: tenantData({
           userId: session.dbUser.id,
           action: 'CREATE',
           entityType: 'ForecastSubmission',
           entityId: result.id,
-        } as any,
+        }),
       })
       .catch((err) => {
         console.error('Audit log failed (submitForecast):', err)
