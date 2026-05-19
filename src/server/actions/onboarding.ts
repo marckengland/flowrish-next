@@ -1,16 +1,37 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import { requireSession } from '@/server/auth/session'
+import { createSupabaseServer } from '@/lib/supabase/server'
+import { prisma } from '@/server/db/client'
 import { createOrganization, acceptInvite } from '@/server/services/organizations'
+import { AppError } from '@/lib/errors'
 import { z } from 'zod'
 
 /**
  * Server Actions for the onboarding flow.
  * New users either create an organization or join one via invite code.
  *
+ * Uses a lightweight auth check (Supabase user + app User lookup) instead of
+ * requireSession(), because the user doesn't have an org membership yet —
+ * that's what onboarding creates.
+ *
  * Validates: Requirements 2.3
  */
+
+async function requireAuthUser() {
+  const supabase = await createSupabaseServer()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    throw new AppError('UNAUTHORIZED', 'Authentication required', 401)
+  }
+  const dbUser = await prisma.user.findUnique({
+    where: { authId: user.id },
+  })
+  if (!dbUser) {
+    throw new AppError('UNAUTHORIZED', 'User record not found', 401)
+  }
+  return dbUser
+}
 
 const createOrgSchema = z.object({
   name: z
@@ -36,7 +57,7 @@ const joinOrgSchema = z.object({
  * On success, redirects to the dashboard.
  */
 export async function createOrg(formData: FormData) {
-  const session = await requireSession()
+  const dbUser = await requireAuthUser()
 
   const parsed = createOrgSchema.safeParse({
     name: formData.get('name'),
@@ -51,7 +72,7 @@ export async function createOrg(formData: FormData) {
   const { name, slug } = parsed.data
 
   try {
-    await createOrganization(name, slug, session.dbUser.id)
+    await createOrganization(name, slug, dbUser.id)
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }
@@ -68,7 +89,7 @@ export async function createOrg(formData: FormData) {
  * On success, redirects to the dashboard.
  */
 export async function joinOrg(formData: FormData) {
-  const session = await requireSession()
+  const dbUser = await requireAuthUser()
 
   const parsed = joinOrgSchema.safeParse({
     inviteCode: formData.get('inviteCode'),
@@ -82,7 +103,7 @@ export async function joinOrg(formData: FormData) {
   const { inviteCode } = parsed.data
 
   try {
-    await acceptInvite(inviteCode, session.dbUser.id)
+    await acceptInvite(inviteCode, dbUser.id)
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }
