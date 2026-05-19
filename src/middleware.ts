@@ -94,7 +94,13 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 3. Auth check via Supabase
+  // 3. Auth check via Supabase (skip for auth callback/confirm — they handle their own session)
+  const isAuthCallback = path.startsWith('/auth/callback') || path.startsWith('/auth/confirm')
+
+  if (isAuthCallback) {
+    return response
+  }
+
   const supabase = createSupabaseMiddleware(request, response)
   const {
     data: { user },
@@ -105,7 +111,8 @@ export async function middleware(request: NextRequest) {
 
   // Redirect unauthenticated page requests to login (except public routes)
   if (!user && !isPublicRoute && !isApiRoute) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    const loginUrl = new URL('/login', request.url)
+    return NextResponse.redirect(loginUrl)
   }
 
   // Return 401 for unauthenticated API requests (except /api/auth and /api/inngest)

@@ -31,6 +31,17 @@ export default async function DashboardLayout({
 }): Promise<React.JSX.Element> {
   const session = await getSession()
   if (!session) {
+    // Could be unauthenticated OR authenticated but no org membership.
+    // Check if the user is authenticated but just hasn't onboarded yet.
+    const { createSupabaseServer } = await import('@/lib/supabase/server')
+    const supabase = await createSupabaseServer()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (user) {
+      // Authenticated but no org → send to onboarding
+      redirect('/onboarding')
+    }
+
     redirect('/login')
   }
 
