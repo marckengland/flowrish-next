@@ -68,7 +68,7 @@ vi.mock('@/server/services/pipeline', () => ({
   createStageTransition: vi.fn(() => Promise.resolve({ id: 'transition-1' })),
 }))
 
-vi.mock('@/generated/prisma', () => ({
+vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(),
 }))
 

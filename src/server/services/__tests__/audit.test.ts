@@ -29,7 +29,7 @@ vi.mock('@/server/db/middleware', () => ({
   createTenantPrisma: vi.fn(() => mockDb),
 }))
 
-vi.mock('@/generated/prisma', () => ({
+vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(),
 }))
 

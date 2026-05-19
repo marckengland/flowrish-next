@@ -36,7 +36,7 @@ vi.mock('@/server/db/middleware', () => ({
   TENANT_SCOPED_MODELS: ['Lead', 'ScoringRule', 'ScoreHistory', 'AssignmentRule'],
 }))
 
-vi.mock('@/generated/prisma', () => ({
+vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(),
 }))
 

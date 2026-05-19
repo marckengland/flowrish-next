@@ -25,7 +25,7 @@ vi.mock('@/server/db/middleware', () => ({
   TENANT_SCOPED_MODELS: ['EmailAccount'],
 }))
 
-vi.mock('@/generated/prisma', () => ({
+vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(),
 }))
 

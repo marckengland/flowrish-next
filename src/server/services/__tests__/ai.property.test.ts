@@ -30,7 +30,7 @@ vi.mock('@/server/db/middleware', () => ({
   TENANT_SCOPED_MODELS: ['Lead', 'Company', 'AiPromptConfig'],
 }))
 
-vi.mock('@/generated/prisma', () => ({
+vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(),
 }))
 

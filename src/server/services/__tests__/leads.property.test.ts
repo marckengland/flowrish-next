@@ -41,7 +41,7 @@ vi.mock('@/server/db/client', () => ({
   prisma: { leadContact: { create: vi.fn() } },
 }))
 
-vi.mock('@/generated/prisma', () => ({
+vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(),
 }))
 

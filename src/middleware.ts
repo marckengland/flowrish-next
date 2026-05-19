@@ -39,7 +39,7 @@ const rateLimiters = {
 
 // --- Constants ---
 
-const PUBLIC_ROUTES = ['/login', '/auth/callback', '/auth/confirm', '/onboarding']
+const PUBLIC_ROUTES = ['/login', '/auth/callback', '/auth/confirm']
 
 // --- Middleware ---
 

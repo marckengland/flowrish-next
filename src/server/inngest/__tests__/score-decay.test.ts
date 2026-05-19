@@ -49,7 +49,7 @@ vi.mock('@/server/db/client', () => ({
   ),
 }))
 
-vi.mock('@/generated/prisma', () => ({
+vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(),
 }))
 
