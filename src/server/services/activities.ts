@@ -73,6 +73,13 @@ export async function createActivity(
     data: { lastActivityAt: new Date() },
   })
 
+  // Recalculate lead score based on new activity (async, non-blocking)
+  // Uses dynamic import to avoid circular dependencies and env validation
+  // issues during testing. Failures are silently caught — scoring is non-critical.
+  void import('@/server/services/scoring')
+    .then(({ calculateScore }) => calculateScore(validated.leadId, orgId))
+    .catch(() => { /* Score recalculation failure is non-critical */ })
+
   return activity
 }
 

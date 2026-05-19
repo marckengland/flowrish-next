@@ -351,6 +351,22 @@ export async function sendEmail(
     }),
   })
 
+  // Create an EMAIL activity on the lead so it appears in the timeline
+  await db.activity.create({
+    data: tenantData({
+      type: 'EMAIL' as const,
+      leadId,
+      createdById: userId,
+      notes: `Sent: ${personalizedSubject}`,
+    }),
+  })
+
+  // Update lead's lastActivityAt
+  await db.lead.update({
+    where: { id: leadId },
+    data: { lastActivityAt: new Date() },
+  })
+
   return { messageId: sendData.id, threadId: sendData.threadId }
 }
 

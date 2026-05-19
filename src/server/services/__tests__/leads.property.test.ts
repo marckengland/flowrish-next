@@ -37,6 +37,10 @@ vi.mock('@/server/services/pipeline', () => ({
   createStageTransition: vi.fn().mockResolvedValue({}),
 }))
 
+vi.mock('@/server/services/assignment', () => ({
+  evaluateAssignmentRules: vi.fn().mockResolvedValue({ assignedUserId: null, ruleId: null, ruleType: null }),
+}))
+
 vi.mock('@/server/db/client', () => ({
   prisma: { leadContact: { create: vi.fn() } },
 }))

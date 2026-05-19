@@ -3,6 +3,7 @@ import { tenantData } from '@/server/db/types'
 import { leadCreateSchema, leadUpdateSchema } from '@/lib/validators/leads'
 import { AppError } from '@/lib/errors'
 import { getOrCreateDefaultPipeline, createStageTransition } from '@/server/services/pipeline'
+import { evaluateAssignmentRules } from '@/server/services/assignment'
 import type { LeadAccessFilter } from '@/server/services/access'
 
 /**
@@ -79,10 +80,26 @@ export async function createLead(
       companyIndustry: validated.companyIndustry,
       companyWebsite: validated.companyWebsite || null,
       stageId: validated.stageId,
-      // Assignment rules will be triggered in task 11.2
-      // For now, leave unassigned if no assignee provided
     }),
   })
+
+  // Trigger assignment rules if no assignee was provided
+  if (!lead.assignedUserId) {
+    // Run async — don't block lead creation if assignment fails
+    evaluateAssignmentRules(
+      {
+        id: lead.id,
+        assignedUserId: null,
+        companyName: lead.companyName,
+        country: lead.country,
+        state: lead.state,
+        dealValue: lead.dealValue ? Number(lead.dealValue) : null,
+      },
+      orgId,
+    ).catch(() => {
+      // Assignment rule failure is non-critical — lead is still created
+    })
+  }
 
   return lead
 }
