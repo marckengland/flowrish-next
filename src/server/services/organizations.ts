@@ -60,50 +60,51 @@ export async function createOrganization(
     throw new AppError('NOT_FOUND', 'User not found', 404)
   }
 
-  // Use a transaction to ensure atomicity of the entire org creation flow
-  const result = await prisma.$transaction(async (tx) => {
-    // 1. Create the Organization
-    const organization = await tx.organization.create({
-      data: {
-        name: name.trim(),
-        slug: slug.trim(),
-      },
-    })
+  // Create org and related records sequentially.
+  // PgBouncer (Supabase pooler) doesn't support interactive transactions,
+  // so we use sequential creates. If a step fails, the org is left in a
+  // partial state — but this is acceptable for onboarding since the user
+  // can retry, and partial orgs without members are harmless.
 
-    // 2. Create default "General" team
-    const defaultTeam = await tx.team.create({
-      data: {
-        name: 'General',
-        organizationId: organization.id,
-      },
-    })
-
-    // 3. Create default roles with system permissions
-    const roles = await createDefaultRoles(tx, organization.id)
-
-    // 4. Add owner as OrganizationMember (isDefault: true)
-    await tx.organizationMember.create({
-      data: {
-        userId: ownerId,
-        organizationId: organization.id,
-        isDefault: true,
-      },
-    })
-
-    // 5. Add owner as TeamMember with OWNER role
-    const ownerRole = roles.find((r) => r.name === 'OWNER')!
-    await tx.teamMember.create({
-      data: {
-        userId: ownerId,
-        teamId: defaultTeam.id,
-        roleId: ownerRole.id,
-      },
-    })
-
-    return { organization, defaultTeam, roles }
+  // 1. Create the Organization
+  const organization = await prisma.organization.create({
+    data: {
+      name: name.trim(),
+      slug: slug.trim(),
+    },
   })
 
-  return result
+  // 2. Create default "General" team
+  const defaultTeam = await prisma.team.create({
+    data: {
+      name: 'General',
+      organizationId: organization.id,
+    },
+  })
+
+  // 3. Create default roles with system permissions
+  const roles = await createDefaultRoles(organization.id)
+
+  // 4. Add owner as OrganizationMember (isDefault: true)
+  await prisma.organizationMember.create({
+    data: {
+      userId: ownerId,
+      organizationId: organization.id,
+      isDefault: true,
+    },
+  })
+
+  // 5. Add owner as TeamMember with OWNER role
+  const ownerRole = roles.find((r) => r.name === 'OWNER')!
+  await prisma.teamMember.create({
+    data: {
+      userId: ownerId,
+      teamId: defaultTeam.id,
+      roleId: ownerRole.id,
+    },
+  })
+
+  return { organization, defaultTeam, roles }
 }
 
 /**
@@ -325,63 +326,59 @@ export async function acceptInvite(inviteId: string, userId: string) {
     )
   }
 
-  // Use a transaction to ensure atomicity
-  const result = await prisma.$transaction(async (tx) => {
-    // Determine if this is the user's first org (make it default)
-    const existingMemberships = await tx.organizationMember.findMany({
-      where: { userId },
-    })
-    const isDefault = existingMemberships.length === 0
+  // Sequential operations (PgBouncer doesn't support interactive transactions)
+  // Determine if this is the user's first org (make it default)
+  const existingMemberships = await prisma.organizationMember.findMany({
+    where: { userId },
+  })
+  const isDefault = existingMemberships.length === 0
 
-    // Create OrganizationMember
-    const membership = await tx.organizationMember.create({
+  // Create OrganizationMember
+  const membership = await prisma.organizationMember.create({
+    data: {
+      userId,
+      organizationId: invite.organizationId,
+      isDefault,
+    },
+  })
+
+  // Create TeamMember if a team was specified in the invite
+  let teamMember = null
+  if (invite.teamId) {
+    teamMember = await prisma.teamMember.create({
       data: {
         userId,
-        organizationId: invite.organizationId,
-        isDefault,
+        teamId: invite.teamId,
+        roleId: invite.roleId,
       },
     })
-
-    // Create TeamMember if a team was specified in the invite
-    let teamMember = null
-    if (invite.teamId) {
-      teamMember = await tx.teamMember.create({
+  } else {
+    // If no team specified, add to the default "General" team
+    const defaultTeam = await prisma.team.findFirst({
+      where: {
+        organizationId: invite.organizationId,
+        name: 'General',
+        parentTeamId: null,
+      },
+    })
+    if (defaultTeam) {
+      teamMember = await prisma.teamMember.create({
         data: {
           userId,
-          teamId: invite.teamId,
+          teamId: defaultTeam.id,
           roleId: invite.roleId,
         },
       })
-    } else {
-      // If no team specified, add to the default "General" team
-      const defaultTeam = await tx.team.findFirst({
-        where: {
-          organizationId: invite.organizationId,
-          name: 'General',
-          parentTeamId: null,
-        },
-      })
-      if (defaultTeam) {
-        teamMember = await tx.teamMember.create({
-          data: {
-            userId,
-            teamId: defaultTeam.id,
-            roleId: invite.roleId,
-          },
-        })
-      }
     }
+  }
 
-    // Mark invite as accepted
-    await tx.organizationInvite.update({
-      where: { id: inviteId },
-      data: { status: 'accepted' },
-    })
-
-    return { membership, teamMember }
+  // Mark invite as accepted
+  await prisma.organizationInvite.update({
+    where: { id: inviteId },
+    data: { status: 'accepted' },
   })
 
-  return result
+  return { membership, teamMember }
 }
 
 /**
@@ -391,15 +388,12 @@ export async function acceptInvite(inviteId: string, userId: string) {
  * These roles are marked as `isSystem: true` and have a hierarchy value
  * that determines their power level (lower = more powerful).
  */
-async function createDefaultRoles(
-  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
-  organizationId: string,
-) {
+async function createDefaultRoles(organizationId: string) {
   const roleNames: DefaultRole[] = ['OWNER', 'ADMIN', 'MANAGER', 'MEMBER']
   const roles = []
 
   for (const roleName of roleNames) {
-    const role = await tx.role.create({
+    const role = await prisma.role.create({
       data: {
         name: roleName,
         organizationId,

@@ -78,9 +78,7 @@ export async function createOrg(formData: FormData) {
       const appErr = err as { message: string; statusCode: number }
       return { error: appErr.message }
     }
-    // Surface the actual error in development/early production for debugging
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    return { error: `Failed to create organization: ${message}` }
+    return { error: 'Failed to create organization. Please try again.' }
   }
 
   redirect('/')
