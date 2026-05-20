@@ -62,7 +62,7 @@ export function AssignmentRules(): React.JSX.Element {
     queryFn: async () => {
       const res = await fetch('/api/admin/assignment-rules')
       if (!res.ok) throw new Error('Failed to fetch assignment rules')
-      return res.json()
+      return (await res.json()).data
     },
   })
 

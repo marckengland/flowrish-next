@@ -47,7 +47,7 @@ export function DeletionRequests(): React.JSX.Element {
     queryFn: async () => {
       const res = await fetch(`/api/deletion-requests?${queryParams.toString()}`)
       if (!res.ok) throw new Error('Failed to fetch deletion requests')
-      return res.json()
+      return (await res.json()).data
     },
   })
 

@@ -66,7 +66,7 @@ export function ScoringRules(): React.JSX.Element {
     queryFn: async () => {
       const res = await fetch('/api/admin/scoring-rules')
       if (!res.ok) throw new Error('Failed to fetch scoring rules')
-      return res.json()
+      return (await res.json()).data
     },
   })
 

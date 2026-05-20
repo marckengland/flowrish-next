@@ -43,7 +43,7 @@ export function TeamManagement(): React.JSX.Element {
     queryFn: async () => {
       const res = await fetch('/api/admin/teams/hierarchy')
       if (!res.ok) throw new Error('Failed to fetch teams')
-      return res.json()
+      return (await res.json()).data
     },
   })
 

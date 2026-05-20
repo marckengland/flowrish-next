@@ -46,7 +46,7 @@ export function ScoreDecayConfig(): React.JSX.Element {
     queryFn: async () => {
       const res = await fetch('/api/admin/score-decay')
       if (!res.ok) throw new Error('Failed to fetch decay configs')
-      return res.json()
+      return (await res.json()).data
     },
   })
 

@@ -58,7 +58,7 @@ export function AiPromptConfig(): React.JSX.Element {
     queryFn: async () => {
       const res = await fetch('/api/admin/ai-prompts')
       if (!res.ok) throw new Error('Failed to fetch AI prompts')
-      return res.json()
+      return (await res.json()).data
     },
   })
 

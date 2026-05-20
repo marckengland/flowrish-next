@@ -68,7 +68,7 @@ export function AuditLog(): React.JSX.Element {
     queryFn: async () => {
       const res = await fetch(`/api/admin/audit?${queryParams.toString()}`)
       if (!res.ok) throw new Error('Failed to fetch audit log')
-      return res.json()
+      return (await res.json()).data
     },
   })
 

@@ -52,7 +52,7 @@ export function UserManagement(): React.JSX.Element {
     queryFn: async () => {
       const res = await fetch('/api/admin/members')
       if (!res.ok) throw new Error('Failed to fetch members')
-      return res.json()
+      return (await res.json()).data
     },
   })
 
@@ -61,7 +61,7 @@ export function UserManagement(): React.JSX.Element {
     queryFn: async () => {
       const res = await fetch('/api/admin/roles')
       if (!res.ok) throw new Error('Failed to fetch roles')
-      return res.json()
+      return (await res.json()).data
     },
   })
 
@@ -70,7 +70,7 @@ export function UserManagement(): React.JSX.Element {
     queryFn: async () => {
       const res = await fetch('/api/admin/teams')
       if (!res.ok) throw new Error('Failed to fetch teams')
-      return res.json()
+      return (await res.json()).data
     },
   })
 
