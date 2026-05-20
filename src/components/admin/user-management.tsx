@@ -27,7 +27,10 @@ interface OrgMember {
     avatarUrl: string | null
   }
   joinedAt: string
-  roleName?: string
+  teamMemberships: Array<{
+    role: { id: string; name: string; hierarchy: number }
+    team: { id: string; name: string }
+  }>
 }
 
 interface InviteFormData {
@@ -232,7 +235,15 @@ export function UserManagement(): React.JSX.Element {
                   <td className="px-3 py-2 text-muted-foreground">{member.user.email}</td>
                   <td className="px-3 py-2">
                     <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-                      {member.roleName ?? 'MEMBER'}
+                      {(() => {
+                        const tms = member.teamMemberships ?? []
+                        if (tms.length === 0) return 'No role'
+                        // Show the highest-privilege role (lowest hierarchy)
+                        const best = tms.reduce((a: any, b: any) =>
+                          (a.role?.hierarchy ?? 99) <= (b.role?.hierarchy ?? 99) ? a : b
+                        )
+                        return best.role?.name ?? 'No role'
+                      })()}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
