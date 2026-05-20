@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, UserPlus, Mail } from 'lucide-react'
+import { Users, UserPlus, Mail, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
@@ -93,6 +93,22 @@ export function UserManagement(): React.JSX.Element {
     onSuccess: () => {
       setShowInviteForm(false)
       setInviteData({ email: '', roleId: '', teamId: '' })
+      queryClient.invalidateQueries({ queryKey: ['org-members'] })
+    },
+  })
+
+  const removeMutation = useMutation({
+    mutationFn: async (membershipId: string) => {
+      const res = await fetch(`/api/admin/members/${membershipId}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error?.message ?? 'Failed to remove member')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['org-members'] })
     },
   })
@@ -226,6 +242,7 @@ export function UserManagement(): React.JSX.Element {
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Email</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Role</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Joined</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -248,6 +265,21 @@ export function UserManagement(): React.JSX.Element {
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {new Date(member.joinedAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        if (confirm(`Remove ${member.user.name} from the organization?`)) {
+                          removeMutation.mutate(member.id)
+                        }
+                      }}
+                      disabled={removeMutation.isPending}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
                   </td>
                 </tr>
               ))}
