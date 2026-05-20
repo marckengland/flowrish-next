@@ -363,7 +363,67 @@ export function UserManagement(): React.JSX.Element {
 
       {/* Leave Organization — shown at the bottom */}
       {members && members.length > 0 && (
-        <div className="border-t pt-4 mt-4">
+        <div className="border-t pt-4 mt-4 space-y-4">
+          {/* Transfer Ownership (only visible to OWNER) */}
+          {(() => {
+            const currentUserMember = members.find((m) =>
+              m.teamMemberships?.some((tm) => tm.role?.name === 'OWNER')
+            )
+            const isOwner = currentUserMember != null
+            const otherMembers = members.filter((m) => m.id !== currentUserMember?.id)
+
+            if (!isOwner || otherMembers.length === 0) return null
+
+            return (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Transfer Ownership</p>
+                  <p className="text-xs text-muted-foreground">
+                    Make another member the owner. You&apos;ll be downgraded to Admin.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    id="transfer-target"
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Select member...</option>
+                    {otherMembers.map((m) => (
+                      <option key={m.user.id} value={m.user.id}>
+                        {m.user.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const select = document.getElementById('transfer-target') as HTMLSelectElement
+                      const targetUserId = select?.value
+                      if (!targetUserId) return
+                      if (!window.confirm(`Transfer ownership to ${otherMembers.find(m => m.user.id === targetUserId)?.user.name}? You will be downgraded to Admin.`)) return
+                      const res = await fetch('/api/admin/members/transfer-ownership', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ targetUserId }),
+                      })
+                      if (res.ok) {
+                        queryClient.invalidateQueries({ queryKey: ['org-members'] })
+                      } else {
+                        const err = await res.json()
+                        alert(err.error?.message ?? 'Transfer failed')
+                      }
+                    }}
+                  >
+                    Transfer
+                  </Button>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Leave Organization */}
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-foreground">Leave Organization</p>
@@ -376,8 +436,7 @@ export function UserManagement(): React.JSX.Element {
               size="sm"
               className="text-destructive border-destructive/30 hover:bg-destructive/10"
               onClick={() => {
-                // Find current user's membership to pass to the modal
-                const self = members.find((m) => m.user.email === members[0]?.user.email)
+                const self = members.find(() => true) // Will use modal
                 if (self) {
                   setConfirmAction({ type: 'leave', member: self })
                 }
