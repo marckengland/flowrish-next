@@ -53,6 +53,17 @@ export function UserManagement(): React.JSX.Element {
     type: 'remove' | 'leave'
     member: OrgMember
   } | null>(null)
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
+
+  // Get current user's email to identify self in the list
+  if (!currentUserEmail) {
+    import('@/lib/supabase/client').then(({ createSupabaseBrowser }) => {
+      const supabase = createSupabaseBrowser()
+      supabase.auth.getUser().then(({ data }) => {
+        if (data.user?.email) setCurrentUserEmail(data.user.email)
+      })
+    })
+  }
 
   const { data: members, isLoading } = useQuery<OrgMember[]>({
     queryKey: ['org-members'],
@@ -266,7 +277,14 @@ export function UserManagement(): React.JSX.Element {
             <tbody className="divide-y">
               {members.map((member) => (
                 <tr key={member.id} className="hover:bg-muted/30">
-                  <td className="px-3 py-2 font-medium">{member.user.name}</td>
+                  <td className="px-3 py-2 font-medium">
+                    {member.user.name}
+                    {member.user.email === currentUserEmail && (
+                      <span className="ml-2 inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                        YOU
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-muted-foreground">{member.user.email}</td>
                   <td className="px-3 py-2">
                     <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
@@ -285,16 +303,29 @@ export function UserManagement(): React.JSX.Element {
                     {new Date(member.joinedAt).toLocaleDateString()}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => setConfirmAction({ type: 'remove', member })}
-                      disabled={removeMutation.isPending}
-                    >
-                      <Trash2 className="size-3.5" />
-                      <span className="sr-only">Remove</span>
-                    </Button>
+                    {member.user.email === currentUserEmail ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setConfirmAction({ type: 'leave', member })}
+                        disabled={leaveMutation.isPending}
+                      >
+                        <LogOut className="size-3.5" />
+                        <span className="text-xs">Leave</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setConfirmAction({ type: 'remove', member })}
+                        disabled={removeMutation.isPending}
+                      >
+                        <Trash2 className="size-3.5" />
+                        <span className="sr-only">Remove</span>
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -424,28 +455,6 @@ export function UserManagement(): React.JSX.Element {
           })()}
 
           {/* Leave Organization */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-foreground">Leave Organization</p>
-              <p className="text-xs text-muted-foreground">
-                Remove yourself from this organization. You&apos;ll need a new invite to rejoin.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive border-destructive/30 hover:bg-destructive/10"
-              onClick={() => {
-                const self = members.find(() => true) // Will use modal
-                if (self) {
-                  setConfirmAction({ type: 'leave', member: self })
-                }
-              }}
-            >
-              <LogOut className="size-3.5" />
-              Leave
-            </Button>
-          </div>
         </div>
       )}
     </div>
