@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, UserPlus, Mail, Trash2 } from 'lucide-react'
+import { Users, UserPlus, Mail, Trash2, LogOut } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
@@ -49,6 +49,10 @@ export function UserManagement(): React.JSX.Element {
     roleId: '',
     teamId: '',
   })
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'remove' | 'leave'
+    member: OrgMember
+  } | null>(null)
 
   const { data: members, isLoading } = useQuery<OrgMember[]>({
     queryKey: ['org-members'],
@@ -271,20 +275,68 @@ export function UserManagement(): React.JSX.Element {
                       variant="ghost"
                       size="sm"
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => {
-                        if (confirm(`Remove ${member.user.name} from the organization?`)) {
-                          removeMutation.mutate(member.id)
-                        }
-                      }}
+                      onClick={() => setConfirmAction({ type: 'remove', member })}
                       disabled={removeMutation.isPending}
                     >
                       <Trash2 className="size-3.5" />
+                      <span className="sr-only">Remove</span>
                     </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setConfirmAction(null)}>
+          <div
+            className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-foreground">
+              {confirmAction.type === 'remove' ? 'Remove Member' : 'Leave Organization'}
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {confirmAction.type === 'remove' ? (
+                <>
+                  Are you sure you want to remove <strong>{confirmAction.member.user.name}</strong> from the organization?
+                  They will lose access to all data and features. This action cannot be undone.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to leave this organization?
+                  You will lose access to all data and features. You&apos;ll need a new invite to rejoin.
+                </>
+              )}
+            </p>
+            {removeMutation.error && (
+              <p className="mt-2 text-sm text-destructive">{removeMutation.error.message}</p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setConfirmAction(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={removeMutation.isPending}
+                onClick={() => {
+                  removeMutation.mutate(confirmAction.member.id, {
+                    onSuccess: () => setConfirmAction(null),
+                  })
+                }}
+              >
+                {removeMutation.isPending
+                  ? 'Processing...'
+                  : confirmAction.type === 'remove'
+                    ? 'Remove Member'
+                    : 'Leave Organization'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
