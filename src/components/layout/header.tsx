@@ -55,8 +55,6 @@ export function Header({
       const supabase = createSupabaseBrowser()
       await supabase.auth.signOut()
     } finally {
-      // Always navigate away — the middleware will redirect to /login
-      // even if the sign-out API call fails for any reason.
       router.replace('/login')
       router.refresh()
     }

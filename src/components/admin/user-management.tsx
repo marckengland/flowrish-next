@@ -117,6 +117,20 @@ export function UserManagement(): React.JSX.Element {
     },
   })
 
+  const leaveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/admin/members/leave', { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error?.message ?? 'Failed to leave organization')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      window.location.href = '/onboarding'
+    },
+  })
+
   const handleInviteSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!inviteData.email || !inviteData.roleId) return
@@ -312,8 +326,11 @@ export function UserManagement(): React.JSX.Element {
                 </>
               )}
             </p>
-            {removeMutation.error && (
+            {confirmAction.type === 'remove' && removeMutation.error && (
               <p className="mt-2 text-sm text-destructive">{removeMutation.error.message}</p>
+            )}
+            {confirmAction.type === 'leave' && leaveMutation.error && (
+              <p className="mt-2 text-sm text-destructive">{leaveMutation.error.message}</p>
             )}
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setConfirmAction(null)}>
@@ -322,20 +339,53 @@ export function UserManagement(): React.JSX.Element {
               <Button
                 variant="destructive"
                 size="sm"
-                disabled={removeMutation.isPending}
+                disabled={removeMutation.isPending || leaveMutation.isPending}
                 onClick={() => {
-                  removeMutation.mutate(confirmAction.member.id, {
-                    onSuccess: () => setConfirmAction(null),
-                  })
+                  if (confirmAction.type === 'remove') {
+                    removeMutation.mutate(confirmAction.member.id, {
+                      onSuccess: () => setConfirmAction(null),
+                    })
+                  } else {
+                    leaveMutation.mutate()
+                  }
                 }}
               >
-                {removeMutation.isPending
+                {(removeMutation.isPending || leaveMutation.isPending)
                   ? 'Processing...'
                   : confirmAction.type === 'remove'
                     ? 'Remove Member'
                     : 'Leave Organization'}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Organization — shown at the bottom */}
+      {members && members.length > 0 && (
+        <div className="border-t pt-4 mt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">Leave Organization</p>
+              <p className="text-xs text-muted-foreground">
+                Remove yourself from this organization. You&apos;ll need a new invite to rejoin.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={() => {
+                // Find current user's membership to pass to the modal
+                const self = members.find((m) => m.user.email === members[0]?.user.email)
+                if (self) {
+                  setConfirmAction({ type: 'leave', member: self })
+                }
+              }}
+            >
+              <LogOut className="size-3.5" />
+              Leave
+            </Button>
           </div>
         </div>
       )}
