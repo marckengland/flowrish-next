@@ -1,13 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { Users, ScrollText, Layers, Trash2 } from 'lucide-react'
+import { Users, ScrollText, Layers, Trash2, Shield } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { AuditLog } from '@/components/admin/audit-log'
 import { UserManagement } from '@/components/admin/user-management'
 import { TeamManagement } from '@/components/admin/team-management'
 import { DeletionRequests } from '@/components/admin/deletion-requests'
+import { RoleEditor } from '@/components/admin/role-editor'
 
 /**
  * Admin page — user management, team hierarchy, audit log, and deletion requests.
@@ -19,10 +20,11 @@ import { DeletionRequests } from '@/components/admin/deletion-requests'
  * Validates: Requirements 2.11, 3.7, 20.3, 33.6
  */
 
-type AdminTab = 'users' | 'teams' | 'audit' | 'deletions'
+type AdminTab = 'users' | 'roles' | 'teams' | 'audit' | 'deletions'
 
 const TABS: Array<{ id: AdminTab; label: string; icon: typeof Users }> = [
   { id: 'users', label: 'User Management', icon: Users },
+  { id: 'roles', label: 'Roles & Permissions', icon: Shield },
   { id: 'teams', label: 'Teams', icon: Layers },
   { id: 'audit', label: 'Audit Log', icon: ScrollText },
   { id: 'deletions', label: 'Deletion Requests', icon: Trash2 },
@@ -67,6 +69,7 @@ export default function AdminPage(): React.JSX.Element {
         {/* Tab content */}
         <section className="min-w-0 flex-1" aria-label={`${activeTab} admin panel`}>
           {activeTab === 'users' && <UserManagement />}
+          {activeTab === 'roles' && <RoleEditor />}
           {activeTab === 'teams' && <TeamManagement />}
           {activeTab === 'audit' && <AuditLog />}
           {activeTab === 'deletions' && <DeletionRequests />}
