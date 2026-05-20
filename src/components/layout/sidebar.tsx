@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -81,13 +81,13 @@ const NAV_ITEMS: readonly NavItem[] = [
     href: '/admin',
     label: 'Admin',
     icon: ShieldCheck,
-    permissions: ['users:manage'],
+    permissions: ['admin:users'],
   },
   {
     href: '/settings',
     label: 'Settings',
     icon: Settings,
-    permissions: ['settings:manage'],
+    permissions: ['admin:settings'],
   },
 ] as const
 

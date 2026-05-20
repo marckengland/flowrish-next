@@ -1,4 +1,4 @@
-import { act } from 'react'
+﻿import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -63,7 +63,7 @@ describe('Sidebar', () => {
     unmount()
   })
 
-  it('hides Settings when user lacks settings:manage', () => {
+  it('hides Settings when user lacks admin:settings', () => {
     const { container, unmount } = mount(
       <Sidebar permissions={['leads:read'] satisfies Permission[]} />,
     )
@@ -71,21 +71,21 @@ describe('Sidebar', () => {
     unmount()
   })
 
-  it('shows Settings when user has settings:manage', () => {
+  it('shows Settings when user has admin:settings', () => {
     const { container, unmount } = mount(
-      <Sidebar permissions={['settings:manage'] satisfies Permission[]} />,
+      <Sidebar permissions={['admin:settings'] satisfies Permission[]} />,
     )
     expect(linkLabels(container)).toContain('Settings')
     unmount()
   })
 
-  it('shows Admin only when user has users:manage', () => {
+  it('shows Admin only when user has admin:users', () => {
     const { container, rerender, unmount } = mount(
       <Sidebar permissions={['leads:read'] satisfies Permission[]} />,
     )
     expect(linkLabels(container)).not.toContain('Admin')
 
-    rerender(<Sidebar permissions={['users:manage'] satisfies Permission[]} />)
+    rerender(<Sidebar permissions={['admin:users'] satisfies Permission[]} />)
     expect(linkLabels(container)).toContain('Admin')
     unmount()
   })
@@ -111,8 +111,8 @@ describe('Sidebar', () => {
       'contacts:read',
       'cadences:manage',
       'cadences:read',
-      'users:manage',
-      'settings:manage',
+      'admin:users',
+      'admin:settings',
     ]
     const { container, unmount } = mount(<Sidebar permissions={allPerms} />)
     const labels = linkLabels(container)

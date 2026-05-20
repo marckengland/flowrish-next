@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { createTenantPrisma } from '@/server/db/middleware'
@@ -11,7 +11,7 @@ import { errorResponse } from '@/lib/errors'
 export async function GET() {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'settings:manage')
+    requirePermission(session.dbUser, 'admin:settings')
 
     const db = createTenantPrisma(session.organizationId)
     const rules = await db.scoringRule.findMany({
@@ -32,7 +32,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'settings:manage')
+    requirePermission(session.dbUser, 'admin:settings')
 
     const body = await request.json()
     const { type, points, config, isActive } = body

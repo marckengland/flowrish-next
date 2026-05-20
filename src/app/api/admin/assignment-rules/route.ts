@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { createTenantPrisma } from '@/server/db/middleware'
@@ -11,7 +11,7 @@ import { errorResponse } from '@/lib/errors'
 export async function GET(request: NextRequest) {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'users:manage')
+    requirePermission(session.dbUser, 'admin:users')
 
     const db = createTenantPrisma(session.organizationId)
 
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'users:manage')
+    requirePermission(session.dbUser, 'admin:users')
 
     const body = await request.json()
     const { type, config, priority, isActive } = body

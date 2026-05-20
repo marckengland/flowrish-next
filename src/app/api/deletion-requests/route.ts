@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { requestDeletion, listPendingRequests } from '@/server/services/deletion'
@@ -7,7 +7,7 @@ import { errorResponse } from '@/lib/errors'
 /**
  * GET /api/deletion-requests — List pending deletion requests.
  *
- * Only accessible to users with settings:manage permission (MANAGER/ADMIN/OWNER).
+ * Only accessible to users with admin:settings permission (MANAGER/ADMIN/OWNER).
  * Returns pending requests ordered by createdAt ascending (oldest first).
  *
  * Validates: Requirement 33.6
@@ -15,7 +15,7 @@ import { errorResponse } from '@/lib/errors'
 export async function GET(request: NextRequest) {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'settings:manage')
+    requirePermission(session.dbUser, 'admin:settings')
 
     const requests = await listPendingRequests(session.organizationId)
 

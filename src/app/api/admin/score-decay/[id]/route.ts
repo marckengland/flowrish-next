@@ -13,7 +13,7 @@ export async function PATCH(
 ) {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'settings:manage')
+    requirePermission(session.dbUser, 'admin:settings')
 
     const { id } = await params
     const body = await request.json()
@@ -48,7 +48,7 @@ export async function DELETE(
 ) {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'settings:manage')
+    requirePermission(session.dbUser, 'admin:settings')
 
     const { id } = await params
     const db = createTenantPrisma(session.organizationId)

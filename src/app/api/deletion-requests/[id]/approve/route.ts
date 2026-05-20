@@ -25,7 +25,7 @@ export async function PATCH(
 ) {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'settings:manage')
+    requirePermission(session.dbUser, 'admin:settings')
 
     const { id } = paramsSchema.parse(await params)
 

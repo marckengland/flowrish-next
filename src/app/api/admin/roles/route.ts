@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { prisma } from '@/server/db/client'
@@ -11,7 +11,7 @@ import { PERMISSIONS } from '@/types/permissions'
 export async function GET() {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'users:manage')
+    requirePermission(session.dbUser, 'admin:users')
 
     const roles = await prisma.role.findMany({
       where: { organizationId: session.organizationId },
@@ -38,7 +38,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'users:manage')
+    requirePermission(session.dbUser, 'admin:users')
 
     const body = await request.json()
     const { name, hierarchy, permissions } = body as {

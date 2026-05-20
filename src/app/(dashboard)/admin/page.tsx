@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { Users, ScrollText, Layers, Trash2, Shield } from 'lucide-react'
@@ -13,7 +13,7 @@ import { RoleEditor } from '@/components/admin/role-editor'
 /**
  * Admin page — user management, team hierarchy, audit log, and deletion requests.
  *
- * Accessible to users with `users:manage` or `audit:read` permissions
+ * Accessible to users with `admin:users` or `audit:read` permissions
  * (OWNER, ADMIN roles). The sidebar already gates visibility of this route
  * based on effective permissions.
  *

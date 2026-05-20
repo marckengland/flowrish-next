@@ -126,11 +126,11 @@ describe('RBAC Permission Checker', () => {
   describe('requirePermission', () => {
     it('does not throw when user has the required permission', () => {
       const user = createMockUser([
-        { teamId: 'team-1', roleName: 'ADMIN', permissions: ['leads:read', 'leads:write', 'users:manage'] },
+        { teamId: 'team-1', roleName: 'ADMIN', permissions: ['leads:read', 'leads:write', 'admin:users'] },
       ])
 
       expect(() => requirePermission(user, 'leads:read')).not.toThrow()
-      expect(() => requirePermission(user, 'users:manage')).not.toThrow()
+      expect(() => requirePermission(user, 'admin:users')).not.toThrow()
     })
 
     it('throws AppError with 403 status when permission is missing', () => {

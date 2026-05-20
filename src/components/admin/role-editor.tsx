@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -54,13 +54,13 @@ const PERMISSION_GROUPS: Record<string, { label: string; permissions: string[] }
     label: 'Forecast',
     permissions: ['forecast:read', 'forecast:submit'],
   },
-  users: {
-    label: 'User Management',
-    permissions: ['users:invite', 'users:manage'],
+  admin: {
+    label: 'Admin',
+    permissions: ['users:invite', 'admin:users', 'admin:settings', 'audit:read'],
   },
   system: {
     label: 'System',
-    permissions: ['billing:manage', 'settings:manage', 'audit:read'],
+    permissions: ['billing:manage'],
   },
 }
 

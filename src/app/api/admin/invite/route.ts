@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { inviteToOrganization } from '@/server/services/organizations'
@@ -12,7 +12,7 @@ import { errorResponse } from '@/lib/errors'
 export async function POST(request: NextRequest) {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'users:manage')
+    requirePermission(session.dbUser, 'admin:users')
 
     const body = await request.json()
     const { email, roleId, teamId } = body

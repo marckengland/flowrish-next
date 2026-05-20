@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { Settings, Zap, Target, Brain, Timer } from 'lucide-react'
@@ -18,7 +18,7 @@ import { AiPromptConfig } from '@/components/ai/ai-prompt-config'
  * - Assignment rules (automatic lead assignment)
  * - AI prompt configuration (system prompts for AI features)
  *
- * Accessible to users with `settings:manage` permission (OWNER, ADMIN, MANAGER).
+ * Accessible to users with `admin:settings` permission (OWNER, ADMIN, MANAGER).
  *
  * Validates: Requirements 2.11, 16.1, 16.4, 33.6
  */

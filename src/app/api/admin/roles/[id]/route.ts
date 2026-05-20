@@ -21,7 +21,7 @@ export async function PATCH(
 ) {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'users:manage')
+    requirePermission(session.dbUser, 'admin:users')
 
     const { id } = await params
     const body = await request.json()
@@ -135,7 +135,7 @@ export async function DELETE(
 ) {
   try {
     const session = await requireSession()
-    requirePermission(session.dbUser, 'users:manage')
+    requirePermission(session.dbUser, 'admin:users')
 
     const { id } = await params
 
