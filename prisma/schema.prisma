@@ -497,6 +497,7 @@ model CadenceEnrollment {
   status           EnrollmentStatus @default(ACTIVE)
   currentStepOrder Int              @default(1)
   exitReason       String?
+  emailThreadId    String?          // Gmail thread ID for email threading across steps
   enrolledAt       DateTime         @default(now())
   completedAt      DateTime?
 

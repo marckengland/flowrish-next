@@ -1,9 +1,10 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { Loader2, Mail, Send, Tag } from 'lucide-react'
+import { Loader2, Mail, Send, Tag, Paperclip } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { RichTextEditor } from '@/components/email/rich-text-editor'
 import { cn } from '@/lib/utils'
 
 /**
@@ -57,6 +58,7 @@ export function EmailCompose({
 }: EmailComposeProps): React.JSX.Element {
   const [subject, setSubject] = useState(defaultSubject)
   const [body, setBody] = useState(defaultBody)
+  const [attachments, setAttachments] = useState<File[]>([])
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -64,11 +66,11 @@ export function EmailCompose({
   const [activeField, setActiveField] = useState<'subject' | 'body'>('body')
 
   const subjectRef = useRef<HTMLInputElement>(null)
-  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   function insertTag(tag: string): void {
-    const ref = activeField === 'subject' ? subjectRef : bodyRef
-    const el = ref.current
+    // Insert into subject field (body is handled by the rich text editor)
+    const el = subjectRef.current
     if (!el) return
 
     const start = el.selectionStart ?? el.value.length
@@ -76,14 +78,8 @@ export function EmailCompose({
     const before = el.value.slice(0, start)
     const after = el.value.slice(end)
     const newValue = before + tag + after
+    setSubject(newValue)
 
-    if (activeField === 'subject') {
-      setSubject(newValue)
-    } else {
-      setBody(newValue)
-    }
-
-    // Restore cursor position after the inserted tag
     requestAnimationFrame(() => {
       el.focus()
       const cursorPos = start + tag.length
@@ -190,27 +186,70 @@ export function EmailCompose({
         />
       </div>
 
-      {/* Body */}
+      {/* Body — Rich Text Editor */}
       <div>
         <label
-          htmlFor="email-body"
           className="block text-xs font-medium text-foreground mb-1"
         >
           Body
         </label>
-        <textarea
-          ref={bodyRef}
-          id="email-body"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onFocus={() => setActiveField('body')}
-          rows={8}
+        <RichTextEditor
+          defaultValue={defaultBody}
+          onChange={(html) => setBody(html)}
           placeholder="Write your email…"
-          className={cn(
-            'w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
-          )}
-          disabled={isPending}
+          minHeight="180px"
         />
+      </div>
+
+      {/* File Attachments */}
+      <div className="flex flex-col gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? [])
+            setAttachments((prev) => [...prev, ...files])
+            e.target.value = ''
+          }}
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isPending}
+          >
+            <Paperclip className="size-3.5" aria-hidden="true" />
+            <span>Attach file</span>
+          </Button>
+          {attachments.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {attachments.length} file{attachments.length > 1 ? 's' : ''} attached
+            </span>
+          )}
+        </div>
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {attachments.map((file, i) => (
+              <span
+                key={`${file.name}-${i}`}
+                className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs"
+              >
+                {file.name}
+                <button
+                  type="button"
+                  onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Personalization tag toolbar */}

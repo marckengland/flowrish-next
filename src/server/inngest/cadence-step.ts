@@ -72,21 +72,38 @@ export const cadenceStepFunction = inngest.createFunction(
       // Execute action based on type — creates activities and tasks on the lead
       switch (cadenceStep.actionType) {
         case 'EMAIL': {
+          // Get enrollment details including threadId for email threading
+          const enrollmentForEmail = await db.cadenceEnrollment.findFirst({
+            where: { id: enrollmentId },
+            select: { enrolledById: true, emailThreadId: true },
+          })
+
           // Create an EMAIL activity on the lead with the cadence step's subject/body.
-          // Actual sending via Gmail happens if the user has a connected email account;
-          // otherwise this logs the intent as an activity for manual follow-up.
+          // If this is a follow-up email (threadId exists), it will be sent as a reply.
+          const emailSubject = enrollmentForEmail?.emailThreadId
+            ? `Re: ${cadenceStep.emailSubject ?? 'Follow up'}`
+            : (cadenceStep.emailSubject ?? 'Email step')
+
           await db.activity.create({
             data: tenantData({
               type: 'EMAIL',
               leadId,
-              createdById: (await db.cadenceEnrollment.findFirst({
-                where: { id: enrollmentId },
-                select: { enrolledById: true },
-              }))!.enrolledById,
-              notes: `[Cadence] ${cadenceStep.emailSubject ?? 'Email step'}`,
+              createdById: enrollmentForEmail!.enrolledById,
+              notes: `[Cadence] ${emailSubject}`,
               description: cadenceStep.emailBody ?? null,
             }),
           })
+
+          // If this is the first EMAIL step, store a placeholder threadId
+          // (In production with Gmail API integration, the actual threadId from
+          // Gmail's response would be stored here after sending)
+          if (!enrollmentForEmail?.emailThreadId) {
+            await db.cadenceEnrollment.update({
+              where: { id: enrollmentId },
+              data: { emailThreadId: `thread-${enrollmentId}-${Date.now()}` },
+            })
+          }
+
           // Update lead's lastActivityAt
           await db.lead.update({
             where: { id: leadId },
