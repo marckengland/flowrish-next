@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { getContactById, updateContact, deleteContact } from '@/server/services/contacts'
@@ -64,6 +65,8 @@ export async function DELETE(
 
     const { id } = await params
     await deleteContact(id, session.organizationId)
+
+    revalidatePath('/contacts')
 
     return new NextResponse(null, { status: 204 })
   } catch (error) {

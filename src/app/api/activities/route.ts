@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { createActivity } from '@/server/services/activities'
@@ -18,6 +19,8 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const activity = await createActivity(body, session.dbUser.id, session.organizationId)
+
+    revalidatePath('/leads')
 
     return NextResponse.json({ data: activity }, { status: 201 })
   } catch (error) {

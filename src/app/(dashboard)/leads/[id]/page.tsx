@@ -14,6 +14,8 @@ import { ActivityForm } from '@/components/activities/activity-form'
 import { ActivityTimeline } from '@/components/activities/activity-timeline'
 import { LeadConvert } from '@/components/leads/lead-convert'
 import { LeadDetail } from '@/components/leads/lead-detail'
+import { DuplicateCheck } from '@/components/leads/duplicate-check'
+import { DeletionRequestButton } from '@/components/leads/deletion-request-button'
 import { ConversationIntelligence } from '@/components/rhythm/conversation-intelligence'
 import { EmailCompose } from '@/components/email/email-compose'
 import { EmailGenerator } from '@/components/ai/email-generator'
@@ -57,6 +59,7 @@ export default async function LeadDetailPage({
   }
 
   const canWrite = hasPermission(session.dbUser, 'leads:write')
+  const canDelete = hasPermission(session.dbUser, 'leads:delete')
   // Coaching is a manager-level capability — Requirement 30.4.
   const canCoach = hasPermission(session.dbUser, 'leads:write')
 
@@ -226,6 +229,33 @@ export default async function LeadDetailPage({
               {lead.companyId && (
                 <AccountResearch companyId={lead.companyId} />
               )}
+            </section>
+          )}
+
+          {canWrite && (
+            <section
+              aria-label="Duplicate detection"
+              className="flex flex-col gap-3 rounded-md border bg-card p-4"
+            >
+              <h2 className="text-sm font-semibold">Duplicates</h2>
+              <DuplicateCheck
+                leadId={lead.id}
+                leadEmail={lead.email}
+                companyName={lead.companyName}
+              />
+            </section>
+          )}
+
+          {canWrite && !canDelete && (
+            <section
+              aria-label="Request deletion"
+              className="flex flex-col gap-3 rounded-md border border-destructive/20 bg-card p-4"
+            >
+              <h2 className="text-sm font-semibold text-destructive">Danger Zone</h2>
+              <DeletionRequestButton
+                leadId={lead.id}
+                leadName={`${lead.firstName} ${lead.lastName}`.trim()}
+              />
             </section>
           )}
         </aside>

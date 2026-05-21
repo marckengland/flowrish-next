@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { getContacts, createContact } from '@/server/services/contacts'
@@ -54,6 +55,8 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const contact = await createContact(body, session.organizationId)
+
+    revalidatePath('/contacts')
 
     return NextResponse.json({ data: contact }, { status: 201 })
   } catch (error) {

@@ -57,6 +57,16 @@ export function AssignmentRules(): React.JSX.Element {
     config: {},
   })
 
+  // Config field state for each rule type
+  const [territoryCompanies, setTerritoryCompanies] = useState('')
+  const [territoryCountries, setTerritoryCountries] = useState('')
+  const [territoryStates, setTerritoryStates] = useState('')
+  const [territoryUserId, setTerritoryUserId] = useState('')
+  const [dealSizeMin, setDealSizeMin] = useState('')
+  const [dealSizeMax, setDealSizeMax] = useState('')
+  const [dealSizeUserId, setDealSizeUserId] = useState('')
+  const [roundRobinUserIds, setRoundRobinUserIds] = useState('')
+
   const { data: rules, isLoading } = useQuery<AssignmentRule[]>({
     queryKey: ['assignment-rules'],
     queryFn: async () => {
@@ -82,6 +92,7 @@ export function AssignmentRules(): React.JSX.Element {
     onSuccess: () => {
       setShowCreateForm(false)
       setNewRule({ type: 'TERRITORY', priority: 1, config: {} })
+      resetConfigFields()
       queryClient.invalidateQueries({ queryKey: ['assignment-rules'] })
     },
   })
@@ -113,9 +124,49 @@ export function AssignmentRules(): React.JSX.Element {
     },
   })
 
+  const buildConfig = (): Record<string, unknown> => {
+    switch (newRule.type) {
+      case 'TERRITORY': {
+        const companies = territoryCompanies.split('\n').map((s) => s.trim()).filter(Boolean)
+        const countries = territoryCountries.split('\n').map((s) => s.trim()).filter(Boolean)
+        const states = territoryStates.split('\n').map((s) => s.trim()).filter(Boolean)
+        return {
+          companies,
+          countries,
+          states,
+          userId: territoryUserId.trim(),
+        }
+      }
+      case 'DEAL_SIZE':
+        return {
+          min: dealSizeMin ? Number(dealSizeMin) : undefined,
+          max: dealSizeMax ? Number(dealSizeMax) : undefined,
+          userId: dealSizeUserId.trim(),
+        }
+      case 'ROUND_ROBIN': {
+        const userIds = roundRobinUserIds.split('\n').map((s) => s.trim()).filter(Boolean)
+        return { userIds }
+      }
+      default:
+        return {}
+    }
+  }
+
+  const resetConfigFields = () => {
+    setTerritoryCompanies('')
+    setTerritoryCountries('')
+    setTerritoryStates('')
+    setTerritoryUserId('')
+    setDealSizeMin('')
+    setDealSizeMax('')
+    setDealSizeUserId('')
+    setRoundRobinUserIds('')
+  }
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    createMutation.mutate(newRule)
+    const config = buildConfig()
+    createMutation.mutate({ ...newRule, config })
   }
 
   return (
@@ -187,6 +238,130 @@ export function AssignmentRules(): React.JSX.Element {
                 Lower number = higher priority
               </p>
             </div>
+          </div>
+
+          {/* Dynamic config fields based on rule type */}
+          <div className="flex flex-col gap-3 border-t pt-3">
+            <h4 className="text-xs font-medium text-muted-foreground">Configuration</h4>
+
+            {newRule.type === 'TERRITORY' && (
+              <>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="territory-companies" className="text-xs font-medium text-muted-foreground">
+                    Companies (one per line)
+                  </label>
+                  <textarea
+                    id="territory-companies"
+                    value={territoryCompanies}
+                    onChange={(e) => setTerritoryCompanies(e.target.value)}
+                    placeholder="Acme Corp&#10;Globex Inc"
+                    rows={3}
+                    className="rounded-md border bg-background px-2 py-1 text-sm"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="territory-countries" className="text-xs font-medium text-muted-foreground">
+                    Countries (one per line)
+                  </label>
+                  <textarea
+                    id="territory-countries"
+                    value={territoryCountries}
+                    onChange={(e) => setTerritoryCountries(e.target.value)}
+                    placeholder="US&#10;CA"
+                    rows={2}
+                    className="rounded-md border bg-background px-2 py-1 text-sm"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="territory-states" className="text-xs font-medium text-muted-foreground">
+                    States (one per line)
+                  </label>
+                  <textarea
+                    id="territory-states"
+                    value={territoryStates}
+                    onChange={(e) => setTerritoryStates(e.target.value)}
+                    placeholder="California&#10;New York"
+                    rows={2}
+                    className="rounded-md border bg-background px-2 py-1 text-sm"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="territory-user-id" className="text-xs font-medium text-muted-foreground">
+                    Assignee User ID
+                  </label>
+                  <input
+                    id="territory-user-id"
+                    type="text"
+                    value={territoryUserId}
+                    onChange={(e) => setTerritoryUserId(e.target.value)}
+                    placeholder="User ID to assign matching leads to"
+                    className="h-8 rounded-md border bg-background px-2 text-sm"
+                  />
+                </div>
+              </>
+            )}
+
+            {newRule.type === 'DEAL_SIZE' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="deal-size-min" className="text-xs font-medium text-muted-foreground">
+                      Min Deal Value
+                    </label>
+                    <input
+                      id="deal-size-min"
+                      type="number"
+                      value={dealSizeMin}
+                      onChange={(e) => setDealSizeMin(e.target.value)}
+                      placeholder="0"
+                      className="h-8 rounded-md border bg-background px-2 text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="deal-size-max" className="text-xs font-medium text-muted-foreground">
+                      Max Deal Value
+                    </label>
+                    <input
+                      id="deal-size-max"
+                      type="number"
+                      value={dealSizeMax}
+                      onChange={(e) => setDealSizeMax(e.target.value)}
+                      placeholder="100000"
+                      className="h-8 rounded-md border bg-background px-2 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="deal-size-user-id" className="text-xs font-medium text-muted-foreground">
+                    Assignee User ID
+                  </label>
+                  <input
+                    id="deal-size-user-id"
+                    type="text"
+                    value={dealSizeUserId}
+                    onChange={(e) => setDealSizeUserId(e.target.value)}
+                    placeholder="User ID to assign matching leads to"
+                    className="h-8 rounded-md border bg-background px-2 text-sm"
+                  />
+                </div>
+              </>
+            )}
+
+            {newRule.type === 'ROUND_ROBIN' && (
+              <div className="flex flex-col gap-1">
+                <label htmlFor="round-robin-user-ids" className="text-xs font-medium text-muted-foreground">
+                  User IDs (one per line)
+                </label>
+                <textarea
+                  id="round-robin-user-ids"
+                  value={roundRobinUserIds}
+                  onChange={(e) => setRoundRobinUserIds(e.target.value)}
+                  placeholder="user-id-1&#10;user-id-2&#10;user-id-3"
+                  rows={4}
+                  className="rounded-md border bg-background px-2 py-1 text-sm"
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
