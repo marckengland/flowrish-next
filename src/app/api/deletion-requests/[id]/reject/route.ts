@@ -14,7 +14,7 @@ const paramsSchema = z.object({
  *
  * Marks the request as "rejected" without executing any deletion.
  *
- * Requires settings:manage permission (MANAGER/ADMIN/OWNER).
+ * Requires admin:settings permission (MANAGER/ADMIN/OWNER).
  *
  * Validates: Requirement 33.4
  */

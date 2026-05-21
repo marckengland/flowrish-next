@@ -15,6 +15,9 @@ import { ActivityTimeline } from '@/components/activities/activity-timeline'
 import { LeadConvert } from '@/components/leads/lead-convert'
 import { LeadDetail } from '@/components/leads/lead-detail'
 import { ConversationIntelligence } from '@/components/rhythm/conversation-intelligence'
+import { EmailCompose } from '@/components/email/email-compose'
+import { EmailGenerator } from '@/components/ai/email-generator'
+import { AccountResearch } from '@/components/ai/account-research'
 import type { ActivityItem } from '@/hooks/use-activities'
 import type { LeadFormStage, LeadFormValues } from '@/components/leads/lead-form'
 
@@ -198,6 +201,33 @@ export default async function LeadDetailPage({
               canCoach={canCoach}
             />
           </section>
+
+          {canWrite && lead.email && (
+            <section
+              aria-label="Email"
+              className="flex flex-col gap-3 rounded-md border bg-card p-4"
+            >
+              <h2 className="text-sm font-semibold">Email</h2>
+              <EmailCompose
+                leadId={lead.id}
+                leadEmail={lead.email}
+                leadName={`${lead.firstName} ${lead.lastName}`.trim()}
+              />
+            </section>
+          )}
+
+          {canWrite && (
+            <section
+              aria-label="AI Tools"
+              className="flex flex-col gap-3 rounded-md border bg-card p-4"
+            >
+              <h2 className="text-sm font-semibold">AI Tools</h2>
+              <EmailGenerator leadId={lead.id} />
+              {lead.companyId && (
+                <AccountResearch companyId={lead.companyId} />
+              )}
+            </section>
+          )}
         </aside>
       </div>
     </div>

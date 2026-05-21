@@ -7,7 +7,16 @@ import { errorResponse } from '@/lib/errors'
 /**
  * GET /api/admin/audit — List audit entries with pagination and filters.
  *
- * Query params: page, pageSize, entityType, userId, action
+ * Query params:
+ * - page (default 1)
+ * - pageSize (default 25, max 100)
+ * - entityType (e.g. 'Lead', 'Cadence')
+ * - userId (filter by actor)
+ * - action (CREATE/UPDATE/DELETE/etc.)
+ * - fromDate (ISO date string)
+ * - toDate (ISO date string)
+ *
+ * Response shape: { data: { entries, pagination } }
  */
 export async function GET(request: NextRequest) {
   try {
@@ -20,6 +29,8 @@ export async function GET(request: NextRequest) {
     const entityType = searchParams.get('entityType') ?? undefined
     const userId = searchParams.get('userId') ?? undefined
     const action = searchParams.get('action') ?? undefined
+    const fromDate = searchParams.get('fromDate') ?? undefined
+    const toDate = searchParams.get('toDate') ?? undefined
 
     const db = createTenantPrisma(session.organizationId)
 
@@ -28,21 +39,45 @@ export async function GET(request: NextRequest) {
     if (userId) where.userId = userId
     if (action) where.action = action
 
+    // Date range filtering
+    if (fromDate || toDate) {
+      const dateFilter: Record<string, Date> = {}
+      if (fromDate) {
+        const from = new Date(fromDate)
+        if (!isNaN(from.getTime())) dateFilter.gte = from
+      }
+      if (toDate) {
+        const to = new Date(toDate)
+        if (!isNaN(to.getTime())) {
+          to.setHours(23, 59, 59, 999)
+          dateFilter.lte = to
+        }
+      }
+      if (Object.keys(dateFilter).length > 0) {
+        where.createdAt = dateFilter
+      }
+    }
+
     const [entries, total] = await Promise.all([
       db.auditEntry.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+        },
       }),
       db.auditEntry.count({ where }),
     ])
 
+    const totalPages = Math.ceil(total / pageSize) || 1
+
     return NextResponse.json({
-      data: entries,
-      total,
-      page,
-      pageSize,
+      data: {
+        entries,
+        pagination: { page, pageSize, total, totalPages },
+      },
     })
   } catch (error) {
     return errorResponse(error)

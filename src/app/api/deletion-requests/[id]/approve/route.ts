@@ -15,7 +15,7 @@ const paramsSchema = z.object({
  * Executes the deletion (soft-delete for leads, hard delete for contacts/tasks)
  * and marks the request as "approved".
  *
- * Requires settings:manage permission (MANAGER/ADMIN/OWNER).
+ * Requires admin:settings permission (MANAGER/ADMIN/OWNER).
  *
  * Validates: Requirements 33.3, 33.4
  */

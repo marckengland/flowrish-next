@@ -1,13 +1,14 @@
 ﻿'use client'
 
 import { useState } from 'react'
-import { Settings, Zap, Target, Brain, Timer } from 'lucide-react'
+import { Settings, Zap, Target, Brain, Timer, Mail } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { ScoringRules } from '@/components/scoring/scoring-rules'
 import { ScoreDecayConfig } from '@/components/scoring/score-decay-config'
 import { AssignmentRules } from '@/components/admin/assignment-rules'
 import { AiPromptConfig } from '@/components/ai/ai-prompt-config'
+import { GmailConnect } from '@/components/email/gmail-connect'
 
 /**
  * Organization settings page.
@@ -23,13 +24,14 @@ import { AiPromptConfig } from '@/components/ai/ai-prompt-config'
  * Validates: Requirements 2.11, 16.1, 16.4, 33.6
  */
 
-type SettingsTab = 'scoring' | 'decay' | 'assignment' | 'ai'
+type SettingsTab = 'scoring' | 'decay' | 'assignment' | 'ai' | 'email'
 
 const TABS: Array<{ id: SettingsTab; label: string; icon: typeof Settings }> = [
   { id: 'scoring', label: 'Scoring Rules', icon: Target },
   { id: 'decay', label: 'Score Decay', icon: Timer },
   { id: 'assignment', label: 'Assignment Rules', icon: Zap },
   { id: 'ai', label: 'AI Prompts', icon: Brain },
+  { id: 'email', label: 'Email (Gmail)', icon: Mail },
 ]
 
 export default function SettingsPage(): React.JSX.Element {
@@ -75,6 +77,13 @@ export default function SettingsPage(): React.JSX.Element {
           {activeTab === 'decay' && <ScoreDecayConfig />}
           {activeTab === 'assignment' && <AssignmentRules />}
           {activeTab === 'ai' && <AiPromptConfig />}
+          {activeTab === 'email' && (
+            <GmailConnect
+              isConnected={false}
+              googleClientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''}
+              redirectUri={typeof window !== 'undefined' ? `${window.location.origin}/api/email/callback` : '/api/email/callback'}
+            />
+          )}
         </section>
       </div>
     </div>

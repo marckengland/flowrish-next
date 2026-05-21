@@ -395,12 +395,14 @@ export function UserManagement(): React.JSX.Element {
       {/* Leave Organization — shown at the bottom */}
       {members && members.length > 0 && (
         <div className="border-t pt-4 mt-4 space-y-4">
-          {/* Transfer Ownership (only visible to OWNER) */}
+          {/* Transfer Ownership (only visible to current user if they're the OWNER) */}
           {(() => {
-            const currentUserMember = members.find((m) =>
-              m.teamMemberships?.some((tm) => tm.role?.name === 'OWNER')
-            )
-            const isOwner = currentUserMember != null
+            // Find the signed-in user by email
+            const currentUserMember = members.find((m) => m.user.email === currentUserEmail)
+            // Check if they're an OWNER
+            const isOwner = currentUserMember?.teamMemberships?.some(
+              (tm) => tm.role?.name === 'OWNER',
+            ) ?? false
             const otherMembers = members.filter((m) => m.id !== currentUserMember?.id)
 
             if (!isOwner || otherMembers.length === 0) return null
