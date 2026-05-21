@@ -17,6 +17,8 @@ cd flowrish-next
 npm install
 ```
 
+All dependencies (including Tiptap rich text editor packages) are installed automatically via `npm install`. No additional setup is needed for the editor.
+
 ## 2. Environment Variables
 
 Copy the example file and fill in your credentials:
@@ -41,6 +43,7 @@ cp .env.example .env
 | `EMAIL_ENCRYPTION_KEY` | Generate yourself (see below) |
 | `GOOGLE_CLIENT_ID` | Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client |
 | `GOOGLE_CLIENT_SECRET` | Same place as above |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Same as `GOOGLE_CLIENT_ID` — needed client-side for the Gmail connect button in Settings |
 
 ### Optional Variables
 
@@ -79,6 +82,10 @@ Example:
 postgresql://postgres.yourproject:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
 ```
 
+### About NEXT_PUBLIC_GOOGLE_CLIENT_ID
+
+This is the same value as `GOOGLE_CLIENT_ID` but exposed to the browser. It's used by the Gmail connect component on the Settings page to initiate the OAuth flow client-side. Without it, the "Connect Gmail" button won't work.
+
 ## 3. Database Setup
 
 ### Generate Prisma Client
@@ -99,6 +106,27 @@ npx prisma migrate dev --name init
 npx prisma migrate deploy
 ```
 
+### Migration: Email Thread ID
+
+If you're upgrading from a version without email threading in cadences, run:
+
+```bash
+npx prisma migrate dev --name add_email_thread_id
+```
+
+This adds the `emailThreadId` field to the `CadenceEnrollment` model, enabling follow-up emails in cadences to be sent as replies in the same Gmail thread.
+
+### Migration: Rename Permissions (Production)
+
+If upgrading from the old permission names (`users:manage`, `settings:manage`) to the new names (`admin:users`, `admin:settings`), run this SQL directly against your production database:
+
+```sql
+UPDATE "RolePermission" SET key = 'admin:users' WHERE key = 'users:manage';
+UPDATE "RolePermission" SET key = 'admin:settings' WHERE key = 'settings:manage';
+```
+
+This ensures existing roles retain their permissions after the rename.
+
 ## 4. Supabase Auth Configuration
 
 In your Supabase dashboard:
@@ -115,11 +143,12 @@ In your Supabase dashboard:
 2. Create a project → Enable Gmail API
 3. Configure OAuth consent screen (External, add email/profile/gmail scopes)
 4. Create OAuth 2.0 credentials (Web application):
-   - Authorized JavaScript origins: `https://your-app.vercel.app`
+   - Authorized JavaScript origins: `https://your-app.vercel.app` (and `http://localhost:3000` for dev)
    - Authorized redirect URIs:
      - `https://your-supabase-ref.supabase.co/auth/v1/callback`
      - `https://your-app.vercel.app/auth/callback`
-5. Copy Client ID and Client Secret to your env vars
+     - `http://localhost:3000/api/email/callback` (for local Gmail connect)
+5. Copy Client ID and Client Secret to your env vars (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `NEXT_PUBLIC_GOOGLE_CLIENT_ID`)
 6. Add the same credentials to Supabase → Authentication → Providers → Google
 
 ## 6. Upstash Redis Setup
@@ -155,7 +184,7 @@ Visit `http://localhost:3000`. You'll be redirected to the login page.
 ## 9. Running Tests
 
 ```bash
-# Run all 836 tests once
+# Run all tests
 npm run test
 
 # Watch mode
@@ -183,6 +212,7 @@ The `vercel.json` configures:
    ```
 2. Update Supabase Auth redirect URLs to include your Vercel production URL
 3. Register your Inngest app URL in Inngest Cloud
+4. Run the permission rename SQL if upgrading (see section 3 above)
 
 ### CI/CD
 
@@ -210,5 +240,11 @@ The Prisma schema must use `provider = "prisma-client-js"` with `binaryTargets =
 ### Google OAuth redirects to localhost
 Update your Supabase Site URL (Authentication → URL Configuration) to your production URL.
 
+### Gmail connect button doesn't work
+Make sure `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is set in your environment. This is the same value as `GOOGLE_CLIENT_ID` but must be separately defined for client-side access.
+
 ### User stuck on onboarding after login
 The user has an account but no organization. Complete the onboarding form to create or join an org.
+
+### Email threading not working in cadences
+Run the migration: `npx prisma migrate dev --name add_email_thread_id`. This adds the `emailThreadId` column to `CadenceEnrollment`.

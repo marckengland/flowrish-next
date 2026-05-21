@@ -66,6 +66,7 @@ Click any lead to see:
 - **Activity Timeline** — All interactions (calls, meetings, notes, emails, files)
 - **Conversation Intelligence** — AI meeting summaries
 - **Coaching Comments** — Manager feedback on activities
+- **Duplicate Detection** — See potential duplicates and merge them (see below)
 
 ### Moving Leads Through Pipeline
 
@@ -80,11 +81,26 @@ Click any lead to see:
 3. The lead moves to Closed Won
 4. Any active cadence enrollments are automatically exited
 
-### Soft Delete
+### Duplicate Detection & Merge
 
-- Deleting a lead sets a `deletedAt` timestamp — hidden from all views and search
-- MEMBER role users must submit a deletion request (approved by MANAGER/ADMIN)
-- MANAGER/ADMIN can delete directly
+On the lead detail page, the system can detect potential duplicates:
+
+1. Duplicates are identified by matching email address or company name
+2. When duplicates are found, they're displayed on the lead detail page
+3. Click "Merge" to combine two leads:
+   - Choose which lead is the **primary** (keeps its data)
+   - The secondary lead's activities and contacts are transferred to the primary
+   - Duplicate contacts (same email) are skipped
+   - The secondary lead is soft-deleted
+
+### Soft Delete & Deletion Requests
+
+- **MANAGER/ADMIN/OWNER:** Can delete leads directly (sets `deletedAt` timestamp, hidden from all views)
+- **MEMBER:** Cannot delete directly — must submit a **deletion request**:
+  1. On the lead detail page, click "Request Deletion"
+  2. Optionally provide a reason
+  3. An admin reviews and approves or rejects the request
+  4. If approved, the lead is soft-deleted
 
 ---
 
@@ -106,7 +122,7 @@ Log interactions on any lead:
 | Call | Call date, duration, notes |
 | Meeting | Meeting date, attendees, notes |
 | Note | Free-text notes |
-| Email | Sent via Gmail integration |
+| Email | Sent via Gmail integration (rich text) |
 | File | Upload attachment (max 25 MB) |
 
 Each activity:
@@ -131,12 +147,21 @@ Each activity:
 
 1. Go to **Cadences** → "New Cadence"
 2. Add steps with delays between them:
-   - **Email** — Creates an email activity on the lead
+   - **Email** — Sends an email to the lead (with rich text editor)
    - **Call** — Creates a high-priority call task for the rep
    - **LinkedIn** — Creates a LinkedIn outreach task
    - **Manual Task** — Creates a custom task for the rep
 3. Cadence starts in DRAFT status
 4. Click "Activate" (requires at least one step)
+
+### Email Threading in Cadences
+
+When a cadence has multiple EMAIL steps, follow-up emails are automatically sent as **replies in the same Gmail thread**:
+
+- The first EMAIL step creates a new email thread
+- Subsequent EMAIL steps use `Re:` prefix and reference the original thread ID
+- This means the lead sees all cadence emails as a single conversation in their inbox
+- Threading is tracked via the `emailThreadId` field on each enrollment
 
 ### Enrolling Leads
 
@@ -156,7 +181,7 @@ ACTIVE → COMPLETED (all steps executed)
 
 | Step Type | Action |
 |-----------|--------|
-| EMAIL | Creates an EMAIL activity on the lead timeline |
+| EMAIL | Sends email (threaded), creates EMAIL activity on timeline |
 | CALL | Creates a high-priority task "Make a call" assigned to the rep |
 | LINKEDIN | Creates a medium-priority task "LinkedIn outreach" assigned to the rep |
 | MANUAL_TASK | Creates a task with the configured title/description |
@@ -175,15 +200,45 @@ ACTIVE → COMPLETED (all steps executed)
 
 1. Go to **Settings** → Email
 2. Click "Connect Gmail"
-3. Authorize via Google OAuth
+3. Authorize via Google OAuth (uses `NEXT_PUBLIC_GOOGLE_CLIENT_ID` for the browser-side flow)
 4. Tokens are encrypted (AES-256-CBC) and stored securely
 
-### Sending Emails
+### Rich Text Email Compose
 
-- Compose from the lead detail page
-- Use personalization tags: `{{FirstName}}`, `{{LastName}}`, `{{FullName}}`, `{{CompanyName}}`, `{{Title}}`
-- Tags are replaced with lead data before sending
-- **Sent emails automatically appear in the lead's activity timeline**
+The email editor supports full rich text formatting:
+
+| Feature | Description |
+|---------|-------------|
+| **Bold** | `Ctrl+B` or toolbar button |
+| **Italic** | `Ctrl+I` or toolbar button |
+| **Underline** | `Ctrl+U` or toolbar button |
+| **Headings** | H1, H2, H3 levels |
+| **Lists** | Bullet and numbered lists |
+| **Links** | Insert/edit clickable URLs |
+| **Font Family** | Choose from multiple fonts |
+| **Text Color** | Color picker for text |
+| **Blockquotes** | Indented quote blocks |
+| **Code** | Inline code formatting |
+
+The editor produces clean HTML that renders consistently across email clients.
+
+### File Attachments
+
+- Click the attachment icon in the compose toolbar
+- Upload files (max 25 MB per file)
+- Attachments are included with the sent email
+
+### Personalization Tags
+
+Use these tags in your email — they're replaced with lead data before sending:
+
+| Tag | Replaced With |
+|-----|--------------|
+| `{{FirstName}}` | Lead's first name |
+| `{{LastName}}` | Lead's last name |
+| `{{FullName}}` | Lead's full name |
+| `{{CompanyName}}` | Lead's company name |
+| `{{Title}}` | Lead's job title |
 
 ### Email Sync
 
@@ -309,7 +364,7 @@ Full-text search across Leads, Contacts, and Companies using PostgreSQL tsvector
 ### Email Generation
 
 - AI uses lead context (name, title, company, last 5 interactions) + admin-configured system prompt
-- Returns structured draft (subject + body) you can edit before sending
+- Returns structured draft (subject + body) you can edit in the rich text editor before sending
 
 ### Account Research
 
@@ -329,6 +384,50 @@ Full-text search across Leads, Contacts, and Companies using PostgreSQL tsvector
 - Invite users with specific roles and team assignments
 - Privilege escalation prevention (can't invite with higher role than yours)
 - View and manage existing members
+- Remove members from the organization
+
+### Custom Roles & Permissions
+
+Navigate to **Admin → Roles & Permissions** tab:
+
+**Viewing Roles:**
+- See all system roles (OWNER, ADMIN, MANAGER, MEMBER) and custom roles
+- Each role shows its hierarchy level and assigned permissions
+
+**Creating a Custom Role:**
+1. Click "Create Role"
+2. Enter a role name (must be unique within the org)
+3. Set the hierarchy level (lower = more powerful; cannot be more powerful than your own)
+4. Toggle permissions on/off using the permission checkboxes
+5. Click "Save"
+
+**Editing a Role:**
+- System roles: can modify permissions only (cannot rename or change hierarchy)
+- Custom roles: can modify name, hierarchy, and permissions
+- Click a role → edit its settings → save
+
+**Deleting a Custom Role:**
+- Only custom roles can be deleted
+- Cannot delete a role that has team members assigned (reassign them first)
+- System roles (OWNER, ADMIN, MANAGER, MEMBER) cannot be deleted
+
+### Transfer Ownership
+
+1. Go to **Admin → Members**
+2. Click "Transfer Ownership"
+3. Select the target member
+4. Confirm the transfer
+5. The target becomes OWNER; you are downgraded to ADMIN
+
+Only the current OWNER can perform this action.
+
+### Leave Organization
+
+1. Go to **Admin → Members** (or Settings)
+2. Click "Leave Organization"
+3. Confirm
+
+You cannot leave if you're the last OWNER — transfer ownership first.
 
 ### Team Management
 
@@ -344,9 +443,9 @@ Full-text search across Leads, Contacts, and Companies using PostgreSQL tsvector
 
 ### Deletion Requests
 
-- MEMBER users submit requests to delete leads/contacts
-- MANAGER/ADMIN review and approve/reject
-- Approved deletions execute immediately
+- View pending deletion requests from MEMBER users
+- Approve: executes the deletion (soft-delete for leads, hard delete for contacts/tasks)
+- Reject: marks the request as rejected, no action taken
 
 ### Assignment Rules
 
@@ -371,9 +470,13 @@ Full-text search across Leads, Contacts, and Companies using PostgreSQL tsvector
 | cadences:manage | ✓ | ✓ | ✓ | — |
 | cadences:read | ✓ | ✓ | ✓ | ✓ |
 | users:invite | ✓ | ✓ | — | — |
-| users:manage | ✓ | ✓ | — | — |
+| admin:users | ✓ | ✓ | — | — |
+| admin:settings | ✓ | ✓ | — | — |
 | billing:manage | ✓ | — | — | — |
-| settings:manage | ✓ | ✓ | — | — |
 | audit:read | ✓ | ✓ | — | — |
 | forecast:read | ✓ | ✓ | ✓ | ✓ |
 | forecast:submit | ✓ | ✓ | ✓ | — |
+
+> **Note:** Custom roles can have any combination of these permissions. The table above shows the defaults for system roles.
+
+> **Migration note:** The permissions `users:manage` and `settings:manage` have been renamed to `admin:users` and `admin:settings` respectively. If you see the old names in your database, run the migration SQL (see Setup Guide).

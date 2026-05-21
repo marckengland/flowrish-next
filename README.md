@@ -10,6 +10,7 @@ A modern, multi-tenant CRM built with Next.js 15 (App Router), Supabase Auth, Pr
 - **Background Jobs:** Inngest (durable functions, cron schedules)
 - **Rate Limiting:** Upstash Redis
 - **UI:** Tailwind CSS v4, Shadcn/ui, Lucide icons
+- **Rich Text Editor:** Tiptap v3 (email composition with formatting, links, colors)
 - **State:** TanStack Query v5 (server), Zustand v5 (client)
 - **Testing:** Vitest v3, fast-check v3 (property-based), Testing Library
 - **Deployment:** Vercel + Supabase Cloud
@@ -22,7 +23,7 @@ npm install
 
 # Set up environment variables
 cp .env.example .env
-# Fill in your Supabase, Upstash, Inngest, and AI API credentials
+# Fill in your Supabase, Upstash, Inngest, Google, and AI API credentials
 
 # Generate Prisma client
 npx prisma generate
@@ -51,7 +52,7 @@ Open [http://localhost:3000](http://localhost:3000).
 |---------|-------------|
 | `npm run dev` | Start Next.js dev server |
 | `npm run build` | Production build |
-| `npm run test` | Run all tests (836 tests) |
+| `npm run test` | Run all tests |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run lint` | ESLint check |
 
@@ -63,8 +64,16 @@ src/
 │   ├── (auth)/             # Auth pages (login, onboarding)
 │   ├── (dashboard)/        # Authenticated dashboard pages
 │   ├── api/                # REST API route handlers
+│   │   ├── admin/          # Admin-only routes (roles, members, teams, etc.)
+│   │   ├── cadences/       # Cadence CRUD + enrollments
+│   │   ├── deletion-requests/ # Deletion request workflow
+│   │   ├── duplicates/     # Duplicate detection
+│   │   ├── email/          # Gmail connect, send, callback
+│   │   └── ...             # leads, contacts, tasks, forecast, etc.
 │   └── auth/               # OAuth callback and magic link confirm
 ├── components/             # React components (Shadcn/ui based)
+│   ├── email/              # Rich text editor (Tiptap), email compose
+│   └── ...
 ├── hooks/                  # TanStack Query hooks
 ├── lib/                    # Shared utilities
 │   ├── supabase/           # Supabase client factories (server, browser, middleware)
@@ -79,24 +88,55 @@ src/
 ├── stores/                 # Zustand stores (layout, filters, kanban)
 └── types/                  # TypeScript type definitions
 prisma/
-├── schema.prisma           # Database schema (28 tenant-scoped models)
+├── schema.prisma           # Database schema (28+ tenant-scoped models)
 └── seed.ts                 # Seed script
 ```
 
 ## Key Features
 
 - **Multi-tenancy** — Complete data isolation between organizations via tenant middleware
-- **RBAC** — 4-tier role system (Owner, Admin, Manager, Member) with permission-based access
+- **Custom Role Management** — Create, edit, and delete custom roles with granular permission toggles; 4 system roles (Owner, Admin, Manager, Member) with editable permissions
+- **Rich Text Email Editor** — Tiptap-powered editor with bold, italic, underline, font families, text colors, links, and file attachments
+- **Email Threading** — Cadence follow-up emails are sent as replies in the same Gmail thread (via `emailThreadId` on enrollments)
 - **Lead Management** — Full lifecycle with pipeline stages, soft-delete, and conversion to contacts
-- **Cadence Engine** — Multi-step sales sequences with automated task/email creation
+- **Duplicate Detection & Merge** — Detect potential duplicates by email/company and merge leads (activities + contacts transferred)
+- **Cadence Engine** — Multi-step sales sequences with automated task/email creation and email threading
 - **Rhythm Engine** — Priority-scored daily actions based on deal value, urgency, and engagement
 - **Revenue Forecasting** — Pipeline metrics, AI predictions, and commit vs. actual tracking
-- **Email Integration** — Gmail OAuth with personalization tags and inbox sync
+- **Email Integration** — Gmail OAuth with personalization tags, inbox sync, and rich HTML emails
 - **AI Features** — Email generation, account research, and chatbot (Gemini/OpenAI)
 - **CSV Import/Export** — Bulk lead import with duplicate detection and field mapping
 - **Full-text Search** — PostgreSQL tsvector across leads, contacts, and companies
 - **Audit Logging** — Immutable trail of all CUD operations
 - **Score Decay** — Automated daily score reduction for inactive leads
+- **Deletion Request Workflow** — Non-admin users request deletion; admins approve/reject
+- **Transfer Ownership** — Owner can transfer the OWNER role to another member
+- **Leave Organization** — Members can leave (owners must transfer first)
+
+## Admin API Routes
+
+All routes under `/api/admin/` require `admin:users` or `admin:settings` permission:
+
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/admin/roles` | GET, POST | List roles with permissions; create custom role |
+| `/api/admin/roles/[id]` | PATCH, DELETE | Update role permissions/name; delete custom role |
+| `/api/admin/members` | GET | List organization members |
+| `/api/admin/members/[id]` | PATCH, DELETE | Update member role; remove member |
+| `/api/admin/members/transfer-ownership` | POST | Transfer OWNER role to another member |
+| `/api/admin/members/leave` | POST | Leave the organization |
+| `/api/admin/invite` | POST | Invite a user to the organization |
+| `/api/admin/teams` | GET, POST | List/create teams |
+| `/api/admin/teams/hierarchy` | GET | Get team hierarchy tree |
+| `/api/admin/audit` | GET | Query audit log entries |
+| `/api/admin/assignment-rules` | GET, POST | List/create assignment rules |
+| `/api/admin/assignment-rules/[id]` | PATCH, DELETE | Update/delete assignment rule |
+| `/api/admin/scoring-rules` | GET, POST | List/create lead scoring rules |
+| `/api/admin/scoring-rules/[id]` | PATCH, DELETE | Update/delete scoring rule |
+| `/api/admin/score-decay` | GET, POST | List/create score decay configs |
+| `/api/admin/score-decay/[id]` | PATCH, DELETE | Update/delete score decay config |
+| `/api/admin/ai-prompts` | GET, POST | List/create AI prompt templates |
+| `/api/admin/ai-prompts/[id]` | PATCH, DELETE | Update/delete AI prompt |
 
 ## Documentation
 
