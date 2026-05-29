@@ -250,7 +250,8 @@ ${body}
  * 2. Refresh token if needed (tokenExpiry - 5 minutes < now)
  * 3. Replace personalization tags in subject and body
  * 4. Wrap body in HTML document with base styling
- * 5. Send via Gmail API (POST to gmail.googleapis.com/gmail/v1/users/me/messages/send)
+ * 5. Send via Gmail API (POST to gmail.googleapis.com/gmail/v1/users/me/messages/send),
+ *    passing `threadId` for reply-in-thread when supplied (Requirement 7.3)
  * 6. Create EmailMessage record
  *
  * Validates: Requirements 7.2, 7.3, 7.4, 7.5
@@ -261,6 +262,7 @@ export async function sendEmail(
   body: string,
   userId: string,
   orgId: string,
+  threadId?: string,
 ): Promise<{ messageId: string; threadId: string }> {
   const db = createTenantPrisma(orgId)
 
@@ -312,12 +314,31 @@ export async function sendEmail(
   // Wrap body in HTML document with base styling
   const htmlBody = wrapHtmlEmail(personalizedBody)
 
+  // For replies, look up the previous message on the thread so we can
+  // emit the In-Reply-To / References headers Gmail uses to thread
+  // conversations correctly. Falling back to no headers is fine — the
+  // `threadId` on the JSON payload already carries the conversation.
+  let inReplyToHeader: string | null = null
+  if (threadId) {
+    const lastMessageOnThread = await db.emailMessage.findFirst({
+      where: { threadId },
+      orderBy: { sentAt: 'desc' },
+      select: { externalId: true },
+    })
+    if (lastMessageOnThread?.externalId) {
+      // Gmail message IDs are not RFC 5322 Message-IDs but Gmail accepts
+      // them for threading purposes.
+      inReplyToHeader = `<${lastMessageOnThread.externalId}@mail.gmail.com>`
+    }
+  }
+
   // Build the raw email (RFC 2822 format, base64url encoded)
   const rawEmail = buildRawEmail(
     updatedAccount.email,
     lead.email,
     personalizedSubject,
     htmlBody,
+    inReplyToHeader,
   )
 
   // Send via Gmail API
@@ -327,7 +348,12 @@ export async function sendEmail(
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ raw: rawEmail }),
+    body: JSON.stringify({
+      raw: rawEmail,
+      // Passing threadId tells Gmail to attach this message to the
+      // existing conversation rather than start a new one.
+      ...(threadId ? { threadId } : {}),
+    }),
   })
 
   if (!sendResponse.ok) {
@@ -373,12 +399,17 @@ export async function sendEmail(
 /**
  * Builds a raw RFC 2822 email message and encodes it as base64url
  * for the Gmail API send endpoint.
+ *
+ * `inReplyTo` (when supplied) sets the `In-Reply-To` and `References`
+ * headers so the receiving client threads this message under the
+ * referenced conversation (Requirement 7.3).
  */
 function buildRawEmail(
   from: string,
   to: string,
   subject: string,
   htmlBody: string,
+  inReplyTo: string | null = null,
 ): string {
   const messageParts = [
     `From: ${from}`,
@@ -386,6 +417,7 @@ function buildRawEmail(
     `Subject: ${subject}`,
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=utf-8',
+    ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`] : []),
     '',
     htmlBody,
   ]

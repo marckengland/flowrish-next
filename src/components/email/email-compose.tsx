@@ -1,24 +1,18 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { Loader2, Mail, Send, Tag, Paperclip } from 'lucide-react'
+import {
+  Loader2,
+  Mail,
+  Paperclip,
+  Send,
+  X,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/email/rich-text-editor'
+import { EmailGenerator } from '@/components/ai/email-generator'
 import { cn } from '@/lib/utils'
-
-/**
- * Supported personalization tags that can be inserted into the email
- * subject or body. These are replaced server-side with lead data before
- * sending (Requirement 7.2).
- */
-const PERSONALIZATION_TAGS = [
-  { tag: '{{FirstName}}', label: 'First Name' },
-  { tag: '{{LastName}}', label: 'Last Name' },
-  { tag: '{{FullName}}', label: 'Full Name' },
-  { tag: '{{CompanyName}}', label: 'Company' },
-  { tag: '{{Title}}', label: 'Title' },
-] as const
 
 export interface EmailComposeProps {
   /** The lead to send the email to. */
@@ -31,19 +25,57 @@ export interface EmailComposeProps {
   defaultSubject?: string
   /** Optional pre-filled body (e.g. from AI generation). */
   defaultBody?: string
+  /**
+   * When provided, the email is sent as a reply on this Gmail thread.
+   * The subject is locked and prefixed with "Re:" automatically.
+   */
+  replyToThreadId?: string
+  /** Subject of the latest message on the thread, used to seed "Re:" subject. */
+  replySubject?: string
   /** Called after a successful send. */
   onSent?: (result: { messageId: string; threadId: string }) => void
   /** Optional extra class for the root element. */
   className?: string
+  /**
+   * When false, renders a "Compose" button that expands into the form.
+   * Defaults to true so the form is rendered inline (matches the
+   * previous Next port behaviour).
+   */
+  alwaysOpen?: boolean
 }
 
+interface UploadResult {
+  attachmentId: string
+  storagePath: string
+  activityId: string
+}
+
+interface UploadedAttachment {
+  file: File
+  status: 'pending' | 'uploading' | 'uploaded' | 'failed'
+  error?: string
+  result?: UploadResult
+}
+
+const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024 // 25 MB — matches /api/upload
+
 /**
- * Email compose form with personalization tag insertion.
+ * Email compose form.
  *
- * Provides a subject + body editor with a toolbar for inserting
- * personalization tags at the cursor position. Sends via
- * `POST /api/email/send` which handles tag replacement, HTML wrapping,
- * and Gmail API delivery.
+ * Supports two modes:
+ *   - **New email** — user enters subject + body, optionally attaches
+ *     files, and posts to `/api/email/send`. Files are uploaded via
+ *     `/api/upload` after the send succeeds and become attachments on the
+ *     activity that the send service creates.
+ *   - **Reply in thread** — when `replyToThreadId` is set, the subject is
+ *     pre-filled with `Re: <thread subject>` and locked. The send
+ *     endpoint receives `threadId` so Gmail stitches the message into the
+ *     existing conversation.
+ *
+ * The AI email generator is embedded so users can drop in an
+ * AI-generated draft directly. Personalization tag insertion happens
+ * inside the rich text editor itself (toolbar button, autocomplete on
+ * `{{`, preview pane).
  *
  * Validates: Requirements 7.1, 7.2, 7.3
  */
@@ -53,57 +85,112 @@ export function EmailCompose({
   leadName,
   defaultSubject = '',
   defaultBody = '',
+  replyToThreadId,
+  replySubject,
   onSent,
   className,
+  alwaysOpen = true,
 }: EmailComposeProps): React.JSX.Element {
-  const [subject, setSubject] = useState(defaultSubject)
-  const [body, setBody] = useState(defaultBody)
-  const [attachments, setAttachments] = useState<File[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const [isPending, startTransition] = useTransition()
-  const [showTags, setShowTags] = useState(false)
-  const [activeField, setActiveField] = useState<'subject' | 'body'>('body')
+  const isReply = Boolean(replyToThreadId)
+  const initialSubject = isReply
+    ? prefixReplySubject(defaultSubject || replySubject || '')
+    : defaultSubject
 
-  const subjectRef = useRef<HTMLInputElement>(null)
+  const [open, setOpen] = useState(alwaysOpen)
+  const [subject, setSubject] = useState(initialSubject)
+  const [body, setBody] = useState(defaultBody)
+  const [attachments, setAttachments] = useState<UploadedAttachment[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+  // Re-keys the editor when we apply an AI draft so its internal state
+  // resets to the new defaultValue (TipTap doesn't react to prop changes).
+  const [editorKey, setEditorKey] = useState(0)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  function insertTag(tag: string): void {
-    // Insert into subject field (body is handled by the rich text editor)
-    const el = subjectRef.current
-    if (!el) return
+  function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>): void {
+    const files = Array.from(event.target.files ?? [])
+    const accepted: UploadedAttachment[] = []
+    const rejected: string[] = []
+    for (const file of files) {
+      if (file.size > MAX_ATTACHMENT_SIZE) {
+        rejected.push(`${file.name} (over 25 MB)`)
+        continue
+      }
+      accepted.push({ file, status: 'pending' })
+    }
+    setAttachments((prev) => [...prev, ...accepted])
+    if (rejected.length > 0) {
+      setError(`Skipped: ${rejected.join(', ')}`)
+    }
+    event.target.value = ''
+  }
 
-    const start = el.selectionStart ?? el.value.length
-    const end = el.selectionEnd ?? start
-    const before = el.value.slice(0, start)
-    const after = el.value.slice(end)
-    const newValue = before + tag + after
-    setSubject(newValue)
+  function removeAttachment(index: number): void {
+    setAttachments((prev) => prev.filter((_, i) => i !== index))
+  }
 
-    requestAnimationFrame(() => {
-      el.focus()
-      const cursorPos = start + tag.length
-      el.setSelectionRange(cursorPos, cursorPos)
-    })
-
-    setShowTags(false)
+  async function uploadAllAttachments(): Promise<void> {
+    if (attachments.length === 0) return
+    // Upload sequentially so a single failure doesn't fan out to many
+    // simultaneous error toasts. The set is small (handful of files).
+    for (let i = 0; i < attachments.length; i++) {
+      const att = attachments[i]
+      if (att.status === 'uploaded') continue
+      setAttachments((prev) => prev.map((a, idx) => (
+        idx === i ? { ...a, status: 'uploading', error: undefined } : a
+      )))
+      const formData = new FormData()
+      formData.append('file', att.file)
+      formData.append('leadId', leadId)
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: formData,
+        })
+        if (!res.ok) {
+          const json = (await res.json().catch(() => ({}))) as {
+            error?: { message?: string }
+          }
+          const message = json.error?.message ?? `Upload failed (${res.status})`
+          setAttachments((prev) => prev.map((a, idx) => (
+            idx === i ? { ...a, status: 'failed', error: message } : a
+          )))
+          continue
+        }
+        const json = (await res.json()) as { data: UploadResult }
+        setAttachments((prev) => prev.map((a, idx) => (
+          idx === i ? { ...a, status: 'uploaded', result: json.data } : a
+        )))
+      } catch (err) {
+        setAttachments((prev) => prev.map((a, idx) => (
+          idx === i
+            ? {
+                ...a,
+                status: 'failed',
+                error: err instanceof Error ? err.message : 'Upload failed',
+              }
+            : a
+        )))
+      }
+    }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault()
     setError(null)
-    setSuccess(false)
+    setSuccess(null)
 
     if (!leadEmail) {
       setError('This lead does not have an email address.')
       return
     }
-
     if (!subject.trim()) {
       setError('Subject is required.')
       return
     }
-
     if (!body.trim()) {
       setError('Email body is required.')
       return
@@ -118,7 +205,12 @@ export function EmailCompose({
             Accept: 'application/json',
           },
           credentials: 'same-origin',
-          body: JSON.stringify({ leadId, subject: subject.trim(), body: body.trim() }),
+          body: JSON.stringify({
+            leadId,
+            subject: subject.trim(),
+            body: body.trim(),
+            ...(replyToThreadId ? { threadId: replyToThreadId } : {}),
+          }),
         })
 
         if (!res.ok) {
@@ -136,7 +228,20 @@ export function EmailCompose({
         const responseBody = (await res.json()) as {
           data: { messageId: string; threadId: string }
         }
-        setSuccess(true)
+
+        // Send succeeded — now upload any attachments to the lead so they
+        // appear on the activity timeline. We deliberately don't attach
+        // them to the outgoing Gmail message yet; that requires multipart
+        // MIME and is a follow-up.
+        if (attachments.length > 0) {
+          await uploadAllAttachments()
+        }
+
+        setSuccess(
+          attachments.length > 0
+            ? 'Email sent. Attachments stored on the lead activity.'
+            : 'Email sent successfully.',
+        )
         onSent?.(responseBody.data)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to send email.')
@@ -144,13 +249,43 @@ export function EmailCompose({
     })
   }
 
+  if (!open) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(true)}
+      >
+        <Mail className="size-3.5" aria-hidden="true" />
+        <span>{isReply ? 'Reply' : 'Send email'}</span>
+      </Button>
+    )
+  }
+
   return (
     <form
       onSubmit={handleSubmit}
       className={cn('flex flex-col gap-3 rounded-md border bg-card p-4', className)}
       aria-busy={isPending || undefined}
-      aria-label="Compose email"
+      aria-label={isReply ? 'Reply email' : 'Compose email'}
     >
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">
+          {isReply ? 'Reply in thread' : 'Compose email'}
+        </h3>
+        {!alwaysOpen && (
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Close compose"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+
       {/* To field (read-only) */}
       <div className="flex items-center gap-2 text-sm">
         <Mail className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -174,26 +309,28 @@ export function EmailCompose({
           Subject
         </label>
         <input
-          ref={subjectRef}
           id="email-subject"
           type="text"
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
-          onFocus={() => setActiveField('subject')}
           placeholder="Email subject…"
-          className={inputClasses}
-          disabled={isPending}
+          className={cn(inputClasses, isReply && 'opacity-70')}
+          disabled={isPending || isReply}
         />
+        {isReply && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Subject is locked when replying in a thread.
+          </p>
+        )}
       </div>
 
-      {/* Body — Rich Text Editor */}
+      {/* Body */}
       <div>
-        <label
-          className="block text-xs font-medium text-foreground mb-1"
-        >
+        <span className="mb-1 block text-xs font-medium text-foreground">
           Body
-        </label>
+        </span>
         <RichTextEditor
+          key={editorKey}
           defaultValue={defaultBody}
           onChange={(html) => setBody(html)}
           placeholder="Write your email…"
@@ -201,18 +338,25 @@ export function EmailCompose({
         />
       </div>
 
-      {/* File Attachments */}
+      {/* AI helper — pastes draft into subject/body */}
+      <EmailGenerator
+        leadId={leadId}
+        leadName={leadName}
+        onUseDraft={({ subject: draftSubject, body: draftBody }) => {
+          if (!isReply) setSubject(draftSubject)
+          setBody(draftBody)
+          setEditorKey((k) => k + 1)
+        }}
+      />
+
+      {/* Attachments */}
       <div className="flex flex-col gap-2">
         <input
           ref={fileInputRef}
           type="file"
           multiple
           className="hidden"
-          onChange={(e) => {
-            const files = Array.from(e.target.files ?? [])
-            setAttachments((prev) => [...prev, ...files])
-            e.target.value = ''
-          }}
+          onChange={handleFileSelect}
         />
         <div className="flex items-center gap-2">
           <Button
@@ -225,70 +369,48 @@ export function EmailCompose({
             <Paperclip className="size-3.5" aria-hidden="true" />
             <span>Attach file</span>
           </Button>
-          {attachments.length > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {attachments.length} file{attachments.length > 1 ? 's' : ''} attached
-            </span>
-          )}
+          <span className="text-[11px] text-muted-foreground">
+            Up to 25 MB each. Stored on the lead activity after the email sends.
+          </span>
         </div>
         {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {attachments.map((file, i) => (
-              <span
-                key={`${file.name}-${i}`}
-                className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs"
+          <ul className="flex flex-wrap gap-1.5">
+            {attachments.map((att, i) => (
+              <li
+                key={`${att.file.name}-${i}`}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border bg-background px-2 py-0.5 text-xs',
+                  att.status === 'failed' && 'border-destructive/40 text-destructive',
+                  att.status === 'uploaded' && 'border-emerald-500/40 text-emerald-700 dark:text-emerald-300',
+                )}
+                title={att.error}
               >
-                {file.name}
+                <Paperclip className="size-3 text-muted-foreground" aria-hidden="true" />
+                <span className="max-w-[160px] truncate">{att.file.name}</span>
+                <span className="text-muted-foreground">
+                  {formatFileSize(att.file.size)}
+                </span>
+                {att.status === 'uploading' && (
+                  <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+                )}
+                {att.status === 'failed' && (
+                  <span className="text-[10px] uppercase tracking-wide">failed</span>
+                )}
                 <button
                   type="button"
-                  onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
-                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => removeAttachment(i)}
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label={`Remove ${att.file.name}`}
+                  disabled={isPending}
                 >
-                  ✕
+                  <X className="size-3" />
                 </button>
-              </span>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
 
-      {/* Personalization tag toolbar */}
-      <div className="relative">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setShowTags((prev) => !prev)}
-          disabled={isPending}
-          aria-expanded={showTags}
-          aria-controls="personalization-tags-menu"
-        >
-          <Tag className="size-3.5" aria-hidden="true" />
-          <span>Insert tag</span>
-        </Button>
-
-        {showTags && (
-          <div
-            id="personalization-tags-menu"
-            role="menu"
-            className="absolute bottom-full left-0 z-10 mb-1 flex flex-wrap gap-1 rounded-md border bg-popover p-2 shadow-md"
-          >
-            {PERSONALIZATION_TAGS.map(({ tag, label }) => (
-              <button
-                key={tag}
-                type="button"
-                role="menuitem"
-                onClick={() => insertTag(tag)}
-                className="rounded-md border bg-background px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Error / success messages */}
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -300,17 +422,23 @@ export function EmailCompose({
           role="status"
           className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300"
         >
-          Email sent successfully.
+          {success}
         </div>
       ) : null}
 
-      {/* Actions */}
-      <div className="flex justify-end">
-        <Button
-          type="submit"
-          size="sm"
-          disabled={isPending || !leadEmail}
-        >
+      <div className="flex justify-end gap-2">
+        {!alwaysOpen && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setOpen(false)}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+        )}
+        <Button type="submit" size="sm" disabled={isPending || !leadEmail}>
           {isPending ? (
             <>
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -319,7 +447,7 @@ export function EmailCompose({
           ) : (
             <>
               <Send className="size-3.5" aria-hidden="true" />
-              <span>Send email</span>
+              <span>{isReply ? 'Send reply' : 'Send email'}</span>
             </>
           )}
         </Button>
@@ -330,3 +458,15 @@ export function EmailCompose({
 
 const inputClasses =
   'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50'
+
+function prefixReplySubject(subject: string): string {
+  const trimmed = subject.trim()
+  if (!trimmed) return 'Re:'
+  return /^re:\s/i.test(trimmed) ? trimmed : `Re: ${trimmed}`
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}

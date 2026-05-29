@@ -13,6 +13,8 @@ import {
   resumeEnrollment as resumeEnrollmentService,
   exitEnrollment as exitEnrollmentService,
   addStep as addStepService,
+  updateStep as updateStepService,
+  deleteStep as deleteStepService,
   reorderSteps as reorderStepsService,
 } from '@/server/services/cadences'
 import { createTenantPrisma } from '@/server/db/middleware'
@@ -213,6 +215,129 @@ export async function addStep(formData: FormData) {
       return { error: appErr.message }
     }
     return { error: 'Failed to add step. Please try again.' }
+  }
+}
+
+/**
+ * Updates an existing step on a cadence.
+ *
+ * Accepts a partial patch — only fields present in `data` are written.
+ * The service rejects updates on archived cadences and on steps that
+ * don't belong to the caller's tenant.
+ *
+ * @param cadenceId - The cadence the step belongs to
+ * @param stepId    - The step to update
+ * @param data      - Partial step fields (actionType/delayHours/subject/body/taskTitle/taskDescription)
+ */
+export async function updateStep(
+  cadenceId: string,
+  stepId: string,
+  data: {
+    actionType?: string
+    delayHours?: number
+    subject?: string | null
+    body?: string | null
+    taskTitle?: string | null
+    taskDescription?: string | null
+  },
+) {
+  const session = await requireSession()
+  requirePermission(session.dbUser, 'cadences:manage')
+
+  if (!cadenceId) {
+    return { error: 'Cadence ID is required' }
+  }
+  if (!stepId) {
+    return { error: 'Step ID is required' }
+  }
+
+  try {
+    const step = await updateStepService(
+      cadenceId,
+      stepId,
+      data,
+      session.organizationId,
+    )
+
+    // Audit log: async, non-blocking
+    const db = createTenantPrisma(session.organizationId)
+    db.auditEntry.create({
+      data: tenantData({
+        userId: session.dbUser.id,
+        action: 'UPDATE',
+        entityType: 'CadenceStep',
+        entityId: stepId,
+        metadata: JSON.stringify({ cadenceId }),
+      }),
+    }).catch((err) => {
+      console.error('Audit log failed (updateStep):', err)
+    })
+
+    revalidatePath('/cadences')
+    revalidatePath(`/cadences/${cadenceId}`)
+    return { data: step }
+  } catch (err: unknown) {
+    if (err instanceof ZodError) {
+      return { error: err.errors[0]?.message ?? 'Validation failed' }
+    }
+    if (err && typeof err === 'object' && 'statusCode' in err) {
+      const appErr = err as { message: string; statusCode: number }
+      return { error: appErr.message }
+    }
+    return { error: 'Failed to update step. Please try again.' }
+  }
+}
+
+/**
+ * Deletes a step from a cadence and renumbers the remaining steps.
+ *
+ * Rejects when the cadence is archived or has any ACTIVE/PAUSED
+ * enrollments — see the service docs for the rationale.
+ *
+ * @param cadenceId - The cadence the step belongs to
+ * @param stepId    - The step to delete
+ */
+export async function deleteStep(cadenceId: string, stepId: string) {
+  const session = await requireSession()
+  requirePermission(session.dbUser, 'cadences:manage')
+
+  if (!cadenceId) {
+    return { error: 'Cadence ID is required' }
+  }
+  if (!stepId) {
+    return { error: 'Step ID is required' }
+  }
+
+  try {
+    const result = await deleteStepService(
+      cadenceId,
+      stepId,
+      session.organizationId,
+    )
+
+    // Audit log: async, non-blocking
+    const db = createTenantPrisma(session.organizationId)
+    db.auditEntry.create({
+      data: tenantData({
+        userId: session.dbUser.id,
+        action: 'DELETE',
+        entityType: 'CadenceStep',
+        entityId: stepId,
+        metadata: JSON.stringify({ cadenceId }),
+      }),
+    }).catch((err) => {
+      console.error('Audit log failed (deleteStep):', err)
+    })
+
+    revalidatePath('/cadences')
+    revalidatePath(`/cadences/${cadenceId}`)
+    return { data: result }
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'statusCode' in err) {
+      const appErr = err as { message: string; statusCode: number }
+      return { error: appErr.message }
+    }
+    return { error: 'Failed to delete step. Please try again.' }
   }
 }
 

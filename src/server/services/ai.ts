@@ -24,10 +24,33 @@ export interface AccountResearch {
   strategicGoals: string
   salesAngles: string[]
   challenges: string[]
+  /**
+   * Short note about the company's AI / tech readiness — useful for
+   * gauging openness to modernization conversations.
+   */
+  aiReadiness: string
+  /**
+   * Sources the model cites for the research. Each entry is either a
+   * URL (rendered as a link) or a free-form descriptor.
+   */
+  sources: string[]
+}
+
+export interface ChatNavigateAction {
+  type: 'navigate'
+  description: string
+  params: { path: string }
 }
 
 export interface ChatResponse {
   message: string
+  /**
+   * Optional follow-up action proposed by the assistant. Today only
+   * `navigate` is supported — see `extractNavigateAction` below for the
+   * marker format and `ChatbotSidebar` for the client confirm/reject
+   * UX.
+   */
+  action?: ChatNavigateAction
 }
 
 export interface TrackerMatch {
@@ -122,12 +145,29 @@ async function getActiveSystemPrompt(
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
+export interface GenerateEmailOptions {
+  /** Free-form description of what the email should accomplish. */
+  instructions?: string
+  /** Tone preset or custom string (e.g. "Helpful and friendly"). */
+  tone?: string
+  /** Goal / CTA (e.g. "Book a meeting"). */
+  goal?: string
+  /**
+   * Whether to include the lead's last 5 interactions in the prompt.
+   * Defaults to `true` to preserve the prior behaviour of the
+   * parameter-less `generateEmail(leadId, userId, orgId)` call.
+   */
+  includeContext?: boolean
+}
+
 /**
  * Generates an AI-drafted email for a lead.
  *
- * Fetches lead context (name, title, company, last 5 interactions) and
- * the admin-configured system prompt, then calls the AI API to produce
- * a structured {subject, body} response.
+ * Fetches lead context (name, title, company, last 5 interactions when
+ * `options.includeContext !== false`) and the admin-configured system
+ * prompt, then calls the AI API to produce a structured {subject, body}
+ * response. Optional `instructions`, `tone`, and `goal` from the caller
+ * are folded into the user prompt so the rep can steer the draft.
  *
  * Validates: Requirements 8.1, 8.4, 8.5
  */
@@ -135,43 +175,61 @@ export async function generateEmail(
   leadId: string,
   userId: string,
   orgId: string,
+  options: GenerateEmailOptions = {},
 ): Promise<GeneratedEmail> {
   try {
+    const includeContext = options.includeContext !== false
     const db = createTenantPrisma(orgId)
 
-    // Fetch lead with last 5 activities for context
+    // Fetch lead with last 5 activities for context (when enabled)
     const lead = await db.lead.findFirst({
       where: { id: leadId, deletedAt: null },
-      include: {
-        activities: {
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-          include: { emailMessage: true },
-        },
-      },
+      include: includeContext
+        ? {
+            activities: {
+              orderBy: { createdAt: 'desc' },
+              take: 5,
+              include: { emailMessage: true },
+            },
+          }
+        : undefined,
     })
 
     if (!lead) {
       throw new AppError('LEAD_NOT_FOUND', 'Lead not found', 404)
     }
 
-    // Build interaction history context
+    // Build interaction history context only when requested.
     let interactionHistory = ''
-    if (lead.activities.length > 0) {
-      interactionHistory =
-        '\n\nRecent interactions:\n' +
-        lead.activities
-          .map((a) => {
-            const date = a.createdAt.toISOString().split('T')[0]
-            if (a.emailMessage) {
-              return `- ${date}: Email "${a.emailMessage.subject}"`
-            }
-            return `- ${date}: ${a.type}${a.notes ? ` — ${a.notes}` : ''}`
-          })
-          .join('\n')
+    if (
+      includeContext
+      && 'activities' in lead
+      && Array.isArray((lead as unknown as { activities?: unknown[] }).activities)
+    ) {
+      const activities = (lead as unknown as {
+        activities: Array<{
+          createdAt: Date
+          type: string
+          notes: string | null
+          emailMessage: { subject: string } | null
+        }>
+      }).activities
+      if (activities.length > 0) {
+        interactionHistory =
+          '\n\nRecent interactions:\n'
+          + activities
+            .map((a) => {
+              const date = a.createdAt.toISOString().split('T')[0]
+              if (a.emailMessage) {
+                return `- ${date}: Email "${a.emailMessage.subject}"`
+              }
+              return `- ${date}: ${a.type}${a.notes ? ` — ${a.notes}` : ''}`
+            })
+            .join('\n')
+      }
     }
 
-    // Build the user prompt with lead context
+    // Build the user prompt with lead context and rep-supplied steering.
     const userPrompt = [
       'Generate a personalized sales email for the following prospect:',
       '',
@@ -180,6 +238,12 @@ export async function generateEmail(
       lead.companyName ? `Company: ${lead.companyName}` : '',
       lead.companyIndustry ? `Industry: ${lead.companyIndustry}` : '',
       interactionHistory,
+      '',
+      options.tone ? `Tone: ${options.tone}` : '',
+      options.goal ? `Primary goal / CTA: ${options.goal}` : '',
+      options.instructions
+        ? `Additional instructions: ${options.instructions}`
+        : '',
       '',
       'Respond in JSON format: {"subject": "...", "body": "..."}',
       'The body should be HTML-formatted for rich text display.',
@@ -262,7 +326,9 @@ export async function researchAccount(
       '  "executiveSummary": "High-level overview of the company...",',
       '  "strategicGoals": "Their likely strategic priorities...",',
       '  "salesAngles": ["Angle 1", "Angle 2", "Angle 3"],',
-      '  "challenges": ["Challenge 1", "Challenge 2"]',
+      '  "challenges": ["Challenge 1", "Challenge 2"],',
+      '  "aiReadiness": "Short note on AI / tech adoption posture",',
+      '  "sources": ["https://example.com", "Industry report 2024"]',
       '}',
     ]
       .filter(Boolean)
@@ -289,6 +355,8 @@ export async function researchAccount(
         strategicGoals: parsed.strategicGoals ?? '',
         salesAngles: Array.isArray(parsed.salesAngles) ? parsed.salesAngles : [],
         challenges: Array.isArray(parsed.challenges) ? parsed.challenges : [],
+        aiReadiness: parsed.aiReadiness ?? '',
+        sources: Array.isArray(parsed.sources) ? parsed.sources : [],
       }
     }
 
@@ -298,6 +366,8 @@ export async function researchAccount(
       strategicGoals: '',
       salesAngles: [],
       challenges: [],
+      aiReadiness: '',
+      sources: [],
     }
   } catch (error) {
     if (error instanceof AppError) {
@@ -311,6 +381,14 @@ export async function researchAccount(
 /**
  * Processes a chatbot message with context and returns a response.
  *
+ * The assistant can optionally include a navigation hint in its reply
+ * by appending a final-line marker `[NAVIGATE: /path]`. When present we
+ * strip it from the user-facing `message` and surface it as a
+ * structured `action` payload so the chat client can offer a confirm /
+ * reject card. We deliberately keep the action surface narrow — only
+ * routes within the app are accepted — so a misbehaving model can't
+ * push destructive actions onto the user.
+ *
  * Validates: Requirements 8.3, 8.4, 8.5
  */
 export async function chatMessage(
@@ -320,6 +398,7 @@ export async function chatMessage(
 ): Promise<ChatResponse> {
   try {
     // Build messages array — include system prompt only if active
+    // (Requirement 8.4: never inject defaults that the admin didn't opt in to).
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = []
 
     const systemPrompt = await getActiveSystemPrompt('chatbot', orgId)
@@ -327,17 +406,52 @@ export async function chatMessage(
       messages.push({ role: 'system', content: systemPrompt })
     }
 
-    messages.push({ role: 'user', content: message })
+    // Inline the navigation-marker hint with the user's message rather
+    // than fabricate a system prompt. The hint is short, ignored by
+    // models that can't act on it, and keeps the
+    // "no system prompt unless admin-configured" invariant intact.
+    const NAVIGATE_HINT =
+      ' \n\n(If the user clearly asks to navigate to a page in the app, '
+      + 'append a final line in the exact form `[NAVIGATE: /path]` with '
+      + 'an in-app route. Otherwise omit it.)'
+
+    messages.push({ role: 'user', content: message + NAVIGATE_HINT })
 
     const responseText = await callAI(messages, 0.5, 1000)
 
-    return { message: responseText }
+    // Detect the navigation marker on the final non-empty line.
+    const { message: cleaned, action } = extractNavigateAction(responseText)
+    return { message: cleaned, action }
   } catch (error) {
     if (error instanceof AppError) {
       throw error
     }
     console.error('[AI Service] chatMessage failed:', error)
     throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
+  }
+}
+
+/**
+ * Pulls a `[NAVIGATE: /path]` marker out of an assistant message and
+ * converts it to a structured action. Returns the cleaned message plus
+ * the action (or undefined). Only same-origin paths are accepted.
+ */
+function extractNavigateAction(text: string): {
+  message: string
+  action?: ChatNavigateAction
+} {
+  const match = text.match(/\[NAVIGATE:\s*(\/[^\]\s]*)\s*\]\s*$/)
+  if (!match) return { message: text.trim() }
+  const path = match[1]
+  if (!path.startsWith('/')) return { message: text.trim() }
+  const cleaned = text.slice(0, match.index).trim()
+  return {
+    message: cleaned,
+    action: {
+      type: 'navigate',
+      description: `Open ${path}`,
+      params: { path },
+    },
   }
 }
 

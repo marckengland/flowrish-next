@@ -222,6 +222,7 @@ export default async function CadenceDetailPage({
                 cadenceId={cadence.id}
                 initialSteps={serializedSteps}
                 readOnly={!canManage || isArchived}
+                hasLiveEnrollments={counts.ACTIVE > 0 || counts.PAUSED > 0}
               />
             ),
           },

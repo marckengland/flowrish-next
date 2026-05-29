@@ -1,7 +1,14 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Building2, Sparkles, Target, TriangleAlert } from 'lucide-react'
+import {
+  Building2,
+  Cpu,
+  ExternalLink,
+  Sparkles,
+  Target,
+  TriangleAlert,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
@@ -13,6 +20,8 @@ interface AccountResearch {
   strategicGoals: string
   salesAngles: string[]
   challenges: string[]
+  aiReadiness: string
+  sources: string[]
 }
 
 interface ResearchResponse {
@@ -86,6 +95,8 @@ export function AccountResearch({
           challenges: Array.isArray(json.data.challenges)
             ? json.data.challenges
             : [],
+          aiReadiness: json.data.aiReadiness ?? '',
+          sources: Array.isArray(json.data.sources) ? json.data.sources : [],
         })
       } catch {
         setError('AI service temporarily unavailable')
@@ -167,6 +178,48 @@ export function AccountResearch({
             items={research.challenges}
             emptyMessage="No challenges identified."
           />
+
+          {research.aiReadiness ? (
+            <div>
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Cpu className="size-3.5" aria-hidden="true" />
+                AI / tech readiness
+              </h3>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                {research.aiReadiness}
+              </p>
+            </div>
+          ) : null}
+
+          {research.sources.length > 0 ? (
+            <div>
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <ExternalLink className="size-3.5" aria-hidden="true" />
+                Sources
+              </h3>
+              <ul className="mt-1 space-y-1">
+                {research.sources.map((source, index) => (
+                  <li
+                    key={`source-${index}`}
+                    className="text-xs text-muted-foreground"
+                  >
+                    {/^https?:\/\//.test(source) ? (
+                      <a
+                        href={source}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline hover:no-underline dark:text-blue-400"
+                      >
+                        {source}
+                      </a>
+                    ) : (
+                      source
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       ) : !pending ? (
         <p className="rounded-lg border border-dashed bg-muted/30 p-4 text-center text-sm text-muted-foreground">

@@ -1,7 +1,11 @@
 import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
 import { prisma } from '@/server/db/client'
-import { cadenceCreateSchema, stepCreateSchema } from '@/lib/validators/cadences'
+import {
+  cadenceCreateSchema,
+  stepCreateSchema,
+  stepUpdateSchema,
+} from '@/lib/validators/cadences'
 import { AppError } from '@/lib/errors'
 
 /**
@@ -229,6 +233,10 @@ export async function addStep(
   const maxOrder = cadence.steps.length > 0 ? cadence.steps[0].stepOrder : 0
   const nextOrder = maxOrder + 1
 
+  // For non-EMAIL steps, accept either `taskTitle` (preferred) or
+  // `instructions` (legacy alias used by the inline add form).
+  const taskTitle = validated.taskTitle ?? validated.instructions ?? null
+
   const step = await db.cadenceStep.create({
     data: tenantData({
       cadenceId,
@@ -237,12 +245,216 @@ export async function addStep(
       delayHours: validated.delayHours,
       emailSubject: validated.subject ?? null,
       emailBody: validated.body ?? null,
-      taskTitle: validated.instructions ?? null,
-      taskDescription: null,
+      taskTitle,
+      taskDescription: validated.taskDescription ?? null,
     }),
   })
 
   return step
+}
+
+/**
+ * Updates an existing step on a cadence.
+ *
+ * - Rejects if cadence is ARCHIVED (no edits allowed on archived cadences).
+ * - Verifies the step belongs to the cadence in the caller's tenant.
+ * - Validates patch fields with Zod; only provided fields are written.
+ * - Step ordering is **not** updatable here — use `reorderSteps`
+ *   (Requirement 6.4 keeps step orders contiguous starting from 1).
+ *
+ * Validates: Requirements 6.4, 6.10
+ *
+ * @param cadenceId - The cadence the step belongs to
+ * @param stepId    - The step to update
+ * @param data      - Partial step fields to patch
+ * @param orgId     - The organization ID (tenant scope)
+ * @returns The updated step
+ */
+export async function updateStep(
+  cadenceId: string,
+  stepId: string,
+  data: unknown,
+  orgId: string,
+) {
+  if (!cadenceId) {
+    throw new AppError('VALIDATION_ERROR', 'Cadence ID is required', 400)
+  }
+  if (!stepId) {
+    throw new AppError('VALIDATION_ERROR', 'Step ID is required', 400)
+  }
+  if (!orgId) {
+    throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
+  }
+
+  const db = createTenantPrisma(orgId)
+
+  // Verify cadence exists and is not archived. We pull the cadence first
+  // (rather than the step) so the ARCHIVED guard runs before the step
+  // existence check, matching the contract used by `addStep`.
+  const cadence = await db.cadence.findFirst({
+    where: { id: cadenceId },
+  })
+
+  if (!cadence) {
+    throw new AppError('NOT_FOUND', 'Cadence not found', 404)
+  }
+
+  if (cadence.status === 'ARCHIVED') {
+    throw new AppError(
+      'INVALID_STATE',
+      'Cannot modify steps on an archived cadence',
+      400,
+    )
+  }
+
+  // Verify step exists and belongs to this cadence in this tenant.
+  const step = await db.cadenceStep.findFirst({
+    where: { id: stepId, cadenceId },
+  })
+
+  if (!step) {
+    throw new AppError('NOT_FOUND', 'Step not found', 404)
+  }
+
+  const validated = stepUpdateSchema.parse(data)
+
+  // Build the prisma update payload from only the fields that were
+  // explicitly provided. We avoid spreading `validated` directly because
+  // the shape doesn't match the prisma column names (subject → emailSubject,
+  // body → emailBody).
+  const update: Record<string, unknown> = {}
+  if (validated.actionType !== undefined) update.actionType = validated.actionType
+  if (validated.delayHours !== undefined) update.delayHours = validated.delayHours
+  if (validated.subject !== undefined) update.emailSubject = validated.subject ?? null
+  if (validated.body !== undefined) update.emailBody = validated.body ?? null
+  if (validated.taskTitle !== undefined) update.taskTitle = validated.taskTitle ?? null
+  if (validated.taskDescription !== undefined) {
+    update.taskDescription = validated.taskDescription ?? null
+  }
+
+  const updated = await db.cadenceStep.update({
+    where: { id: stepId },
+    data: update,
+  })
+
+  return updated
+}
+
+/**
+ * Deletes a step from a cadence and renumbers the remaining steps so
+ * orders stay contiguous starting from 1 (Requirement 6.4).
+ *
+ * Guardrails:
+ * - Rejects if the cadence is ARCHIVED.
+ * - Rejects if the cadence has any ACTIVE or PAUSED enrollments — those
+ *   enrollments may have already advanced past the deleted step's order
+ *   and dropping a step out from underneath them would leave the schedule
+ *   inconsistent. Callers should pause/exit enrollments first or wait for
+ *   them to complete (matches the original frontend's "no edits while
+ *   active enrollments exist" rule).
+ *
+ * The delete + renumber happens inside a transaction so a failure
+ * partway through cannot leave the cadence with a hole or duplicate
+ * step orders.
+ *
+ * Validates: Requirements 6.4, 6.10
+ *
+ * @param cadenceId - The cadence the step belongs to
+ * @param stepId    - The step to delete
+ * @param orgId     - The organization ID (tenant scope)
+ * @returns Object with the deleted step id and the renumbered remaining steps
+ */
+export async function deleteStep(
+  cadenceId: string,
+  stepId: string,
+  orgId: string,
+) {
+  if (!cadenceId) {
+    throw new AppError('VALIDATION_ERROR', 'Cadence ID is required', 400)
+  }
+  if (!stepId) {
+    throw new AppError('VALIDATION_ERROR', 'Step ID is required', 400)
+  }
+  if (!orgId) {
+    throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
+  }
+
+  const db = createTenantPrisma(orgId)
+
+  const cadence = await db.cadence.findFirst({
+    where: { id: cadenceId },
+    include: { steps: { orderBy: { stepOrder: 'asc' } } },
+  })
+
+  if (!cadence) {
+    throw new AppError('NOT_FOUND', 'Cadence not found', 404)
+  }
+
+  if (cadence.status === 'ARCHIVED') {
+    throw new AppError(
+      'INVALID_STATE',
+      'Cannot modify steps on an archived cadence',
+      400,
+    )
+  }
+
+  const step = cadence.steps.find((s) => s.id === stepId)
+  if (!step) {
+    throw new AppError('NOT_FOUND', 'Step not found', 404)
+  }
+
+  // Block deletes while enrollments are running — those enrollments
+  // may have advanced past this step already. The UI should pause or
+  // exit them first.
+  const liveEnrollments = await db.cadenceEnrollment.count({
+    where: {
+      cadenceId,
+      status: { in: ['ACTIVE', 'PAUSED'] },
+    },
+  })
+
+  if (liveEnrollments > 0) {
+    throw new AppError(
+      'ACTIVE_ENROLLMENTS',
+      `Cannot delete a step while ${liveEnrollments} enrollment(s) are active or paused. Exit them first or wait for them to complete.`,
+      409,
+    )
+  }
+
+  // Determine the post-delete step order so we can renumber in a single
+  // pass. Steps after the deleted one shift down by 1.
+  const remaining = cadence.steps.filter((s) => s.id !== stepId)
+
+  const remainingIds = await prisma.$transaction(async (tx) => {
+    await tx.cadenceStep.delete({ where: { id: stepId } })
+
+    // Two-pass renumber to avoid violating the [cadenceId, stepOrder]
+    // unique constraint, mirroring the approach used by `reorderSteps`.
+    for (let i = 0; i < remaining.length; i++) {
+      await tx.cadenceStep.update({
+        where: { id: remaining[i].id },
+        data: { stepOrder: -(i + 1) },
+      })
+    }
+    for (let i = 0; i < remaining.length; i++) {
+      await tx.cadenceStep.update({
+        where: { id: remaining[i].id },
+        data: { stepOrder: i + 1 },
+      })
+    }
+
+    return remaining.map((s) => s.id)
+  })
+
+  // Re-read so callers get the freshly renumbered rows in order.
+  const renumberedSteps = remainingIds.length
+    ? await db.cadenceStep.findMany({
+        where: { cadenceId },
+        orderBy: { stepOrder: 'asc' },
+      })
+    : []
+
+  return { deletedStepId: stepId, steps: renumberedSteps }
 }
 
 /**

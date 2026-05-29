@@ -19,7 +19,17 @@ export type CadenceCreateInput = z.infer<typeof cadenceCreateSchema>
 
 /**
  * Schema for creating a cadence step.
- * Required fields: actionType, stepOrder, delayHours
+ *
+ * Required fields: actionType, stepOrder, delayHours.
+ *
+ * The step body is shaped by `actionType`:
+ * - EMAIL → `subject` + `body` are used; `taskTitle`/`taskDescription` are ignored.
+ * - CALL / LINKEDIN / MANUAL_TASK → `taskTitle` + `taskDescription` are used.
+ *
+ * `instructions` is kept as a backward-compatible alias that maps to
+ * `taskTitle` when `taskTitle` is not provided. It exists so the simple
+ * "instructions" textarea in the inline add form keeps working alongside
+ * the richer step editor that distinguishes title and description.
  */
 export const stepCreateSchema = z.object({
   actionType: stepActionTypeEnum,
@@ -28,9 +38,44 @@ export const stepCreateSchema = z.object({
   subject: nullableSanitizedString,
   body: nullableSanitizedString,
   instructions: nullableSanitizedString,
+  taskTitle: nullableSanitizedString,
+  taskDescription: nullableSanitizedString,
 })
 
 export type StepCreateInput = z.infer<typeof stepCreateSchema>
+
+/**
+ * Schema for updating a cadence step. All fields are optional —
+ * callers may patch any subset.
+ *
+ * `stepOrder` is intentionally excluded: ordering is managed exclusively
+ * by `reorderSteps` (Requirement 6.4) so that orders stay contiguous.
+ */
+export const stepUpdateSchema = z
+  .object({
+    actionType: stepActionTypeEnum.optional(),
+    delayHours: z.coerce
+      .number()
+      .int()
+      .min(0, 'Delay hours must be non-negative')
+      .optional(),
+    subject: nullableSanitizedString,
+    body: nullableSanitizedString,
+    taskTitle: nullableSanitizedString,
+    taskDescription: nullableSanitizedString,
+  })
+  .refine(
+    (val) =>
+      val.actionType !== undefined
+      || val.delayHours !== undefined
+      || val.subject !== undefined
+      || val.body !== undefined
+      || val.taskTitle !== undefined
+      || val.taskDescription !== undefined,
+    { message: 'At least one field must be provided to update' },
+  )
+
+export type StepUpdateInput = z.infer<typeof stepUpdateSchema>
 
 /**
  * Schema for enrolling a lead in a cadence.
