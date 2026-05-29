@@ -29,6 +29,15 @@ export interface SearchFilters {
   }
   /** Filter leads by assigned user (only applies to Lead entity type) */
   assignedUserId?: string
+  /**
+   * Lead-only: filter by stage name (case-insensitive substring match).
+   * Other entity types ignore this filter.
+   */
+  stageName?: string
+  /** Lead-only: minimum lead score (inclusive). Other entity types ignore. */
+  scoreMin?: number
+  /** Lead-only: maximum lead score (inclusive). Other entity types ignore. */
+  scoreMax?: number
 }
 
 /**
@@ -133,7 +142,11 @@ export async function search(
 /**
  * Searches leads using tsvector with ILIKE fallback.
  * Excludes soft-deleted leads (deletedAt IS NULL).
- * Supports assignedUserId filter.
+ * Supports assignedUserId, score range, and stage-name filters.
+ *
+ * Score and stage filters are lead-only — Contacts and Companies don't
+ * have those columns, so applying them here keeps the search service
+ * uniformly composable for the FilterPanel UI.
  */
 async function searchLeadsEntity(
   orgId: string,
@@ -144,25 +157,45 @@ async function searchLeadsEntity(
 ): Promise<void> {
   // Build dynamic WHERE conditions
   const conditions: string[] = [
-    `"organizationId" = $1`,
-    `"deletedAt" IS NULL`,
+    `l."organizationId" = $1`,
+    `l."deletedAt" IS NULL`,
   ]
   const params: unknown[] = [orgId]
 
   // Assigned user filter (leads only)
   if (filters?.assignedUserId) {
     params.push(filters.assignedUserId)
-    conditions.push(`"assignedUserId" = $${params.length}`)
+    conditions.push(`l."assignedUserId" = $${params.length}`)
   }
 
   // Date range filters
   if (filters?.dateRange?.from) {
     params.push(filters.dateRange.from)
-    conditions.push(`"createdAt" >= $${params.length}`)
+    conditions.push(`l."createdAt" >= $${params.length}`)
   }
   if (filters?.dateRange?.to) {
     params.push(filters.dateRange.to)
-    conditions.push(`"createdAt" <= $${params.length}`)
+    conditions.push(`l."createdAt" <= $${params.length}`)
+  }
+
+  // Score filters — clamp at the database boundary so a malformed value
+  // (e.g. 9999 for scoreMax) doesn't accidentally match nothing.
+  if (filters?.scoreMin !== undefined && Number.isFinite(filters.scoreMin)) {
+    params.push(Math.max(0, Math.min(100, Math.round(filters.scoreMin))))
+    conditions.push(`l."score" >= $${params.length}`)
+  }
+  if (filters?.scoreMax !== undefined && Number.isFinite(filters.scoreMax)) {
+    params.push(Math.max(0, Math.min(100, Math.round(filters.scoreMax))))
+    conditions.push(`l."score" <= $${params.length}`)
+  }
+
+  // Stage filter — ILIKE match on the stage name. We join Stage so
+  // users can filter by readable name ("Qualified") rather than UUIDs.
+  let stageJoin = ''
+  if (filters?.stageName && filters.stageName.trim().length > 0) {
+    params.push(`%${filters.stageName.trim().replace(/[%_\\]/g, '\\$&')}%`)
+    stageJoin = `JOIN "Stage" s ON s.id = l."stageId"`
+    conditions.push(`s."name" ILIKE $${params.length}`)
   }
 
   const whereClause = conditions.join(' AND ')
@@ -175,16 +208,17 @@ async function searchLeadsEntity(
     const rows = await prisma.$queryRawUnsafe<
       Array<{ id: string; name: string; rank: number }>
     >(
-      `SELECT id, "firstName" || ' ' || "lastName" AS name,
-              COALESCE(ts_rank("searchVector", to_tsquery('english', ${tsQueryParam})), 0) AS rank
-       FROM "Lead"
+      `SELECT l.id, l."firstName" || ' ' || l."lastName" AS name,
+              COALESCE(ts_rank(l."searchVector", to_tsquery('english', ${tsQueryParam})), 0) AS rank
+       FROM "Lead" l
+       ${stageJoin}
        WHERE ${whereClause}
          AND (
-           "searchVector" IS NOT NULL AND "searchVector" @@ to_tsquery('english', ${tsQueryParam})
-           OR "searchVector" IS NULL AND (
-             "firstName" || ' ' || "lastName" ILIKE ${`$${params.length + 1}`}
-             OR COALESCE("email", '') ILIKE ${`$${params.length + 1}`}
-             OR COALESCE("companyName", '') ILIKE ${`$${params.length + 1}`}
+           l."searchVector" IS NOT NULL AND l."searchVector" @@ to_tsquery('english', ${tsQueryParam})
+           OR l."searchVector" IS NULL AND (
+             l."firstName" || ' ' || l."lastName" ILIKE ${`$${params.length + 1}`}
+             OR COALESCE(l."email", '') ILIKE ${`$${params.length + 1}`}
+             OR COALESCE(l."companyName", '') ILIKE ${`$${params.length + 1}`}
            )
          )
        ORDER BY rank DESC
@@ -209,15 +243,16 @@ async function searchLeadsEntity(
     const rows = await prisma.$queryRawUnsafe<
       Array<{ id: string; name: string }>
     >(
-      `SELECT id, "firstName" || ' ' || "lastName" AS name
-       FROM "Lead"
+      `SELECT l.id, l."firstName" || ' ' || l."lastName" AS name
+       FROM "Lead" l
+       ${stageJoin}
        WHERE ${whereClause}
          AND (
-           "firstName" || ' ' || "lastName" ILIKE ${ilikeParam}
-           OR COALESCE("email", '') ILIKE ${ilikeParam}
-           OR COALESCE("companyName", '') ILIKE ${ilikeParam}
+           l."firstName" || ' ' || l."lastName" ILIKE ${ilikeParam}
+           OR COALESCE(l."email", '') ILIKE ${ilikeParam}
+           OR COALESCE(l."companyName", '') ILIKE ${ilikeParam}
          )
-       ORDER BY "createdAt" DESC
+       ORDER BY l."createdAt" DESC
        LIMIT 50`,
       ...params,
     )

@@ -1,8 +1,10 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 
+import { BarChart } from '@/components/dashboard/bar-chart'
+import { DateRangeFilter } from '@/components/dashboard/date-range-filter'
 import { EmptyState, MetricCard } from '@/components/dashboard/metric-card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -13,15 +15,14 @@ export interface PipelineMetricsPanelProps {
 }
 
 /**
- * Pipeline Metrics tab — displays pipeline value per stage, conversion
- * rates, stage duration, lead counts and closed-won/lost totals. Includes
- * a date-range filter that round-trips through URL query parameters so
+ * Pipeline Metrics tab — pipeline value per stage, conversion rates,
+ * stage duration, lead counts, and closed-won/lost totals. Includes a
+ * date-range filter that round-trips through URL query parameters so
  * switching windows triggers a Server Component re-fetch (Requirements
  * 28.1–28.7).
  *
- * The filter is wired into URL search params `from` / `to` as ISO dates
- * (YYYY-MM-DD). Clearing the filter removes both params, which on the
- * server side falls back to the default 30-day window.
+ * Uses the shared `BarChart` and `DateRangeFilter` primitives so this
+ * panel and the search page share the same visual vocabulary.
  *
  * Validates: Requirements 28.1, 28.2, 28.3, 28.4, 28.5, 28.6, 28.7
  */
@@ -32,8 +33,11 @@ export function PipelineMetricsPanel({
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
 
-  const fromStr = toInputValue(report.dateRange.from)
-  const toStr = toInputValue(report.dateRange.to)
+  // We mirror the report's date range into local state so the inputs
+  // behave naturally — typing a partial date doesn't navigate away
+  // until the user clicks Apply.
+  const [from, setFrom] = useState(toInputValue(report.dateRange.from))
+  const [to, setTo] = useState(toInputValue(report.dateRange.to))
 
   const applyRange = (nextFrom: string, nextTo: string): void => {
     const params = new URLSearchParams(searchParams?.toString() ?? '')
@@ -50,6 +54,8 @@ export function PipelineMetricsPanel({
   }
 
   const clearRange = (): void => {
+    setFrom('')
+    setTo('')
     const params = new URLSearchParams(searchParams?.toString() ?? '')
     params.delete('from')
     params.delete('to')
@@ -59,37 +65,46 @@ export function PipelineMetricsPanel({
     })
   }
 
+  // Stages excluded from open-pipeline value totals (won / lost are
+  // terminal, the rest are "in motion").
+  const openStages = report.stages.filter(
+    (s) => !s.isClosedWon && !s.isClosedLost,
+  )
+
+  const stageValueBars = openStages.map((s) => ({
+    label: s.stageName,
+    value: s.value,
+  }))
+
+  const stageLeadBars = openStages.map((s) => ({
+    label: s.stageName,
+    value: s.leadCount,
+  }))
+
   return (
     <div className="flex flex-col gap-4">
-      <form
+      <div
         aria-label="Filter pipeline metrics by date range"
         className="flex flex-wrap items-end gap-3 rounded-md border bg-card p-3"
-        onSubmit={(e) => {
-          e.preventDefault()
-          const form = e.currentTarget
-          const from = (form.elements.namedItem('from') as HTMLInputElement)
-            .value
-          const to = (form.elements.namedItem('to') as HTMLInputElement).value
-          applyRange(from, to)
-        }}
       >
-        <DateField label="From" name="from" defaultValue={fromStr} />
-        <DateField label="To" name="to" defaultValue={toStr} />
+        <DateRangeFilter
+          startDate={from}
+          endDate={to}
+          onStartDateChange={setFrom}
+          onEndDateChange={setTo}
+          onClear={clearRange}
+        />
         <div className="ml-auto flex gap-2">
           <Button
             type="button"
-            variant="ghost"
             size="sm"
-            onClick={clearRange}
+            onClick={() => applyRange(from, to)}
             disabled={isPending}
           >
-            Reset
-          </Button>
-          <Button type="submit" size="sm" disabled={isPending}>
             {isPending ? 'Applying…' : 'Apply'}
           </Button>
         </div>
-      </form>
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
@@ -105,19 +120,26 @@ export function PipelineMetricsPanel({
         <MetricCard
           label="Total pipeline value"
           value={formatCurrency(
-            report.stages
-              .filter((s) => !s.isClosedWon && !s.isClosedLost)
-              .reduce((n, s) => n + s.value, 0),
+            openStages.reduce((n, s) => n + s.value, 0),
           )}
           hint="Open stages only"
         />
         <MetricCard
           label="Total open leads"
-          value={report.stages
-            .filter((s) => !s.isClosedWon && !s.isClosedLost)
-            .reduce((n, s) => n + s.leadCount, 0)}
+          value={openStages.reduce((n, s) => n + s.leadCount, 0)}
         />
       </div>
+
+      {openStages.length > 0 ? (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <BarChart
+            title="Pipeline value by stage"
+            items={stageValueBars}
+            formatValue={formatCurrency}
+          />
+          <BarChart title="Open leads by stage" items={stageLeadBars} />
+        </div>
+      ) : null}
 
       {report.stages.length === 0 ? (
         <EmptyState
@@ -195,31 +217,6 @@ export function PipelineMetricsPanel({
         </section>
       )}
     </div>
-  )
-}
-
-function DateField({
-  label,
-  name,
-  defaultValue,
-}: {
-  label: string
-  name: string
-  defaultValue: string
-}): React.JSX.Element {
-  return (
-    <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-      {label}
-      <input
-        type="date"
-        name={name}
-        defaultValue={defaultValue}
-        className={cn(
-          'h-8 rounded-md border border-input bg-background px-2 text-sm normal-case text-foreground shadow-sm outline-none transition-colors',
-          'focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30',
-        )}
-      />
-    </label>
   )
 }
 

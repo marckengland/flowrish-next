@@ -18,6 +18,13 @@ export type SearchEntityTypeInput = z.infer<typeof searchEntityTypeEnum>
  * - `dateFrom?`: Inclusive lower bound for createdAt (ISO 8601 date-time string)
  * - `dateTo?`: Inclusive upper bound for createdAt (ISO 8601 date-time string)
  * - `assignedUserId?`: Restrict lead results to those assigned to this user (UUID)
+ * - `stageName?`: Lead-only filter — case-insensitive substring match on the stage name
+ * - `scoreMin?`: Lead-only filter — minimum lead score (0–100, inclusive)
+ * - `scoreMax?`: Lead-only filter — maximum lead score (0–100, inclusive)
+ *
+ * Lead-only filters are silently ignored for Contact / Company results
+ * (they don't have those columns) so the same filter shape can drive
+ * the entire search surface.
  *
  * Validates: Requirements 12.2, 12.4
  */
@@ -33,6 +40,9 @@ export const searchQuerySchema = z.object({
     .datetime({ message: 'dateTo must be a valid ISO 8601 date-time string' })
     .optional(),
   assignedUserId: z.string().uuid('Invalid assignedUserId').optional(),
+  stageName: sanitizedString.pipe(z.string().min(1).max(100)).optional(),
+  scoreMin: z.coerce.number().int().min(0).max(100).optional(),
+  scoreMax: z.coerce.number().int().min(0).max(100).optional(),
 })
 
 export type SearchQueryInput = z.infer<typeof searchQuerySchema>

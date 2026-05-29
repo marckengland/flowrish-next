@@ -13,6 +13,9 @@ import { errorResponse } from '@/lib/errors'
  *   - dateFrom?   : ISO 8601 lower bound on createdAt (inclusive)
  *   - dateTo?     : ISO 8601 upper bound on createdAt (inclusive)
  *   - assignedUserId? : UUID filter for Lead results
+ *   - stageName?  : Lead-only — case-insensitive stage name substring match
+ *   - scoreMin?   : Lead-only — minimum lead score (0–100)
+ *   - scoreMax?   : Lead-only — maximum lead score (0–100)
  *
  * Response: { data: SearchResult[] }
  *
@@ -32,11 +35,17 @@ export async function GET(request: NextRequest) {
       dateFrom: searchParams.get('dateFrom') ?? undefined,
       dateTo: searchParams.get('dateTo') ?? undefined,
       assignedUserId: searchParams.get('assignedUserId') ?? undefined,
+      stageName: searchParams.get('stageName') ?? undefined,
+      scoreMin: searchParams.get('scoreMin') ?? undefined,
+      scoreMax: searchParams.get('scoreMax') ?? undefined,
     })
 
     const filters: SearchFilters = {}
     if (parsed.entityType) filters.entityType = parsed.entityType
     if (parsed.assignedUserId) filters.assignedUserId = parsed.assignedUserId
+    if (parsed.stageName) filters.stageName = parsed.stageName
+    if (parsed.scoreMin !== undefined) filters.scoreMin = parsed.scoreMin
+    if (parsed.scoreMax !== undefined) filters.scoreMax = parsed.scoreMax
     if (parsed.dateFrom || parsed.dateTo) {
       filters.dateRange = {}
       if (parsed.dateFrom) filters.dateRange.from = new Date(parsed.dateFrom)

@@ -25,6 +25,15 @@ export interface SearchResultFilters {
   dateFrom?: string
   dateTo?: string
   assignedUserId?: string
+  /**
+   * Lead-only — substring matched against the stage's name. Ignored
+   * for Contact / Company results.
+   */
+  stageName?: string
+  /** Lead-only — minimum lead score, 0–100 inclusive. */
+  scoreMin?: number
+  /** Lead-only — maximum lead score, 0–100 inclusive. */
+  scoreMax?: number
 }
 
 export interface SearchResultsProps {
@@ -48,6 +57,11 @@ function buildSearchQueryString(
   if (filters?.dateFrom) params.set('dateFrom', filters.dateFrom)
   if (filters?.dateTo) params.set('dateTo', filters.dateTo)
   if (filters?.assignedUserId) params.set('assignedUserId', filters.assignedUserId)
+  if (filters?.stageName) params.set('stageName', filters.stageName)
+  if (filters?.scoreMin !== undefined)
+    params.set('scoreMin', String(filters.scoreMin))
+  if (filters?.scoreMax !== undefined)
+    params.set('scoreMax', String(filters.scoreMax))
   return params.toString()
 }
 

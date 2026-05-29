@@ -1,11 +1,16 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { useCallback, useId, useState } from 'react'
+import { useCallback, useId, useMemo, useState } from 'react'
 import { Filter, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { SearchBar } from '@/components/search/search-bar'
+import {
+  FilterPanel,
+  emptySearchFilters,
+  type SearchFilters as PanelFilters,
+} from '@/components/search/filter-panel'
 import {
   SearchResults,
   type SearchResultFilters,
@@ -22,12 +27,14 @@ const ENTITY_TYPE_OPTIONS: { value: SearchEntityType; label: string }[] = [
  * Search results page.
  *
  * Reads the initial query from the `q` URL search param (set by the global
- * SearchBar on navigation). Provides inline filter controls for entity type,
- * date range, and assigned user. Results are fetched client-side via TanStack
- * Query through the `SearchResults` component.
+ * SearchBar on navigation). Provides:
+ *   - an entity-type / date-range filter row (applies to all entity types)
+ *   - the shared `FilterPanel` for lead-specific filters (stage / score
+ *     range / assigned user) — those filters are silently ignored when
+ *     filtering Contacts or Companies.
  *
- * This is a client component because it manages interactive filter state and
- * reads URL search params reactively.
+ * Results are fetched client-side via TanStack Query through the
+ * `SearchResults` component.
  *
  * Validates: Requirements 12.2, 12.4
  */
@@ -37,7 +44,10 @@ export default function SearchPage(): React.JSX.Element {
 
   const [query, setQuery] = useState(initialQuery)
   const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters] = useState<SearchResultFilters>({})
+  const [entityType, setEntityType] = useState<SearchEntityType | ''>('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [leadFilters, setLeadFilters] = useState<PanelFilters>(emptySearchFilters)
 
   const entityTypeId = useId()
   const dateFromId = useId()
@@ -47,29 +57,64 @@ export default function SearchPage(): React.JSX.Element {
     setQuery(q)
   }, [])
 
-  const handleFilterChange = useCallback(
-    <K extends keyof SearchResultFilters>(
-      key: K,
-      value: SearchResultFilters[K] | '',
-    ) => {
-      setFilters((prev) => {
-        const next = { ...prev }
-        if (!value) {
-          delete next[key]
-        } else {
-          next[key] = value
-        }
-        return next
-      })
-    },
-    [],
-  )
+  const filters = useMemo<SearchResultFilters>(() => {
+    const out: SearchResultFilters = {}
+    if (entityType) out.entityType = entityType
+    if (dateFrom) out.dateFrom = `${dateFrom}T00:00:00.000Z`
+    if (dateTo) out.dateTo = `${dateTo}T23:59:59.999Z`
+    // Lead-only filters from FilterPanel — only apply when the user
+    // hasn't restricted to Contact/Company. The server ignores them
+    // for non-Lead types anyway, but skipping them client-side keeps
+    // the URL clean and avoids unnecessary cache misses.
+    if (entityType === 'Lead' || entityType === '') {
+      if (leadFilters.stage) out.stageName = leadFilters.stage
+      if (leadFilters.assignedTo) {
+        out.assignedUserId = leadFilters.assignedTo
+      }
+      if (leadFilters.scoreMin) {
+        const n = Number(leadFilters.scoreMin)
+        if (Number.isFinite(n)) out.scoreMin = n
+      }
+      if (leadFilters.scoreMax) {
+        const n = Number(leadFilters.scoreMax)
+        if (Number.isFinite(n)) out.scoreMax = n
+      }
+      // The shared FilterPanel also has start/end dates. Surface them
+      // through the same dateFrom/dateTo channel so the user only has
+      // to pick once. The dedicated row above takes priority when both
+      // are set.
+      if (!out.dateFrom && leadFilters.startDate) {
+        out.dateFrom = `${leadFilters.startDate}T00:00:00.000Z`
+      }
+      if (!out.dateTo && leadFilters.endDate) {
+        out.dateTo = `${leadFilters.endDate}T23:59:59.999Z`
+      }
+    }
+    return out
+  }, [entityType, dateFrom, dateTo, leadFilters])
 
-  const clearFilters = useCallback(() => {
-    setFilters({})
+  const clearAllFilters = useCallback(() => {
+    setEntityType('')
+    setDateFrom('')
+    setDateTo('')
+    setLeadFilters(emptySearchFilters)
   }, [])
 
-  const hasActiveFilters = Object.keys(filters).length > 0
+  const activeFilterCount = useMemo(() => {
+    let n = 0
+    if (entityType) n++
+    if (dateFrom) n++
+    if (dateTo) n++
+    if (leadFilters.stage) n++
+    if (leadFilters.scoreMin) n++
+    if (leadFilters.scoreMax) n++
+    if (leadFilters.startDate) n++
+    if (leadFilters.endDate) n++
+    if (leadFilters.assignedTo) n++
+    return n
+  }, [entityType, dateFrom, dateTo, leadFilters])
+
+  const showLeadFilters = entityType === 'Lead' || entityType === ''
 
   return (
     <div className="flex flex-col gap-4">
@@ -97,9 +142,9 @@ export default function SearchPage(): React.JSX.Element {
           >
             <Filter className="size-4" aria-hidden="true" />
             <span>Filters</span>
-            {hasActiveFilters && (
+            {activeFilterCount > 0 && (
               <span className="ml-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                {Object.keys(filters).length}
+                {activeFilterCount}
               </span>
             )}
           </Button>
@@ -110,74 +155,69 @@ export default function SearchPage(): React.JSX.Element {
         <section
           id="search-filters"
           aria-label="Search filters"
-          className="flex flex-col gap-3 rounded-md border bg-card p-3 sm:flex-row sm:flex-wrap sm:items-end"
+          className="flex flex-col gap-3"
         >
-          <FilterField id={entityTypeId} label="Entity type">
-            <select
-              id={entityTypeId}
-              value={filters.entityType ?? ''}
-              onChange={(e) =>
-                handleFilterChange(
-                  'entityType',
-                  (e.target.value as SearchEntityType) || '',
-                )
-              }
-              className={selectClasses}
-            >
-              <option value="">All types</option>
-              {ENTITY_TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </FilterField>
+          <div className="flex flex-col gap-3 rounded-md border bg-card p-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <FilterField id={entityTypeId} label="Entity type">
+              <select
+                id={entityTypeId}
+                value={entityType}
+                onChange={(e) =>
+                  setEntityType((e.target.value as SearchEntityType) || '')
+                }
+                className={selectClasses}
+              >
+                <option value="">All types</option>
+                {ENTITY_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
 
-          <FilterField id={dateFromId} label="From date">
-            <input
-              id={dateFromId}
-              type="date"
-              value={filters.dateFrom ? filters.dateFrom.split('T')[0] : ''}
-              onChange={(e) => {
-                const val = e.target.value
-                handleFilterChange(
-                  'dateFrom',
-                  val ? `${val}T00:00:00.000Z` : '',
-                )
-              }}
-              className={selectClasses}
-            />
-          </FilterField>
+            <FilterField id={dateFromId} label="From date">
+              <input
+                id={dateFromId}
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className={selectClasses}
+              />
+            </FilterField>
 
-          <FilterField id={dateToId} label="To date">
-            <input
-              id={dateToId}
-              type="date"
-              value={filters.dateTo ? filters.dateTo.split('T')[0] : ''}
-              onChange={(e) => {
-                const val = e.target.value
-                handleFilterChange(
-                  'dateTo',
-                  val ? `${val}T23:59:59.999Z` : '',
-                )
-              }}
-              className={selectClasses}
-            />
-          </FilterField>
+            <FilterField id={dateToId} label="To date">
+              <input
+                id={dateToId}
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className={selectClasses}
+              />
+            </FilterField>
 
-          <div className="sm:ml-auto">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={!hasActiveFilters}
-              onClick={clearFilters}
-              aria-label="Clear all filters"
-            >
-              <X className="size-4" aria-hidden="true" />
-              <span>Clear</span>
-            </Button>
+            <div className="sm:ml-auto">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={activeFilterCount === 0}
+                onClick={clearAllFilters}
+                aria-label="Clear all filters"
+              >
+                <X className="size-4" aria-hidden="true" />
+                <span>Clear</span>
+              </Button>
+            </div>
           </div>
+
+          {showLeadFilters && (
+            <FilterPanel
+              filters={leadFilters}
+              onChange={setLeadFilters}
+              onClear={() => setLeadFilters(emptySearchFilters)}
+            />
+          )}
         </section>
       )}
 
