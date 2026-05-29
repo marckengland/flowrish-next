@@ -242,8 +242,22 @@ ${body}
 }
 
 /**
+ * One file attachment delivered with an outgoing email. The send
+ * service base64-encodes the bytes and emits a `multipart/mixed`
+ * payload so Gmail attaches them to the message itself rather than
+ * dropping them on the lead activity.
+ */
+export interface EmailAttachment {
+  fileName: string
+  mimeType: string
+  /** Raw bytes of the attachment. */
+  data: ArrayBuffer | Uint8Array
+}
+
+/**
  * Sends an email to a lead with personalization tag replacement,
- * HTML wrapping, and Gmail API delivery. Creates an EmailMessage record.
+ * HTML wrapping, optional file attachments, and Gmail API delivery.
+ * Creates an EmailMessage record.
  *
  * Steps:
  * 1. Get the user's EmailAccount
@@ -252,9 +266,11 @@ ${body}
  * 4. Wrap body in HTML document with base styling
  * 5. Send via Gmail API (POST to gmail.googleapis.com/gmail/v1/users/me/messages/send),
  *    passing `threadId` for reply-in-thread when supplied (Requirement 7.3)
+ *    and bundling any `attachments` as a `multipart/mixed` payload
+ *    (Requirement 7.6 — attachments delivered with the message itself)
  * 6. Create EmailMessage record
  *
- * Validates: Requirements 7.2, 7.3, 7.4, 7.5
+ * Validates: Requirements 7.2, 7.3, 7.4, 7.5, 7.6
  */
 export async function sendEmail(
   leadId: string,
@@ -263,7 +279,8 @@ export async function sendEmail(
   userId: string,
   orgId: string,
   threadId?: string,
-): Promise<{ messageId: string; threadId: string }> {
+  attachments: readonly EmailAttachment[] = [],
+): Promise<{ messageId: string; threadId: string; attachmentCount: number }> {
   const db = createTenantPrisma(orgId)
 
   // Get the lead for personalization data
@@ -332,14 +349,27 @@ export async function sendEmail(
     }
   }
 
-  // Build the raw email (RFC 2822 format, base64url encoded)
-  const rawEmail = buildRawEmail(
-    updatedAccount.email,
-    lead.email,
-    personalizedSubject,
-    htmlBody,
-    inReplyToHeader,
-  )
+  // Build the raw email (RFC 2822 format, base64url encoded). When
+  // attachments are present, switch to a `multipart/mixed` body so the
+  // attachments travel with the message rather than as a separate
+  // upload to the lead activity.
+  const rawEmail =
+    attachments.length > 0
+      ? buildRawEmailWithAttachments(
+          updatedAccount.email,
+          lead.email,
+          personalizedSubject,
+          htmlBody,
+          attachments,
+          inReplyToHeader,
+        )
+      : buildRawEmail(
+          updatedAccount.email,
+          lead.email,
+          personalizedSubject,
+          htmlBody,
+          inReplyToHeader,
+        )
 
   // Send via Gmail API
   const sendResponse = await fetch(`${GMAIL_API_BASE}/users/me/messages/send`, {
@@ -393,7 +423,11 @@ export async function sendEmail(
     data: { lastActivityAt: new Date() },
   })
 
-  return { messageId: sendData.id, threadId: sendData.threadId }
+  return {
+    messageId: sendData.id,
+    threadId: sendData.threadId,
+    attachmentCount: attachments.length,
+  }
 }
 
 /**
@@ -425,6 +459,89 @@ function buildRawEmail(
   const message = messageParts.join('\r\n')
 
   // Base64url encode (Gmail API requirement)
+  return Buffer.from(message)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
+/**
+ * Builds a `multipart/mixed` raw email so attachments travel with the
+ * message body. The structure is:
+ *
+ *   multipart/mixed (top-level)
+ *     ├── text/html (the wrapped email body)
+ *     └── application/octet-stream … (one part per attachment, base64-encoded)
+ *
+ * Boundary tokens are randomized per call to avoid collisions with the
+ * body or attachment contents. The Gmail API requires the result
+ * base64url-encoded, same as the plain-body path.
+ */
+function buildRawEmailWithAttachments(
+  from: string,
+  to: string,
+  subject: string,
+  htmlBody: string,
+  attachments: readonly EmailAttachment[],
+  inReplyTo: string | null = null,
+): string {
+  const boundary = `flowrish_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`
+
+  const headers = [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`] : []),
+  ]
+
+  const parts: string[] = []
+
+  // 1. Body part — text/html with the same wrapper used by the plain-body path.
+  parts.push(
+    [
+      `--${boundary}`,
+      'Content-Type: text/html; charset=utf-8',
+      'Content-Transfer-Encoding: 7bit',
+      '',
+      htmlBody,
+    ].join('\r\n'),
+  )
+
+  // 2. One part per attachment. Body bytes are base64-encoded and split
+  //    into 76-char lines per RFC 2045 so older clients don't choke.
+  for (const att of attachments) {
+    const bytes = att.data instanceof Uint8Array
+      ? Buffer.from(att.data)
+      : Buffer.from(att.data)
+    const encoded = bytes.toString('base64').replace(/(.{76})/g, '$1\r\n')
+    // Strip CR/LF and quotes from filename to avoid header injection;
+    // a sufficiently weird filename is replaced with a generic one.
+    const safeName = att.fileName
+      .replace(/[\r\n"]+/g, ' ')
+      .trim() || 'attachment'
+    parts.push(
+      [
+        `--${boundary}`,
+        `Content-Type: ${att.mimeType || 'application/octet-stream'}; name="${safeName}"`,
+        `Content-Disposition: attachment; filename="${safeName}"`,
+        'Content-Transfer-Encoding: base64',
+        '',
+        encoded,
+      ].join('\r\n'),
+    )
+  }
+
+  const message = [
+    headers.join('\r\n'),
+    '',
+    parts.join('\r\n'),
+    `--${boundary}--`,
+    '',
+  ].join('\r\n')
+
   return Buffer.from(message)
     .toString('base64')
     .replace(/\+/g, '-')

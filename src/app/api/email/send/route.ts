@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
-import { sendEmail } from '@/server/services/email'
-import { errorResponse } from '@/lib/errors'
+import { sendEmail, type EmailAttachment } from '@/server/services/email'
+import {
+  ALLOWED_MIME_TYPES,
+  MAX_FILE_SIZE_BYTES,
+} from '@/server/services/files'
+import { AppError, errorResponse } from '@/lib/errors'
 
 const sendEmailBodySchema = z.object({
   leadId: z.string().uuid('Invalid lead ID'),
@@ -20,25 +24,118 @@ const sendEmailBodySchema = z.object({
 /**
  * POST /api/email/send — Send an email to a lead with personalization tag replacement.
  *
- * Body: { leadId, subject, body, threadId? }
+ * Accepts two content types:
  *
- * Validates: Requirements 7.2, 7.3
+ * - `application/json` — `{ leadId, subject, body, threadId? }`
+ *   The simple path used when the rep doesn't attach files.
+ *
+ * - `multipart/form-data` — fields:
+ *   - `payload`: JSON-encoded `{ leadId, subject, body, threadId? }`
+ *   - `attachments`: zero or more `File` entries
+ *   Used when files are attached so they can ride inside the Gmail
+ *   message itself rather than being uploaded separately to the lead.
+ *   File size and MIME type are validated against the same allowlist
+ *   as `/api/upload` (Requirement 7.6, 13.1, 13.4).
+ *
+ * Validates: Requirements 7.2, 7.3, 7.6
  */
 export async function POST(request: NextRequest) {
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'leads:write')
 
-    const body = await request.json()
-    const { leadId, subject, body: emailBody, threadId } = sendEmailBodySchema.parse(body)
+    const contentType = request.headers.get('content-type') ?? ''
+    const isMultipart = contentType.toLowerCase().includes('multipart/form-data')
+
+    let parsedPayload: z.infer<typeof sendEmailBodySchema>
+    let attachments: EmailAttachment[] = []
+
+    if (isMultipart) {
+      let formData: FormData
+      try {
+        formData = await request.formData()
+      } catch {
+        throw new AppError(
+          'INVALID_REQUEST',
+          'Expected multipart/form-data request body',
+          400,
+        )
+      }
+
+      const payloadEntry = formData.get('payload')
+      if (typeof payloadEntry !== 'string') {
+        throw new AppError('INVALID_REQUEST', 'Missing payload field', 400)
+      }
+      let rawPayload: unknown
+      try {
+        rawPayload = JSON.parse(payloadEntry)
+      } catch {
+        throw new AppError('INVALID_REQUEST', 'payload must be valid JSON', 400)
+      }
+      parsedPayload = sendEmailBodySchema.parse(rawPayload)
+
+      // Read attachments. We deliberately bound the per-file size and
+      // total size — Gmail rejects requests over 35 MB raw and the
+      // platform allowlist already restricts file types.
+      const fileEntries = formData
+        .getAll('attachments')
+        .filter((entry): entry is File => entry instanceof File)
+
+      let totalSize = 0
+      for (const file of fileEntries) {
+        if (file.size <= 0) {
+          throw new AppError('FILE_EMPTY', `${file.name} is empty`, 400)
+        }
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+          throw new AppError(
+            'FILE_TOO_LARGE',
+            `${file.name} exceeds the per-file maximum of 25 MB`,
+            400,
+          )
+        }
+        if (!ALLOWED_MIME_TYPES.has(file.type)) {
+          throw new AppError(
+            'UNSUPPORTED_FILE_TYPE',
+            `${file.name}: MIME type "${file.type}" is not allowed`,
+            400,
+          )
+        }
+        totalSize += file.size
+        // Gmail's hard send-payload cap is ~35 MB; we use a slightly
+        // lower threshold because of base64 inflation (~4/3) plus
+        // multipart envelope overhead.
+        if (totalSize > 25 * 1024 * 1024) {
+          throw new AppError(
+            'ATTACHMENTS_TOO_LARGE',
+            'Combined attachment size exceeds 25 MB',
+            400,
+          )
+        }
+      }
+
+      const collected: EmailAttachment[] = []
+      for (const file of fileEntries) {
+        const buffer = await file.arrayBuffer()
+        collected.push({
+          fileName: file.name,
+          mimeType: file.type,
+          data: buffer,
+        })
+      }
+      attachments = collected
+    } else {
+      const body = await request.json()
+      parsedPayload = sendEmailBodySchema.parse(body)
+    }
 
     const result = await sendEmail(
-      leadId,
-      subject,
-      emailBody,
+      parsedPayload.leadId,
+      parsedPayload.subject,
+      parsedPayload.body,
       session.dbUser.id,
       session.organizationId,
-      threadId,
+      parsedPayload.threadId,
+      attachments,
     )
 
     return NextResponse.json({ data: result })

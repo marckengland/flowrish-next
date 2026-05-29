@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Handshake,
   Mail,
+  Pencil,
   Phone,
   Plus,
   type LucideIcon,
@@ -170,6 +171,11 @@ export function CadenceBuilder({
             {steps.length === 0
               ? 'No steps yet. Add one to get started.'
               : `${steps.length} step${steps.length === 1 ? '' : 's'} in this cadence.`}
+            {!readOnly && steps.length > 0 ? (
+              <span className="ml-1 text-xs text-muted-foreground">
+                Click a step to edit it.
+              </span>
+            ) : null}
           </p>
         </div>
         {!readOnly && (
@@ -297,7 +303,7 @@ function StepRow({
         className={cn(
           'group flex flex-1 items-start gap-3 rounded-md border bg-card p-3 text-left transition-colors',
           selectable
-            ? 'cursor-pointer hover:border-foreground/30 hover:bg-muted/40'
+            ? 'cursor-pointer hover:border-foreground/30 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
             : 'cursor-default',
         )}
       >
@@ -324,6 +330,15 @@ function StepRow({
           </span>
           {renderStepDetails(step)}
         </span>
+        {selectable ? (
+          <span
+            className="ml-2 inline-flex shrink-0 items-center gap-1 self-start rounded-md border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors group-hover:border-foreground/30 group-hover:text-foreground"
+            aria-hidden="true"
+          >
+            <Pencil className="size-3" />
+            Edit
+          </span>
+        ) : null}
       </button>
       <div className="flex shrink-0 flex-col gap-1">
         <Button

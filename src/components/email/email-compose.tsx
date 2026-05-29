@@ -33,7 +33,11 @@ export interface EmailComposeProps {
   /** Subject of the latest message on the thread, used to seed "Re:" subject. */
   replySubject?: string
   /** Called after a successful send. */
-  onSent?: (result: { messageId: string; threadId: string }) => void
+  onSent?: (result: {
+    messageId: string
+    threadId: string
+    attachmentCount: number
+  }) => void
   /** Optional extra class for the root element. */
   className?: string
   /**
@@ -44,17 +48,10 @@ export interface EmailComposeProps {
   alwaysOpen?: boolean
 }
 
-interface UploadResult {
-  attachmentId: string
-  storagePath: string
-  activityId: string
-}
-
 interface UploadedAttachment {
   file: File
   status: 'pending' | 'uploading' | 'uploaded' | 'failed'
   error?: string
-  result?: UploadResult
 }
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024 // 25 MB — matches /api/upload
@@ -131,53 +128,6 @@ export function EmailCompose({
     setAttachments((prev) => prev.filter((_, i) => i !== index))
   }
 
-  async function uploadAllAttachments(): Promise<void> {
-    if (attachments.length === 0) return
-    // Upload sequentially so a single failure doesn't fan out to many
-    // simultaneous error toasts. The set is small (handful of files).
-    for (let i = 0; i < attachments.length; i++) {
-      const att = attachments[i]
-      if (att.status === 'uploaded') continue
-      setAttachments((prev) => prev.map((a, idx) => (
-        idx === i ? { ...a, status: 'uploading', error: undefined } : a
-      )))
-      const formData = new FormData()
-      formData.append('file', att.file)
-      formData.append('leadId', leadId)
-      try {
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          credentials: 'same-origin',
-          body: formData,
-        })
-        if (!res.ok) {
-          const json = (await res.json().catch(() => ({}))) as {
-            error?: { message?: string }
-          }
-          const message = json.error?.message ?? `Upload failed (${res.status})`
-          setAttachments((prev) => prev.map((a, idx) => (
-            idx === i ? { ...a, status: 'failed', error: message } : a
-          )))
-          continue
-        }
-        const json = (await res.json()) as { data: UploadResult }
-        setAttachments((prev) => prev.map((a, idx) => (
-          idx === i ? { ...a, status: 'uploaded', result: json.data } : a
-        )))
-      } catch (err) {
-        setAttachments((prev) => prev.map((a, idx) => (
-          idx === i
-            ? {
-                ...a,
-                status: 'failed',
-                error: err instanceof Error ? err.message : 'Upload failed',
-              }
-            : a
-        )))
-      }
-    }
-  }
-
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault()
     setError(null)
@@ -198,20 +148,51 @@ export function EmailCompose({
 
     startTransition(async () => {
       try {
-        const res = await fetch('/api/email/send', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-          credentials: 'same-origin',
-          body: JSON.stringify({
-            leadId,
-            subject: subject.trim(),
-            body: body.trim(),
-            ...(replyToThreadId ? { threadId: replyToThreadId } : {}),
-          }),
-        })
+        // When attachments are present we POST `multipart/form-data`
+        // so the server can stitch them into the Gmail message itself.
+        // Without attachments we keep the simple JSON path.
+        const hasAttachments = attachments.length > 0
+
+        let res: Response
+        if (hasAttachments) {
+          // Mark all attachments as uploading so the user sees feedback.
+          setAttachments((prev) =>
+            prev.map((a) => ({ ...a, status: 'uploading', error: undefined })),
+          )
+          const formData = new FormData()
+          formData.append(
+            'payload',
+            JSON.stringify({
+              leadId,
+              subject: subject.trim(),
+              body: body.trim(),
+              ...(replyToThreadId ? { threadId: replyToThreadId } : {}),
+            }),
+          )
+          for (const att of attachments) {
+            formData.append('attachments', att.file, att.file.name)
+          }
+          res = await fetch('/api/email/send', {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: formData,
+          })
+        } else {
+          res = await fetch('/api/email/send', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              leadId,
+              subject: subject.trim(),
+              body: body.trim(),
+              ...(replyToThreadId ? { threadId: replyToThreadId } : {}),
+            }),
+          })
+        }
 
         if (!res.ok) {
           let message = `Failed to send email (${res.status})`
@@ -221,25 +202,28 @@ export function EmailCompose({
           } catch {
             // ignore parse failure
           }
+          if (hasAttachments) {
+            setAttachments((prev) =>
+              prev.map((a) => ({ ...a, status: 'failed', error: message })),
+            )
+          }
           setError(message)
           return
         }
 
         const responseBody = (await res.json()) as {
-          data: { messageId: string; threadId: string }
+          data: { messageId: string; threadId: string; attachmentCount: number }
         }
 
-        // Send succeeded — now upload any attachments to the lead so they
-        // appear on the activity timeline. We deliberately don't attach
-        // them to the outgoing Gmail message yet; that requires multipart
-        // MIME and is a follow-up.
-        if (attachments.length > 0) {
-          await uploadAllAttachments()
+        if (hasAttachments) {
+          setAttachments((prev) =>
+            prev.map((a) => ({ ...a, status: 'uploaded' })),
+          )
         }
 
         setSuccess(
           attachments.length > 0
-            ? 'Email sent. Attachments stored on the lead activity.'
+            ? `Email sent with ${attachments.length} attachment${attachments.length === 1 ? '' : 's'}.`
             : 'Email sent successfully.',
         )
         onSent?.(responseBody.data)
@@ -370,7 +354,7 @@ export function EmailCompose({
             <span>Attach file</span>
           </Button>
           <span className="text-[11px] text-muted-foreground">
-            Up to 25 MB each. Stored on the lead activity after the email sends.
+            Up to 25 MB each. Sent as attachments inside the email.
           </span>
         </div>
         {attachments.length > 0 && (

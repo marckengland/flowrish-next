@@ -167,7 +167,10 @@ export async function archiveCadence(id: string) {
  * Adds a step to a cadence from form data.
  *
  * Required fields: cadenceId, actionType, delayHours
- * Optional fields: subject, body, instructions
+ * Optional fields:
+ *   - EMAIL steps: subject, body
+ *   - non-EMAIL steps: taskTitle, taskDescription
+ *   - instructions (legacy alias mapped to taskTitle by the service)
  */
 export async function addStep(formData: FormData) {
   const session = await requireSession()
@@ -185,6 +188,8 @@ export async function addStep(formData: FormData) {
     subject: formData.get('subject') as string | null,
     body: formData.get('body') as string | null,
     instructions: formData.get('instructions') as string | null,
+    taskTitle: formData.get('taskTitle') as string | null,
+    taskDescription: formData.get('taskDescription') as string | null,
   }
 
   try {
