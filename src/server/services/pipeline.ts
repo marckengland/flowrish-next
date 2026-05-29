@@ -205,9 +205,11 @@ export async function createStageTransition(
     ? createTenantPrisma(orgOrDb)
     : orgOrDb
 
-  // Intentional `as any`: TenantPrismaClient's inferred type from $extends doesn't
+  // Intentional cast: TenantPrismaClient's inferred type from $extends doesn't
   // expose all model accessors. The stageTransition model is available at runtime.
-  const transition = await (db as any).stageTransition.create({
+  const transition = await (db as unknown as {
+    stageTransition: { create: (args: unknown) => Promise<unknown> }
+  }).stageTransition.create({
     data: tenantData({
       leadId,
       fromStageId: fromStageId ?? null,

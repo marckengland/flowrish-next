@@ -292,7 +292,8 @@ export function UserManagement(): React.JSX.Element {
                         const tms = member.teamMemberships ?? []
                         if (tms.length === 0) return 'No role'
                         // Show the highest-privilege role (lowest hierarchy)
-                        const best = tms.reduce((a: any, b: any) =>
+                        type TM = (typeof tms)[number]
+                        const best = tms.reduce((a: TM, b: TM) =>
                           (a.role?.hierarchy ?? 99) <= (b.role?.hierarchy ?? 99) ? a : b
                         )
                         return best.role?.name ?? 'No role'

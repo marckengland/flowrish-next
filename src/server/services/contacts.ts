@@ -141,9 +141,14 @@ export async function linkContactToLead(
       },
     })
     return leadContact
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Handle unique constraint violation (link already exists)
-    if (error?.code === 'P2002') {
+    if (
+      error !== null &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: string }).code === 'P2002'
+    ) {
       // Return existing link — idempotent behavior
       return { leadId, contactId }
     }

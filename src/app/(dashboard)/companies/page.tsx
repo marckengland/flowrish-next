@@ -67,13 +67,18 @@ export default async function CompaniesPage(): Promise<React.JSX.Element> {
 function toCompanyListItem(
   company: Awaited<ReturnType<typeof getCompanies>>['companies'][number],
 ): CompanyListItem {
+  const c = company as typeof company & {
+    industry?: string | null
+    website?: string | null
+    _count?: { contacts: number; leads: number }
+  }
   return {
     id: company.id,
     name: company.name,
-    industry: (company as any).industry ?? null,
-    website: (company as any).website ?? null,
+    industry: c.industry ?? null,
+    website: c.website ?? null,
     createdAt: company.createdAt.toISOString(),
     updatedAt: company.updatedAt.toISOString(),
-    _count: (company as any)._count ?? { contacts: 0, leads: 0 },
+    _count: c._count ?? { contacts: 0, leads: 0 },
   }
 }

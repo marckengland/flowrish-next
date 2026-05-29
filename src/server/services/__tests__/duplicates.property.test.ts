@@ -160,7 +160,7 @@ describe('Duplicate Detection and Lead Merge - Property Tests', () => {
 
           // Track what happens in the transaction
           let movedActivities: string[] = []
-          let createdContactLinks: string[] = []
+          const createdContactLinks: string[] = []
           let deletedLeadId: string | null = null
 
           mockTransaction.mockImplementation(async (fn: (tx: any) => Promise<any>) => {

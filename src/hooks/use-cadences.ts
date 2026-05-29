@@ -49,10 +49,7 @@ export interface CadenceListItem {
   _count: { enrollments: number }
 }
 
-export interface CadenceDetail extends CadenceListItem {
-  // Detail view carries the same shape today; kept distinct for future
-  // additions like embedded enrollment lists without breaking callers.
-}
+export type CadenceDetail = CadenceListItem
 
 export interface CadencesPage {
   data: CadenceListItem[]

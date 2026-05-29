@@ -73,18 +73,28 @@ export default async function ContactsPage(): Promise<React.JSX.Element> {
 function toContactListItem(
   contact: Awaited<ReturnType<typeof getContacts>>['contacts'][number],
 ): ContactListItem {
+  const c = contact as typeof contact & {
+    email?: string | null
+    phone?: string | null
+    jobTitle?: string | null
+    linkedinUrl?: string | null
+    country?: string | null
+    state?: string | null
+    companyId?: string | null
+    company?: ContactListItem['company']
+  }
   return {
     id: contact.id,
     firstName: contact.firstName,
     lastName: contact.lastName,
-    email: (contact as any).email ?? null,
-    phone: (contact as any).phone ?? null,
-    jobTitle: (contact as any).jobTitle ?? null,
-    linkedinUrl: (contact as any).linkedinUrl ?? null,
-    country: (contact as any).country ?? null,
-    state: (contact as any).state ?? null,
-    companyId: (contact as any).companyId ?? null,
-    company: (contact as any).company ?? null,
+    email: c.email ?? null,
+    phone: c.phone ?? null,
+    jobTitle: c.jobTitle ?? null,
+    linkedinUrl: c.linkedinUrl ?? null,
+    country: c.country ?? null,
+    state: c.state ?? null,
+    companyId: c.companyId ?? null,
+    company: c.company ?? null,
     createdAt: contact.createdAt.toISOString(),
     updatedAt: contact.updatedAt.toISOString(),
   }

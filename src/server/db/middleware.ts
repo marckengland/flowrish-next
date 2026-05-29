@@ -53,39 +53,36 @@ export function createTenantPrisma(organizationId: string) {
       $allModels: {
         async create({ model, args, query }) {
           if (isTenantScoped(model)) {
-            // Intentional `as any`: Prisma's $allModels extension uses a union of all
-            // model arg types that cannot be narrowed to a specific model's data shape.
-            // We know tenant-scoped models always have an organizationId field at runtime.
-            ;(args as any).data = { ...(args as any).data, organizationId }
+            // Prisma's $allModels extension uses a union of all model arg types
+            // that cannot be narrowed to a specific model's data shape.
+            // At runtime, tenant-scoped models always have an organizationId field.
+            const a = args as { data: Record<string, unknown> }
+            a.data = { ...a.data, organizationId }
           }
           return query(args)
         },
         async createMany({ model, args, query }) {
           if (isTenantScoped(model)) {
-            // Intentional `as any`: same reason as create() above.
-            const data = (args as any).data
-            if (Array.isArray(data)) {
-              ;(args as any).data = data.map((item: Record<string, unknown>) => ({
-                ...item,
-                organizationId,
-              }))
+            const a = args as {
+              data: Record<string, unknown> | Record<string, unknown>[]
+            }
+            if (Array.isArray(a.data)) {
+              a.data = a.data.map((item) => ({ ...item, organizationId }))
             } else {
-              ;(args as any).data = { ...data, organizationId }
+              a.data = { ...a.data, organizationId }
             }
           }
           return query(args)
         },
         async createManyAndReturn({ model, args, query }) {
           if (isTenantScoped(model)) {
-            // Intentional `as any`: same reason as create() above.
-            const data = (args as any).data
-            if (Array.isArray(data)) {
-              ;(args as any).data = data.map((item: Record<string, unknown>) => ({
-                ...item,
-                organizationId,
-              }))
+            const a = args as {
+              data: Record<string, unknown> | Record<string, unknown>[]
+            }
+            if (Array.isArray(a.data)) {
+              a.data = a.data.map((item) => ({ ...item, organizationId }))
             } else {
-              ;(args as any).data = { ...data, organizationId }
+              a.data = { ...a.data, organizationId }
             }
           }
           return query(args)
@@ -163,8 +160,8 @@ export function createTenantPrisma(organizationId: string) {
         async upsert({ model, args, query }) {
           if (isTenantScoped(model)) {
             args.where = { ...args.where, organizationId } as typeof args.where
-            // Intentional `as any`: same reason as create() above.
-            ;(args as any).create = { ...(args as any).create, organizationId }
+            const a = args as { create: Record<string, unknown> }
+            a.create = { ...a.create, organizationId }
             // update doesn't need orgId injection (where already filters)
           }
           return query(args)
