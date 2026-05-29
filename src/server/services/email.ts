@@ -3,6 +3,10 @@ import { tenantData } from '@/server/db/types'
 import { encrypt, decrypt } from '@/lib/encryption'
 import { env } from '@/lib/env'
 import { AppError } from '@/lib/errors'
+import {
+  replacePersonalizationTags as replaceTags,
+  type PersonalizationLead,
+} from '@/lib/personalization-tags'
 
 const GMAIL_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1'
@@ -11,22 +15,10 @@ const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1'
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000
 
 /**
- * Supported personalization tags and their corresponding Lead field accessors.
+ * Backward-compatible re-export of the lead shape used for
+ * personalization. Some tests import this from the email service.
  */
-const PERSONALIZATION_TAGS: Record<string, (lead: LeadForPersonalization) => string> = {
-  '{{FirstName}}': (lead) => lead.firstName ?? '',
-  '{{LastName}}': (lead) => lead.lastName ?? '',
-  '{{FullName}}': (lead) => [lead.firstName, lead.lastName].filter(Boolean).join(' '),
-  '{{CompanyName}}': (lead) => lead.companyName ?? '',
-  '{{Title}}': (lead) => lead.title ?? '',
-}
-
-interface LeadForPersonalization {
-  firstName: string
-  lastName: string
-  companyName: string | null
-  title: string | null
-}
+type LeadForPersonalization = PersonalizationLead
 
 interface GmailTokenResponse {
   access_token: string
@@ -192,10 +184,11 @@ export async function refreshTokenIfNeeded(
 
 /**
  * Replaces personalization tags in text with lead data.
- * Tags: {{FirstName}}, {{LastName}}, {{FullName}}, {{CompanyName}}, {{Title}}
  *
- * Uses split/join instead of replaceAll to avoid special replacement patterns
- * ($&, $`, $', $<n>) being interpreted in lead field values.
+ * Delegates to {@link replaceTags} so the editor (which displays the
+ * available tags) and the send pipeline (which substitutes them) read
+ * from the same source of truth in `@/lib/personalization-tags`. Adding
+ * a tag in one place will automatically work in the other.
  *
  * Validates: Requirements 7.2
  */
@@ -203,11 +196,7 @@ export function replacePersonalizationTags(
   text: string,
   lead: LeadForPersonalization,
 ): string {
-  let result = text
-  for (const [tag, accessor] of Object.entries(PERSONALIZATION_TAGS)) {
-    result = result.split(tag).join(accessor(lead))
-  }
-  return result
+  return replaceTags(text, lead)
 }
 
 /**

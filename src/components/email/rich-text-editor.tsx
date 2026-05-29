@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { PERSONALIZATION_TAGS } from '@/lib/personalization-tags'
 
 export interface RichTextEditorProps {
   /** Initial HTML content. */
@@ -66,18 +67,11 @@ const COLOR_OPTIONS = [
 ] as const
 
 /**
- * Personalization tags supported by the email send pipeline. The list
- * matches the server-side `PERSONALIZATION_TAGS` map in
- * `server/services/email.ts` so anything insertable here also gets
- * substituted at send time.
+ * Personalization tags supported by the email send pipeline. Imported
+ * from `@/lib/personalization-tags` so the list of available tokens
+ * here always matches the substitutions the email service performs at
+ * send time — adding or renaming a tag in one place updates the other.
  */
-const PERSONALIZATION_TAGS = [
-  { tag: '{{FirstName}}', label: 'First Name', description: "Lead's first name", sample: 'John' },
-  { tag: '{{LastName}}', label: 'Last Name', description: "Lead's last name", sample: 'Smith' },
-  { tag: '{{FullName}}', label: 'Full Name', description: "Lead's full name", sample: 'John Smith' },
-  { tag: '{{CompanyName}}', label: 'Company Name', description: "Lead's company", sample: 'Acme Corp' },
-  { tag: '{{Title}}', label: 'Title / Role', description: "Lead's job title", sample: 'VP of Sales' },
-] as const
 
 /**
  * Rich text editor for email composition.

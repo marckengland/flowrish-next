@@ -16,7 +16,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { HelpTooltip } from '@/components/ui/help-tooltip'
 import { RichTextEditor } from '@/components/email/rich-text-editor'
-import { EmailGenerator } from '@/components/ai/email-generator'
 import { addStep, deleteStep, updateStep } from '@/server/actions/cadences'
 import { cn } from '@/lib/utils'
 import type { CadenceStep, StepActionType } from '@/hooks/use-cadences'
@@ -401,16 +400,11 @@ export function StepEditor({
                 )}
               </div>
 
-              {/* AI helper — drafts a fresh email and pastes it into the form */}
-              {canEdit && (
-                <EmailGenerator
-                  leadId=""
-                  onUseDraft={({ subject, body }) => {
-                    setEmailSubject(subject)
-                    setEmailBody(body)
-                  }}
-                />
-              )}
+              {/* AI generation is intentionally excluded here — cadence
+                  steps are templates that aren't tied to a single lead,
+                  so the generator (which needs a leadId for context)
+                  belongs on the lead detail page where it can pull the
+                  recipient's profile and history. */}
             </div>
           ) : (
             <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
