@@ -1,11 +1,12 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, Check, Loader2 } from 'lucide-react'
+import { AlertTriangle, Check, Loader2, UserCog } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { TaskReassign } from '@/components/tasks/task-reassign'
 import {
   useCompleteTaskMutation,
   useTasksQuery,
@@ -31,6 +32,12 @@ export interface TaskListProps {
    * — the server enforces the real permission check (`leads:write`).
    */
   canComplete?: boolean
+  /**
+   * Whether the current user can reassign tasks. Defaults to the same
+   * value as `canComplete` since they share the same `leads:write`
+   * permission server-side.
+   */
+  canReassign?: boolean
 }
 
 /**
@@ -52,9 +59,13 @@ export function TaskList({
   filters = {},
   initialTasks,
   canComplete = true,
+  canReassign,
 }: TaskListProps): React.JSX.Element {
   const query = useTasksQuery(filters, initialTasks)
   const completeMutation = useCompleteTaskMutation()
+  const [reassignTask, setReassignTask] = useState<TaskItem | null>(null)
+
+  const allowReassign = canReassign ?? canComplete
 
   const tasks = query.data ?? initialTasks ?? []
 
@@ -106,6 +117,8 @@ export function TaskList({
           <TaskRow
             task={task}
             canComplete={canComplete}
+            canReassign={allowReassign && !task.isComplete}
+            onReassign={() => setReassignTask(task)}
             isCompleting={
               completeMutation.isPending &&
               completeMutation.variables === task.id
@@ -120,6 +133,15 @@ export function TaskList({
           />
         </li>
       ))}
+      {reassignTask ? (
+        <TaskReassign
+          open
+          onClose={() => setReassignTask(null)}
+          taskId={reassignTask.id}
+          taskTitle={reassignTask.title}
+          currentAssigneeId={reassignTask.assigneeId}
+        />
+      ) : null}
     </ol>
   )
 }
@@ -127,12 +149,16 @@ export function TaskList({
 function TaskRow({
   task,
   canComplete,
+  canReassign,
+  onReassign,
   isCompleting,
   onComplete,
   completeError,
 }: {
   task: TaskItem
   canComplete: boolean
+  canReassign: boolean
+  onReassign: () => void
   isCompleting: boolean
   onComplete: () => void
   completeError: unknown
@@ -188,26 +214,41 @@ function TaskRow({
         </div>
 
         {!task.isComplete && canComplete ? (
-          <Button
-            type="button"
-            size="xs"
-            variant="outline"
-            onClick={onComplete}
-            disabled={isCompleting}
-            aria-label={`Mark "${task.title}" complete`}
-          >
-            {isCompleting ? (
-              <>
-                <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-                <span>Saving…</span>
-              </>
-            ) : (
-              <>
-                <Check className="size-3" aria-hidden="true" />
-                <span>Complete</span>
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-1">
+            {canReassign ? (
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                onClick={onReassign}
+                aria-label={`Reassign "${task.title}"`}
+                title="Reassign"
+              >
+                <UserCog className="size-3" aria-hidden="true" />
+                <span>Reassign</span>
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={onComplete}
+              disabled={isCompleting}
+              aria-label={`Mark "${task.title}" complete`}
+            >
+              {isCompleting ? (
+                <>
+                  <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+                  <span>Saving…</span>
+                </>
+              ) : (
+                <>
+                  <Check className="size-3" aria-hidden="true" />
+                  <span>Complete</span>
+                </>
+              )}
+            </Button>
+          </div>
         ) : task.isComplete && task.completedAt ? (
           <span className="text-xs text-muted-foreground">
             Completed {formatDateTime(task.completedAt)}
