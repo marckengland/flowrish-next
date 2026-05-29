@@ -10,14 +10,13 @@ import { getActivitiesByLead } from '@/server/services/activities'
 import { getOrCreateDefaultPipeline } from '@/server/services/pipeline'
 import { AppError } from '@/lib/errors'
 
-import { ActivityForm } from '@/components/activities/activity-form'
-import { ActivityTimeline } from '@/components/activities/activity-timeline'
 import { LeadConvert } from '@/components/leads/lead-convert'
 import { LeadDetail } from '@/components/leads/lead-detail'
+import { LeadStageTransition } from '@/components/leads/lead-stage-transition'
+import { LeadTabs } from '@/components/leads/lead-tabs'
 import { DuplicateCheck } from '@/components/leads/duplicate-check'
 import { DeletionRequestButton } from '@/components/leads/deletion-request-button'
 import { ConversationIntelligence } from '@/components/rhythm/conversation-intelligence'
-import { EmailCompose } from '@/components/email/email-compose'
 import { EmailGenerator } from '@/components/ai/email-generator'
 import { AccountResearch } from '@/components/ai/account-research'
 import type { ActivityItem } from '@/hooks/use-activities'
@@ -84,6 +83,22 @@ export default async function LeadDetailPage({
     .slice()
     .sort((a, b) => a.order - b.order)
     .map((s) => ({ id: s.id, name: s.name, order: s.order }))
+
+  /**
+   * Stage list with terminal-state flags, used by LeadStageTransition
+   * so it can render the lock icons and reopen-helper text. The form
+   * itself only needs id/name/order so we keep two derived shapes.
+   */
+  const stageOptions = pipeline.stages
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      order: s.order,
+      isClosedWon: s.isClosedWon,
+      isClosedLost: s.isClosedLost,
+    }))
 
   const initialLeadValues: LeadFormValues = {
     id: lead.id,
@@ -157,21 +172,30 @@ export default async function LeadDetailPage({
             canEdit={canWrite}
           />
 
-          <section
-            aria-label="Activity timeline"
-            className="flex flex-col gap-3"
-          >
-            <header className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold tracking-tight">
-                Activity timeline
-              </h2>
-            </header>
-            {canWrite ? <ActivityForm leadId={lead.id} /> : null}
-            <ActivityTimeline
-              leadId={lead.id}
-              initialActivities={initialActivities}
-            />
-          </section>
+          <LeadStageTransition
+            leadId={lead.id}
+            currentStageId={lead.stageId}
+            stages={stageOptions}
+            canEdit={canWrite}
+          />
+
+          <LeadTabs
+            leadId={lead.id}
+            leadName={`${lead.firstName} ${lead.lastName}`.trim()}
+            leadEmail={lead.email}
+            initialActivities={initialActivities}
+            contacts={(lead.contacts ?? []).map((entry) => ({
+              contact: {
+                id: entry.contact.id,
+                firstName: entry.contact.firstName,
+                lastName: entry.contact.lastName,
+                email: entry.contact.email,
+                phone: entry.contact.phone,
+                jobTitle: entry.contact.jobTitle,
+              },
+            }))}
+            canWrite={canWrite}
+          />
         </div>
 
         <aside className="flex flex-col gap-5">
@@ -204,20 +228,6 @@ export default async function LeadDetailPage({
               canCoach={canCoach}
             />
           </section>
-
-          {canWrite && lead.email && (
-            <section
-              aria-label="Email"
-              className="flex flex-col gap-3 rounded-md border bg-card p-4"
-            >
-              <h2 className="text-sm font-semibold">Email</h2>
-              <EmailCompose
-                leadId={lead.id}
-                leadEmail={lead.email}
-                leadName={`${lead.firstName} ${lead.lastName}`.trim()}
-              />
-            </section>
-          )}
 
           {canWrite && (
             <section

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createSupabaseBrowser } from '@/lib/supabase/client'
 import { useLayoutStore } from '@/stores/layout'
+import { ThemeToggle } from '@/components/layout/theme-toggle'
 
 /**
  * Minimal display view of the authenticated user shown in the header.
@@ -73,6 +74,7 @@ export function Header({
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2">
+        <ThemeToggle />
         <Button
           variant="ghost"
           size="icon-sm"

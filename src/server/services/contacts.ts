@@ -525,3 +525,38 @@ export async function deleteCompany(id: string, orgId: string) {
 
   return { id }
 }
+
+
+/**
+ * Removes a Lead ↔ Contact link without deleting either side.
+ *
+ * No-ops when the link doesn't exist so the API surface can stay
+ * idempotent — repeated unlink calls don't error.
+ *
+ * Validates: Requirement 19.4
+ */
+export async function unlinkContactFromLead(
+  contactId: string,
+  leadId: string,
+  orgId: string,
+): Promise<void> {
+  const db = createTenantPrisma(orgId)
+
+  // Verify both ends still belong to the caller's tenant. We fail
+  // softly if either is missing — a deleted lead or contact should
+  // produce a 404 rather than a silent no-op.
+  const contact = await db.contact.findFirst({ where: { id: contactId } })
+  if (!contact) {
+    throw new AppError('CONTACT_NOT_FOUND', 'Contact not found', 404)
+  }
+  const lead = await db.lead.findFirst({
+    where: { id: leadId, deletedAt: null },
+  })
+  if (!lead) {
+    throw new AppError('LEAD_NOT_FOUND', 'Lead not found', 404)
+  }
+
+  await prisma.leadContact.deleteMany({
+    where: { leadId, contactId },
+  })
+}

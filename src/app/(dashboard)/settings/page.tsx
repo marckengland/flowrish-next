@@ -6,9 +6,11 @@ import { Settings, Zap, Target, Brain, Timer, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScoringRules } from '@/components/scoring/scoring-rules'
 import { ScoreDecayConfig } from '@/components/scoring/score-decay-config'
+import { RankedLeadList } from '@/components/scoring/ranked-lead-list'
 import { AssignmentRules } from '@/components/admin/assignment-rules'
 import { AiPromptConfig } from '@/components/ai/ai-prompt-config'
 import { GmailConnect } from '@/components/email/gmail-connect'
+import { EmailSyncStatus } from '@/components/email/email-sync-status'
 
 /**
  * Organization settings page.
@@ -73,16 +75,34 @@ export default function SettingsPage(): React.JSX.Element {
 
         {/* Tab content */}
         <section className="min-w-0 flex-1" aria-label={`${activeTab} settings`}>
-          {activeTab === 'scoring' && <ScoringRules />}
+          {activeTab === 'scoring' && (
+            <div className="flex flex-col gap-6">
+              <ScoringRules />
+              <RankedLeadList />
+            </div>
+          )}
           {activeTab === 'decay' && <ScoreDecayConfig />}
           {activeTab === 'assignment' && <AssignmentRules />}
           {activeTab === 'ai' && <AiPromptConfig />}
           {activeTab === 'email' && (
-            <GmailConnect
-              isConnected={false}
-              googleClientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''}
-              redirectUri={typeof window !== 'undefined' ? `${window.location.origin}/api/email/callback` : '/api/email/callback'}
-            />
+            <div className="flex flex-col gap-4">
+              <GmailConnect
+                isConnected={false}
+                googleClientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''}
+                redirectUri={typeof window !== 'undefined' ? `${window.location.origin}/api/email/callback` : '/api/email/callback'}
+              />
+              <section
+                aria-label="Email sync"
+                className="flex flex-col gap-2 rounded-md border bg-card p-4"
+              >
+                <h3 className="text-sm font-semibold">Manual sync</h3>
+                <p className="text-xs text-muted-foreground">
+                  Pull the latest messages from your connected Gmail
+                  account into the activity timeline.
+                </p>
+                <EmailSyncStatus className="mt-1" />
+              </section>
+            </div>
           )}
         </section>
       </div>

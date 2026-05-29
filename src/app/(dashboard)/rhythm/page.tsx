@@ -4,6 +4,8 @@ import {
   DealHealth,
   type DealHealthRow,
 } from '@/components/rhythm/deal-health'
+import { DealGapsPanel } from '@/components/rhythm/deal-gaps-panel'
+import { DealScoresPanel } from '@/components/rhythm/deal-scores-panel'
 import {
   PriorityList,
   type PriorityActionRow,
@@ -298,6 +300,43 @@ export default async function RhythmPage(): Promise<React.JSX.Element> {
           summary={healthSummary}
           gapSummary={gapSummary}
         />
+      </section>
+
+      <section
+        aria-labelledby="deal-scores-section"
+        className="flex flex-col gap-3"
+      >
+        <div>
+          <h2
+            id="deal-scores-section"
+            className="text-lg font-semibold tracking-tight"
+          >
+            Engagement scores
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Every open deal scored 1–100 across recency, stakeholders, volume,
+            progression, and lead score.
+          </p>
+        </div>
+        <DealScoresPanel />
+      </section>
+
+      <section
+        aria-labelledby="deal-gaps-section"
+        className="flex flex-col gap-3"
+      >
+        <div>
+          <h2
+            id="deal-gaps-section"
+            className="text-lg font-semibold tracking-tight"
+          >
+            Deal gaps
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Cold deals, missing meetings, and single-threaded relationships.
+          </p>
+        </div>
+        <DealGapsPanel />
       </section>
     </div>
   )

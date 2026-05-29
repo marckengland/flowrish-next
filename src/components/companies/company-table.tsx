@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Loader2, Trash2 } from 'lucide-react'
 
 import { useCompaniesQuery, useDeleteCompanyMutation, type CompanyListItem } from '@/hooks/use-companies'
@@ -106,7 +107,12 @@ export function CompanyTable({
               rows.map((company) => (
                 <tr key={company.id} className="border-t transition-colors hover:bg-muted/30">
                   <td className="px-3 py-2 font-medium text-foreground">
-                    {company.name}
+                    <Link
+                      href={`/companies/${company.id}`}
+                      className="hover:underline"
+                    >
+                      {company.name}
+                    </Link>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {company.industry ?? '—'}

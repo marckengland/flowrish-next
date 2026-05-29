@@ -8,6 +8,7 @@ import { createTenantPrisma } from '@/server/db/middleware'
 import { getLeadAccessFilter } from '@/server/services/access'
 import { DashboardTabs } from '@/components/dashboard/dashboard-tabs'
 import { CadenceBuilder } from '@/components/cadences/cadence-builder'
+import { CadenceRenameButton } from '@/components/cadences/cadence-rename-button'
 import { EnrollmentList } from '@/components/cadences/enrollment-list'
 import { EnrollDialog } from '@/components/cadences/enroll-dialog'
 import {
@@ -198,6 +199,12 @@ export default async function CadenceDetailPage({
               {cadence.name}
             </h1>
             <StatusBadge status={cadenceDetail.status} />
+            {canManage && !isArchived ? (
+              <CadenceRenameButton
+                cadenceId={cadence.id}
+                currentName={cadence.name}
+              />
+            ) : null}
           </div>
           <p className="text-sm text-muted-foreground">
             {serializedSteps.length} step

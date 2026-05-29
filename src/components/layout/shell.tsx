@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { ChatbotSidebar } from '@/components/ai/chatbot-sidebar'
+import { ChatbotToggle } from '@/components/ai/chatbot-toggle'
 import { Header, type HeaderUser } from '@/components/layout/header'
 import { Sidebar } from '@/components/layout/sidebar'
 import type { Permission } from '@/types/permissions'
@@ -44,6 +45,7 @@ export function Shell({
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
       <ChatbotSidebar />
+      <ChatbotToggle />
     </div>
   )
 }
