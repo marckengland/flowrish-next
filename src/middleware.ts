@@ -14,27 +14,54 @@ import { createSupabaseMiddleware } from '@/lib/supabase/middleware'
 
 // --- Rate Limiters (edge-compatible, using process.env directly) ---
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-})
+/**
+ * Build the rate-limit registry only when Upstash credentials are
+ * available. Local development typically runs without Redis, and we
+ * never want middleware to 500 on every request just because the
+ * limiter can't reach a backend — so a missing config means
+ * "rate-limit-disabled" rather than "fail closed".
+ *
+ * The registry is built lazily on first use (one-shot module-scoped
+ * cache) so production paths still pay the construction cost exactly
+ * once.
+ */
+type RateLimiterSet = {
+  general: Ratelimit
+  auth: Ratelimit
+  write: Ratelimit
+}
 
-const rateLimiters = {
-  general: new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(100, '1m'),
-    prefix: 'rl:general',
-  }),
-  auth: new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(10, '1m'),
-    prefix: 'rl:auth',
-  }),
-  write: new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(30, '1m'),
-    prefix: 'rl:write',
-  }),
+let cachedLimiters: RateLimiterSet | null | undefined
+
+function getRateLimiters(): RateLimiterSet | null {
+  if (cachedLimiters !== undefined) return cachedLimiters
+
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) {
+    cachedLimiters = null
+    return null
+  }
+
+  const redis = new Redis({ url, token })
+  cachedLimiters = {
+    general: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(100, '1m'),
+      prefix: 'rl:general',
+    }),
+    auth: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, '1m'),
+      prefix: 'rl:auth',
+    }),
+    write: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(30, '1m'),
+      prefix: 'rl:write',
+    }),
+  }
+  return cachedLimiters
 }
 
 // --- Constants ---
@@ -56,41 +83,58 @@ export async function middleware(request: NextRequest) {
     'camera=(), microphone=(), geolocation=(), payment=()'
   )
 
-  // 2. Rate limiting (skip for static assets)
+  // 2. Rate limiting (skip for static assets, and skip entirely when
+  // Redis isn't configured — see getRateLimiters())
   const path = request.nextUrl.pathname
 
   if (!path.startsWith('/_next') && !path.startsWith('/favicon')) {
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? '127.0.0.1'
+    const limiters = getRateLimiters()
+    if (limiters) {
+      const ip =
+        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        ?? '127.0.0.1'
 
-    const limiter = path.startsWith('/api/auth')
-      ? rateLimiters.auth
-      : ['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)
-        ? rateLimiters.write
-        : rateLimiters.general
+      const limiter = path.startsWith('/api/auth')
+        ? limiters.auth
+        : ['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)
+          ? limiters.write
+          : limiters.general
 
-    const { success, limit, remaining, reset } = await limiter.limit(ip)
+      try {
+        const { success, limit, remaining, reset } = await limiter.limit(ip)
 
-    response.headers.set('X-RateLimit-Limit', limit.toString())
-    response.headers.set('X-RateLimit-Remaining', remaining.toString())
-    response.headers.set('X-RateLimit-Reset', reset.toString())
+        response.headers.set('X-RateLimit-Limit', limit.toString())
+        response.headers.set('X-RateLimit-Remaining', remaining.toString())
+        response.headers.set('X-RateLimit-Reset', reset.toString())
 
-    if (!success) {
-      return NextResponse.json(
-        { error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
-        {
-          status: 429,
-          headers: {
-            'X-RateLimit-Limit': limit.toString(),
-            'X-RateLimit-Remaining': remaining.toString(),
-            'X-RateLimit-Reset': reset.toString(),
-            'X-Content-Type-Options': 'nosniff',
-            'X-Frame-Options': 'DENY',
-            'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
-            'Referrer-Policy': 'strict-origin-when-cross-origin',
-            'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
-          },
+        if (!success) {
+          return NextResponse.json(
+            { error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
+            {
+              status: 429,
+              headers: {
+                'X-RateLimit-Limit': limit.toString(),
+                'X-RateLimit-Remaining': remaining.toString(),
+                'X-RateLimit-Reset': reset.toString(),
+                'X-Content-Type-Options': 'nosniff',
+                'X-Frame-Options': 'DENY',
+                'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+                'Referrer-Policy': 'strict-origin-when-cross-origin',
+                'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+              },
+            }
+          )
         }
-      )
+      } catch (err) {
+        // A transient Redis blip should not 500 the entire app. Log
+        // once and let the request through — the request will still
+        // be auth-checked below. Production deployments where Redis
+        // is critical should monitor this log line.
+        console.warn(
+          '[middleware] rate-limit check failed; allowing request:',
+          err instanceof Error ? err.message : err,
+        )
+      }
     }
   }
 
@@ -102,6 +146,16 @@ export async function middleware(request: NextRequest) {
   }
 
   const supabase = createSupabaseMiddleware(request, response)
+
+  // When Supabase isn't configured (local dev without credentials),
+  // skip the auth gate so static / public routes still render. The
+  // app's data layer will surface its own "not signed in" errors when
+  // it tries to query the DB, and the login page will render without
+  // crashing.
+  if (!supabase) {
+    return response
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser()

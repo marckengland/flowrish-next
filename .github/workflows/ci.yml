@@ -57,23 +57,49 @@ jobs:
         run: npx vitest --run
 
   migrate:
-    name: Run Supabase Migrations
+    name: Apply Prisma Migrations
     runs-on: ubuntu-latest
     needs: ci
+    # Only run after a successful merge to main — never on PRs.
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    # The job is gated on the SUPABASE_DB_URL secret existing. If the
+    # repo doesn't have it configured (for example, on a fork or in a
+    # transitional environment) we skip rather than fail the run.
+    # The connection string must include `?sslmode=require` for Supabase.
+    env:
+      DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+      DIRECT_URL: ${{ secrets.SUPABASE_DB_URL }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
+      - name: Skip when DATABASE_URL is not configured
+        id: gate
+        run: |
+          if [ -z "${{ secrets.SUPABASE_DB_URL }}" ]; then
+            echo "DATABASE_URL secret is not set; skipping migrations."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Run migrations
-        run: supabase db push
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      - name: Set up Node.js
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.gate.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Apply Prisma migrations
+        if: steps.gate.outputs.skip != 'true'
+        # `prisma migrate deploy` applies every pending migration in
+        # `prisma/migrations/` against DATABASE_URL. It's the
+        # production-safe sibling of `migrate dev` — it never prompts
+        # and never modifies the schema beyond the migration files.
+        run: npx prisma migrate deploy

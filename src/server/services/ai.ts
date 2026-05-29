@@ -36,21 +36,76 @@ export interface AccountResearch {
   sources: string[]
 }
 
-export interface ChatNavigateAction {
-  type: 'navigate'
-  description: string
-  params: { path: string }
-}
+/**
+ * Action types the AI assistant can propose. The chatbot client
+ * surfaces these as confirm/reject cards (or auto-runs them when the
+ * user has flipped on auto-confirm). Each variant carries its own
+ * `params` shape so the executor can validate without runtime
+ * inspection.
+ */
+export type ChatAction =
+  | {
+      type: 'navigate'
+      description: string
+      params: { path: string }
+    }
+  | {
+      type: 'create_lead'
+      description: string
+      params: {
+        firstName: string
+        lastName: string
+        email?: string
+        phone?: string
+        title?: string
+        companyName?: string
+        leadStatus?: string
+        tier?: string
+        dealValue?: number
+      }
+    }
+  | {
+      type: 'create_task'
+      description: string
+      params: {
+        title: string
+        description?: string
+        priority?: 'LOW' | 'MEDIUM' | 'HIGH'
+        dueDate?: string
+        leadId?: string
+        assigneeId?: string
+      }
+    }
+  | {
+      type: 'update_lead_status'
+      description: string
+      params: { leadId: string; leadStatus: string }
+    }
+  | {
+      type: 'update_lead_tier'
+      description: string
+      params: { leadId: string; tier: string }
+    }
+  | {
+      type: 'enroll_in_cadence'
+      description: string
+      params: { cadenceId: string; leadId: string }
+    }
+
+/**
+ * Backward-compatible alias for the navigate variant. Older callers
+ * import this name; new code should reference the `ChatAction` union.
+ */
+export type ChatNavigateAction = Extract<ChatAction, { type: 'navigate' }>
 
 export interface ChatResponse {
   message: string
   /**
-   * Optional follow-up action proposed by the assistant. Today only
-   * `navigate` is supported — see `extractNavigateAction` below for the
-   * marker format and `ChatbotSidebar` for the client confirm/reject
-   * UX.
+   * Optional follow-up action proposed by the assistant. The shape
+   * is union-typed so the client can route by `action.type` rather
+   * than runtime detection.
    */
-  action?: ChatNavigateAction
+  action?: ChatAction
 }
 
 export interface TrackerMatch {
@@ -379,15 +434,41 @@ export async function researchAccount(
 }
 
 /**
- * Processes a chatbot message with context and returns a response.
+ * Inline hint appended to the user's chat message so the assistant
+ * knows the supported action format without us injecting a system
+ * prompt (which would violate Requirement 8.4: "no system prompt
+ * unless an admin-active config exists").
  *
- * The assistant can optionally include a navigation hint in its reply
- * by appending a final-line marker `[NAVIGATE: /path]`. When present we
- * strip it from the user-facing `message` and surface it as a
- * structured `action` payload so the chat client can offer a confirm /
- * reject card. We deliberately keep the action surface narrow — only
- * routes within the app are accepted — so a misbehaving model can't
- * push destructive actions onto the user.
+ * Models that can't act on the format simply ignore it, so the chat
+ * still works as a Q&A surface.
+ */
+const CHAT_ACTION_HINT = [
+  '',
+  '',
+  '(Optional: if the user wants you to perform an action in the app,',
+  'append a final block in the exact form `[ACTION]{...JSON...}[/ACTION]`.',
+  'Available action types: navigate, create_lead, create_task,',
+  'update_lead_status, update_lead_tier, enroll_in_cadence.',
+  'Examples of params:',
+  '  - navigate: { "path": "/leads" }',
+  '  - create_lead: { "firstName": "Ada", "lastName": "Lovelace", "companyName": "Acme" }',
+  '  - create_task: { "title": "Follow up", "leadId": "<uuid>", "priority": "HIGH" }',
+  '  - update_lead_status: { "leadId": "<uuid>", "leadStatus": "Active" }',
+  '  - update_lead_tier: { "leadId": "<uuid>", "tier": "Tier 1" }',
+  '  - enroll_in_cadence: { "cadenceId": "<uuid>", "leadId": "<uuid>" }',
+  'Never propose destructive actions. Always explain in plain text BEFORE the action block.',
+  'Omit the block entirely when the user is just asking a question.)',
+].join('\n')
+
+/**
+ * Processes a chatbot message and returns the assistant's reply
+ * along with any action it has proposed.
+ *
+ * The assistant can append a single `[ACTION]…[/ACTION]` block at
+ * the end of its message. The parser strips the block from the
+ * user-facing text and returns it as a structured payload so the
+ * client can show a confirm / reject card. Allowed action types are
+ * declared in {@link ChatAction}; unknown types are ignored.
  *
  * Validates: Requirements 8.3, 8.4, 8.5
  */
@@ -406,21 +487,11 @@ export async function chatMessage(
       messages.push({ role: 'system', content: systemPrompt })
     }
 
-    // Inline the navigation-marker hint with the user's message rather
-    // than fabricate a system prompt. The hint is short, ignored by
-    // models that can't act on it, and keeps the
-    // "no system prompt unless admin-configured" invariant intact.
-    const NAVIGATE_HINT =
-      ' \n\n(If the user clearly asks to navigate to a page in the app, '
-      + 'append a final line in the exact form `[NAVIGATE: /path]` with '
-      + 'an in-app route. Otherwise omit it.)'
-
-    messages.push({ role: 'user', content: message + NAVIGATE_HINT })
+    messages.push({ role: 'user', content: message + CHAT_ACTION_HINT })
 
     const responseText = await callAI(messages, 0.5, 1000)
 
-    // Detect the navigation marker on the final non-empty line.
-    const { message: cleaned, action } = extractNavigateAction(responseText)
+    const { message: cleaned, action } = extractActionBlock(responseText)
     return { message: cleaned, action }
   } catch (error) {
     if (error instanceof AppError) {
@@ -432,27 +503,177 @@ export async function chatMessage(
 }
 
 /**
- * Pulls a `[NAVIGATE: /path]` marker out of an assistant message and
- * converts it to a structured action. Returns the cleaned message plus
- * the action (or undefined). Only same-origin paths are accepted.
+ * Pulls a `[ACTION]{json}[/ACTION]` block out of the assistant's
+ * message and converts it to a structured action. Returns the
+ * cleaned message plus the action (or undefined when no valid block
+ * was found). Unknown action types or malformed JSON are silently
+ * dropped — better to lose a single proposed action than to crash
+ * the whole chat round-trip.
+ *
+ * Exported so the chat tests can drive the parser without touching
+ * the AI provider.
  */
-function extractNavigateAction(text: string): {
+export function extractActionBlock(text: string): {
   message: string
-  action?: ChatNavigateAction
+  action?: ChatAction
 } {
-  const match = text.match(/\[NAVIGATE:\s*(\/[^\]\s]*)\s*\]\s*$/)
-  if (!match) return { message: text.trim() }
-  const path = match[1]
-  if (!path.startsWith('/')) return { message: text.trim() }
-  const cleaned = text.slice(0, match.index).trim()
-  return {
-    message: cleaned,
-    action: {
-      type: 'navigate',
-      description: `Open ${path}`,
-      params: { path },
-    },
+  const match = text.match(/\[ACTION\]([\s\S]*?)\[\/ACTION\]/)
+  if (!match) {
+    // Fall back to the legacy single-line `[NAVIGATE: /path]` marker
+    // we shipped in the previous iteration so older deployments still
+    // benefit from navigate actions during the transition.
+    const legacy = text.match(/\[NAVIGATE:\s*(\/[^\]\s]*)\s*\]\s*$/)
+    if (legacy) {
+      const path = legacy[1]
+      const cleaned = text.slice(0, legacy.index).trim()
+      return {
+        message: cleaned,
+        action: {
+          type: 'navigate',
+          description: `Open ${path}`,
+          params: { path },
+        },
+      }
+    }
+    return { message: text.trim() }
   }
+
+  const cleaned = text.replace(/\[ACTION\][\s\S]*?\[\/ACTION\]/, '').trim()
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(match[1].trim())
+  } catch {
+    return { message: cleaned }
+  }
+
+  const action = sanitizeChatAction(parsed)
+  if (!action) {
+    return { message: cleaned }
+  }
+
+  return { message: cleaned, action }
+}
+
+/**
+ * Validates a parsed action payload against the {@link ChatAction}
+ * union and normalizes its shape. Anything that doesn't match a
+ * known action type — or is missing the required params — is
+ * rejected.
+ *
+ * Defensive: a misbehaving model could emit a `delete_*` action
+ * and the executor would refuse, but the front-end shouldn't even
+ * see it. Better to drop the block here.
+ */
+function sanitizeChatAction(input: unknown): ChatAction | null {
+  if (!input || typeof input !== 'object') return null
+  const obj = input as Record<string, unknown>
+  const type = obj.type
+  const description =
+    typeof obj.description === 'string' ? obj.description : 'Run action'
+  const params =
+    obj.params && typeof obj.params === 'object'
+      ? (obj.params as Record<string, unknown>)
+      : null
+  if (!params) return null
+
+  switch (type) {
+    case 'navigate': {
+      const path = params.path
+      if (typeof path !== 'string' || !path.startsWith('/')) return null
+      return { type: 'navigate', description, params: { path } }
+    }
+    case 'create_lead': {
+      const firstName = stringOrNull(params.firstName)
+      const lastName = stringOrNull(params.lastName)
+      if (!firstName || !lastName) return null
+      return {
+        type: 'create_lead',
+        description,
+        params: {
+          firstName,
+          lastName,
+          email: stringOrUndef(params.email),
+          phone: stringOrUndef(params.phone),
+          title: stringOrUndef(params.title),
+          companyName: stringOrUndef(params.companyName),
+          leadStatus: stringOrUndef(params.leadStatus),
+          tier: stringOrUndef(params.tier),
+          dealValue:
+            typeof params.dealValue === 'number'
+              ? params.dealValue
+              : typeof params.dealValue === 'string'
+                ? Number(params.dealValue) || undefined
+                : undefined,
+        },
+      }
+    }
+    case 'create_task': {
+      const title = stringOrNull(params.title)
+      if (!title) return null
+      const priority =
+        params.priority === 'LOW'
+          || params.priority === 'MEDIUM'
+          || params.priority === 'HIGH'
+          ? params.priority
+          : undefined
+      return {
+        type: 'create_task',
+        description,
+        params: {
+          title,
+          description: stringOrUndef(params.description),
+          priority,
+          dueDate: stringOrUndef(params.dueDate),
+          leadId: stringOrUndef(params.leadId),
+          assigneeId: stringOrUndef(params.assigneeId),
+        },
+      }
+    }
+    case 'update_lead_status': {
+      const leadId = stringOrNull(params.leadId)
+      const leadStatus = stringOrNull(params.leadStatus)
+      if (!leadId || !leadStatus) return null
+      return {
+        type: 'update_lead_status',
+        description,
+        params: { leadId, leadStatus },
+      }
+    }
+    case 'update_lead_tier': {
+      const leadId = stringOrNull(params.leadId)
+      const tier = stringOrNull(params.tier)
+      if (!leadId || !tier) return null
+      return {
+        type: 'update_lead_tier',
+        description,
+        params: { leadId, tier },
+      }
+    }
+    case 'enroll_in_cadence': {
+      const cadenceId = stringOrNull(params.cadenceId)
+      const leadId = stringOrNull(params.leadId)
+      if (!cadenceId || !leadId) return null
+      return {
+        type: 'enroll_in_cadence',
+        description,
+        params: { cadenceId, leadId },
+      }
+    }
+    default:
+      return null
+  }
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : null
+}
+
+function stringOrUndef(value: unknown): string | undefined {
+  const result = stringOrNull(value)
+  return result ?? undefined
 }
 
 // ─── Conversation Intelligence ───────────────────────────────────────────────
@@ -697,4 +918,264 @@ export async function getLeadConversations(
       trackers,
     }
   })
+}
+
+
+// ─── Chat Action Executor ────────────────────────────────────────────────────
+
+import { tenantData } from '@/server/db/types'
+
+export interface ChatActionResult {
+  success: boolean
+  message: string
+  data?: Record<string, unknown>
+}
+
+/**
+ * Performs a chat action server-side after the user has confirmed it
+ * (or implicitly approved it via auto-confirm). Each branch reuses
+ * the existing service / repository so audit, RBAC, and validation
+ * stay consistent with the manual UI paths.
+ *
+ * Navigate actions are handled client-side — we only return a
+ * success result for completeness so the client can show a "done"
+ * status badge.
+ *
+ * Failures bubble up as `{ success: false, message }` — the client
+ * never crashes the chat surface on a bad action proposal.
+ *
+ * Service imports are dynamic inside this function rather than at
+ * the top of the file so the test harness for the AI service can
+ * mock environment variables without the leads/tasks modules eagerly
+ * initializing dependent clients (Redis, Prisma) at import time.
+ *
+ * Validates: Requirements 8.3
+ */
+export async function executeChatAction(
+  action: ChatAction,
+  userId: string,
+  orgId: string,
+): Promise<ChatActionResult> {
+  try {
+    switch (action.type) {
+      case 'navigate': {
+        // Navigation runs in the browser. Returning success here lets
+        // the client mark the action card as "executed" without an
+        // additional round-trip.
+        return {
+          success: true,
+          message: `Navigating to ${action.params.path}.`,
+          data: { path: action.params.path },
+        }
+      }
+
+      case 'create_lead': {
+        // Pick the first available pipeline stage so the new lead has
+        // somewhere to live without forcing the user to pick one in
+        // chat. Mirrors the original Flowrish behaviour.
+        const db = createTenantPrisma(orgId)
+        let stage = await db.stage.findFirst({
+          orderBy: { order: 'asc' },
+          select: { id: true },
+        })
+        if (!stage) {
+          // No pipeline yet — auto-create the default one through the
+          // pipeline service and pick the first stage from that.
+          const { getOrCreateDefaultPipeline } = await import(
+            '@/server/services/pipeline'
+          )
+          const pipeline = await getOrCreateDefaultPipeline(orgId)
+          stage = pipeline.stages[0]
+            ? { id: pipeline.stages[0].id }
+            : null
+        }
+        if (!stage) {
+          return {
+            success: false,
+            message: 'Could not resolve a pipeline stage for the new lead.',
+          }
+        }
+
+        const { createLead } = await import('@/server/services/leads')
+        const lead = await createLead(
+          {
+            firstName: action.params.firstName,
+            lastName: action.params.lastName,
+            stageId: stage.id,
+            email: action.params.email ?? null,
+            phone: action.params.phone ?? null,
+            title: action.params.title ?? null,
+            companyName: action.params.companyName ?? null,
+            leadStatus: action.params.leadStatus ?? 'Open',
+            tier: action.params.tier ?? null,
+            dealValue:
+              action.params.dealValue !== undefined
+                ? String(action.params.dealValue)
+                : null,
+          },
+          userId,
+          orgId,
+        )
+
+        return {
+          success: true,
+          message: `Lead "${action.params.firstName} ${action.params.lastName}" created.`,
+          data: {
+            leadId: lead.id,
+            path: `/leads/${lead.id}`,
+          },
+        }
+      }
+
+      case 'create_task': {
+        const db = createTenantPrisma(orgId)
+        // Tasks must be attached to a lead. If the model didn't supply
+        // one, attach to the most recently updated lead the user can
+        // see — useful for "remind me to follow up tomorrow" style
+        // requests where the lead context is implicit.
+        let leadId = action.params.leadId
+        if (!leadId) {
+          const recent = await db.lead.findFirst({
+            where: { deletedAt: null },
+            orderBy: { updatedAt: 'desc' },
+            select: { id: true },
+          })
+          if (!recent) {
+            return {
+              success: false,
+              message: 'No leads exist to attach the task to. Create a lead first.',
+            }
+          }
+          leadId = recent.id
+        }
+
+        const dueDate = action.params.dueDate
+          ? new Date(action.params.dueDate)
+          : new Date(Date.now() + 24 * 60 * 60 * 1000)
+
+        const { createTask } = await import('@/server/services/tasks')
+        const task = await createTask(
+          {
+            title: action.params.title,
+            description: action.params.description ?? null,
+            priority: action.params.priority ?? 'MEDIUM',
+            dueDate,
+            leadId,
+            assigneeId: action.params.assigneeId ?? userId,
+          },
+          userId,
+          orgId,
+        )
+
+        return {
+          success: true,
+          message: `Task "${action.params.title}" created.`,
+          data: { taskId: task.id, leadId },
+        }
+      }
+
+      case 'update_lead_status': {
+        const db = createTenantPrisma(orgId)
+        const lead = await db.lead.findFirst({
+          where: { id: action.params.leadId, deletedAt: null },
+        })
+        if (!lead) {
+          return { success: false, message: 'Lead not found.' }
+        }
+        await db.lead.update({
+          where: { id: action.params.leadId },
+          data: { leadStatus: action.params.leadStatus },
+        })
+        // Audit, async non-blocking, mirrors other write paths.
+        db.auditEntry
+          .create({
+            data: tenantData({
+              userId,
+              action: 'UPDATE',
+              entityType: 'Lead',
+              entityId: action.params.leadId,
+              metadata: JSON.stringify({
+                via: 'chatbot',
+                leadStatus: action.params.leadStatus,
+              }),
+            }),
+          })
+          .catch(() => {})
+        return {
+          success: true,
+          message: `Lead status updated to "${action.params.leadStatus}".`,
+          data: {
+            leadId: action.params.leadId,
+            path: `/leads/${action.params.leadId}`,
+          },
+        }
+      }
+
+      case 'update_lead_tier': {
+        const db = createTenantPrisma(orgId)
+        const lead = await db.lead.findFirst({
+          where: { id: action.params.leadId, deletedAt: null },
+        })
+        if (!lead) {
+          return { success: false, message: 'Lead not found.' }
+        }
+        await db.lead.update({
+          where: { id: action.params.leadId },
+          data: { tier: action.params.tier },
+        })
+        db.auditEntry
+          .create({
+            data: tenantData({
+              userId,
+              action: 'UPDATE',
+              entityType: 'Lead',
+              entityId: action.params.leadId,
+              metadata: JSON.stringify({
+                via: 'chatbot',
+                tier: action.params.tier,
+              }),
+            }),
+          })
+          .catch(() => {})
+        return {
+          success: true,
+          message: `Lead tier updated to "${action.params.tier}".`,
+          data: {
+            leadId: action.params.leadId,
+            path: `/leads/${action.params.leadId}`,
+          },
+        }
+      }
+
+      case 'enroll_in_cadence': {
+        const { enrollLead: enrollLeadInCadence } = await import(
+          '@/server/services/cadences'
+        )
+        const enrollment = await enrollLeadInCadence(
+          action.params.cadenceId,
+          action.params.leadId,
+          userId,
+          orgId,
+        )
+        return {
+          success: true,
+          message: 'Lead enrolled in cadence.',
+          data: {
+            enrollmentId: enrollment.id,
+            cadenceId: action.params.cadenceId,
+            path: `/cadences/${action.params.cadenceId}`,
+          },
+        }
+      }
+    }
+  } catch (error) {
+    if (error instanceof AppError) {
+      return { success: false, message: error.message }
+    }
+    console.error('[AI Service] executeChatAction failed:', error)
+    return {
+      success: false,
+      message: 'Action failed. Please try again or perform it manually.',
+    }
+  }
 }

@@ -20,22 +20,40 @@ import { cn } from '@/lib/utils'
 import { useLayoutStore } from '@/stores/layout'
 
 /**
- * Chatbot sidebar with action loop, quick prompts, and lightweight
- * markdown rendering.
+ * Chatbot sidebar with full action loop, quick prompts, lightweight
+ * markdown rendering, and an auto-confirm switch.
  *
- * Each turn from the assistant can optionally include a `Navigate`
- * action that the user can confirm to jump to a route. When auto-confirm
- * is on, navigate actions execute immediately without prompting. The
- * frame intentionally only ships navigate actions today — adding entity
- * mutations would require a dedicated, audit-aware execute endpoint and
- * is tracked separately.
+ * Action flow:
+ *   1. The user sends a message; `/api/ai/chat` returns the assistant's
+ *      reply plus an optional `action` payload.
+ *   2. If the action is `navigate`, the client handles it locally
+ *      (Next router push) — no execute request needed.
+ *   3. For data-mutation actions (`create_lead`, `create_task`,
+ *      `update_lead_status`, `update_lead_tier`, `enroll_in_cadence`),
+ *      the client posts to `/api/ai/chat/execute` which delegates to
+ *      `executeChatAction` server-side. Auth + RBAC checks live in the
+ *      route handler, never on the client.
+ *   4. When the auto-confirm switch is on, mutating actions execute as
+ *      soon as they arrive. Otherwise the user sees a confirm/cancel
+ *      card. Navigate actions always require an explicit click (we
+ *      don't redirect users mid-conversation).
  *
- * The component never displays raw exception details; failure modes use
- * the generic `AI service temporarily unavailable` fallback so callers
- * can swap chat providers without leaking internals (Requirement 8.5).
+ * The auto-confirm toggle has a short label and a help tooltip so the
+ * affordance is discoverable at a glance — that was a real gap in the
+ * earlier port.
  *
  * Validates: Requirements 8.3, 8.5
  */
+
+// ─── Action types ────────────────────────────────────────────────────────────
+
+type ChatActionType =
+  | 'navigate'
+  | 'create_lead'
+  | 'create_task'
+  | 'update_lead_status'
+  | 'update_lead_tier'
+  | 'enroll_in_cadence'
 
 interface NavigateAction {
   type: 'navigate'
@@ -43,7 +61,60 @@ interface NavigateAction {
   params: { path: string }
 }
 
-type ChatAction = NavigateAction
+interface CreateLeadAction {
+  type: 'create_lead'
+  description: string
+  params: {
+    firstName: string
+    lastName: string
+    email?: string
+    phone?: string
+    title?: string
+    companyName?: string
+    leadStatus?: string
+    tier?: string
+    dealValue?: number
+  }
+}
+
+interface CreateTaskAction {
+  type: 'create_task'
+  description: string
+  params: {
+    title: string
+    description?: string
+    priority?: 'LOW' | 'MEDIUM' | 'HIGH'
+    dueDate?: string
+    leadId?: string
+    assigneeId?: string
+  }
+}
+
+interface UpdateLeadStatusAction {
+  type: 'update_lead_status'
+  description: string
+  params: { leadId: string; leadStatus: string }
+}
+
+interface UpdateLeadTierAction {
+  type: 'update_lead_tier'
+  description: string
+  params: { leadId: string; tier: string }
+}
+
+interface EnrollInCadenceAction {
+  type: 'enroll_in_cadence'
+  description: string
+  params: { cadenceId: string; leadId: string }
+}
+
+type ChatAction =
+  | NavigateAction
+  | CreateLeadAction
+  | CreateTaskAction
+  | UpdateLeadStatusAction
+  | UpdateLeadTierAction
+  | EnrollInCadenceAction
 
 interface ChatTurn {
   id: string
@@ -52,6 +123,12 @@ interface ChatTurn {
   action?: ChatAction
   actionStatus?: 'pending' | 'confirmed' | 'rejected' | 'executed' | 'failed'
   actionResult?: string
+  /**
+   * Optional follow-up path the executor returned (e.g. the new lead's
+   * detail page). Surfaced under the action result as a "Open" link so
+   * the user can jump straight to the affected entity.
+   */
+  followUpPath?: string
 }
 
 interface ChatApiResponse {
@@ -59,12 +136,30 @@ interface ChatApiResponse {
   error?: { code?: string; message?: string }
 }
 
+interface ExecuteApiResponse {
+  data?: {
+    success: boolean
+    message: string
+    data?: { path?: string; [k: string]: unknown }
+  }
+  error?: { code?: string; message?: string }
+}
+
 const QUICK_PROMPTS = [
-  'Summarise my open deals',
+  'Create a lead named Ada Lovelace at Acme',
   'Take me to the dashboard',
   'How do I send an email?',
   'What is deal health?',
 ]
+
+const ACTION_LABELS: Record<ChatActionType, string> = {
+  navigate: 'Navigate',
+  create_lead: 'Create lead',
+  create_task: 'Create task',
+  update_lead_status: 'Update lead status',
+  update_lead_tier: 'Update lead tier',
+  enroll_in_cadence: 'Enroll in cadence',
+}
 
 export function ChatbotSidebar(): React.JSX.Element | null {
   const router = useRouter()
@@ -103,16 +198,23 @@ export function ChatbotSidebar(): React.JSX.Element | null {
 
   function executeAction(turnId: string, action: ChatAction): void {
     setTurns((prev) =>
-      prev.map((t) => (t.id === turnId ? { ...t, actionStatus: 'confirmed' } : t)),
+      prev.map((t) =>
+        t.id === turnId ? { ...t, actionStatus: 'confirmed' } : t,
+      ),
     )
+
+    // Navigate actions never hit the executor route — handle locally.
     if (action.type === 'navigate') {
-      const path = action.params.path
       try {
-        router.push(path)
+        router.push(action.params.path)
         setTurns((prev) =>
           prev.map((t) =>
             t.id === turnId
-              ? { ...t, actionStatus: 'executed', actionResult: `Navigated to ${path}` }
+              ? {
+                  ...t,
+                  actionStatus: 'executed',
+                  actionResult: `Navigated to ${action.params.path}`,
+                }
               : t,
           ),
         )
@@ -130,7 +232,83 @@ export function ChatbotSidebar(): React.JSX.Element | null {
           ),
         )
       }
+      return
     }
+
+    // All other actions go through the server-side executor.
+    startTransition(async () => {
+      try {
+        const res = await fetch('/api/ai/chat/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ action }),
+        })
+        const body = (await res.json().catch(() => ({}))) as ExecuteApiResponse
+
+        if (!res.ok) {
+          setTurns((prev) =>
+            prev.map((t) =>
+              t.id === turnId
+                ? {
+                    ...t,
+                    actionStatus: 'failed',
+                    actionResult:
+                      body.error?.message ?? `Failed (${res.status})`,
+                  }
+                : t,
+            ),
+          )
+          return
+        }
+
+        const result = body.data
+        if (!result || !result.success) {
+          setTurns((prev) =>
+            prev.map((t) =>
+              t.id === turnId
+                ? {
+                    ...t,
+                    actionStatus: 'failed',
+                    actionResult: result?.message ?? 'Action failed',
+                  }
+                : t,
+            ),
+          )
+          return
+        }
+
+        const followUpPath = typeof result.data?.path === 'string'
+          ? result.data.path
+          : undefined
+
+        setTurns((prev) =>
+          prev.map((t) =>
+            t.id === turnId
+              ? {
+                  ...t,
+                  actionStatus: 'executed',
+                  actionResult: result.message,
+                  followUpPath,
+                }
+              : t,
+          ),
+        )
+      } catch (err) {
+        setTurns((prev) =>
+          prev.map((t) =>
+            t.id === turnId
+              ? {
+                  ...t,
+                  actionStatus: 'failed',
+                  actionResult:
+                    err instanceof Error ? err.message : 'Action failed',
+                }
+              : t,
+          ),
+        )
+      }
+    })
   }
 
   function rejectAction(turnId: string): void {
@@ -203,8 +381,11 @@ export function ChatbotSidebar(): React.JSX.Element | null {
             actionStatus: action ? 'pending' : undefined,
           },
         ])
-        if (action && autoConfirm) {
-          // Defer one tick so React commits the new turn before we mutate it.
+        // Auto-confirm runs *non-navigate* actions only — taking a user
+        // off the current page mid-conversation without their explicit
+        // click is the kind of "AI did something I didn't ask for"
+        // moment that erodes trust.
+        if (action && autoConfirm && action.type !== 'navigate') {
           window.setTimeout(() => executeAction(assistantId, action), 0)
         }
       } catch {
@@ -251,29 +432,10 @@ export function ChatbotSidebar(): React.JSX.Element | null {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setAutoConfirm((v) => !v)}
-            title={
-              autoConfirm
-                ? 'Auto-confirm ON — actions execute without asking'
-                : 'Auto-confirm OFF — actions require confirmation'
-            }
-            className={cn(
-              'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-              autoConfirm ? 'bg-amber-500' : 'bg-muted',
-            )}
-            aria-pressed={autoConfirm}
-            aria-label="Toggle auto-confirm"
-          >
-            <span
-              aria-hidden="true"
-              className={cn(
-                'inline-block size-3.5 rounded-full bg-white shadow transition-transform',
-                autoConfirm ? 'translate-x-[18px]' : 'translate-x-[3px]',
-              )}
-            />
-          </button>
+          <AutoConfirmToggle
+            value={autoConfirm}
+            onChange={setAutoConfirm}
+          />
           <Button
             variant="ghost"
             size="icon-sm"
@@ -326,7 +488,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
         {autoConfirm && (
           <p className="mb-1.5 flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
             <Zap className="size-3" aria-hidden="true" />
-            Auto-confirm ON — actions will execute immediately
+            Auto-confirm ON — actions run without asking
           </p>
         )}
         <label htmlFor="chatbot-input" className="sr-only">
@@ -362,21 +524,78 @@ export function ChatbotSidebar(): React.JSX.Element | null {
   )
 }
 
+// ─── Auto-confirm toggle ─────────────────────────────────────────────────────
+
+function AutoConfirmToggle({
+  value,
+  onChange,
+}: {
+  value: boolean
+  onChange: (next: boolean) => void
+}): React.JSX.Element {
+  return (
+    <label
+      className="flex select-none items-center gap-1.5 text-[11px] text-muted-foreground"
+      title={
+        value
+          ? 'Auto-confirm is ON: actions like creating leads run immediately without asking.'
+          : 'Auto-confirm is OFF: actions wait for your explicit confirm click.'
+      }
+    >
+      <span className="hidden sm:inline">Auto-run</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        aria-label="Auto-run actions without confirmation"
+        onClick={() => onChange(!value)}
+        className={cn(
+          'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          value ? 'bg-amber-500' : 'bg-muted',
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            'inline-block size-3.5 rounded-full bg-white shadow transition-transform',
+            value ? 'translate-x-[18px]' : 'translate-x-[3px]',
+          )}
+        />
+      </button>
+    </label>
+  )
+}
+
 /**
- * Validates the action payload coming back from the chat endpoint. The
- * server may not return one at all today, but we want to be ready for
- * the future shape and reject anything outside the allowlist defensively
- * so a misbehaving model can't push a `delete` action onto the user.
+ * Validates the action payload coming back from the chat endpoint and
+ * narrows it to one of the supported `ChatAction` variants. Defensive:
+ * the server already sanitizes, but we re-check on the client so a
+ * misbehaving model can't push an action variant the UI doesn't know
+ * how to render.
  */
 function sanitizeAction(action: ChatAction | null): ChatAction | null {
   if (!action || typeof action !== 'object') return null
-  if (action.type !== 'navigate') return null
-  const path = action.params?.path
-  if (typeof path !== 'string' || !path.startsWith('/')) return null
-  return {
-    type: 'navigate',
-    description: typeof action.description === 'string' ? action.description : 'Navigate',
-    params: { path },
+  const type = action.type
+  switch (type) {
+    case 'navigate':
+      return typeof action.params?.path === 'string'
+        && action.params.path.startsWith('/')
+        ? action
+        : null
+    case 'create_lead':
+      return action.params?.firstName && action.params?.lastName ? action : null
+    case 'create_task':
+      return action.params?.title ? action : null
+    case 'update_lead_status':
+      return action.params?.leadId && action.params?.leadStatus
+        ? action
+        : null
+    case 'update_lead_tier':
+      return action.params?.leadId && action.params?.tier ? action : null
+    case 'enroll_in_cadence':
+      return action.params?.cadenceId && action.params?.leadId ? action : null
+    default:
+      return null
   }
 }
 
@@ -422,6 +641,8 @@ function Turn({
   onConfirm: () => void
   onReject: () => void
 }): React.JSX.Element {
+  const router = useRouter()
+
   if (turn.role === 'user') {
     return (
       <div className="flex justify-end">
@@ -472,6 +693,12 @@ function Turn({
             <ActionStatusBadge
               status={turn.actionStatus}
               result={turn.actionResult}
+              followUpPath={turn.followUpPath}
+              onFollowUp={
+                turn.followUpPath
+                  ? () => router.push(turn.followUpPath!)
+                  : undefined
+              }
             />
           )}
         </div>
@@ -494,7 +721,8 @@ function ActionCard({
     <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-800 dark:bg-amber-950/30">
       <div className="flex items-center gap-1.5 text-xs font-medium text-amber-800 dark:text-amber-200">
         <Zap className="size-3" aria-hidden="true" />
-        {action.description}
+        <span>{ACTION_LABELS[action.type] ?? 'Run action'}: </span>
+        <span className="font-normal">{action.description}</span>
       </div>
       <button
         type="button"
@@ -536,9 +764,13 @@ function ActionCard({
 function ActionStatusBadge({
   status,
   result,
+  followUpPath,
+  onFollowUp,
 }: {
   status: NonNullable<ChatTurn['actionStatus']>
   result?: string
+  followUpPath?: string
+  onFollowUp?: () => void
 }): React.JSX.Element {
   const map: Record<
     NonNullable<ChatTurn['actionStatus']>,
@@ -562,8 +794,7 @@ function ActionStatusBadge({
       icon: <XCircle className="size-3" aria-hidden="true" />,
     },
     failed: {
-      className:
-        'border-destructive/30 bg-destructive/5 text-destructive',
+      className: 'border-destructive/30 bg-destructive/5 text-destructive',
       icon: <XCircle className="size-3" aria-hidden="true" />,
     },
   }
@@ -571,12 +802,23 @@ function ActionStatusBadge({
   return (
     <div
       className={cn(
-        'flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-[11px]',
+        'flex flex-wrap items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11px]',
         cfg.className,
       )}
     >
-      {cfg.icon}
-      <span>{result ?? statusFallback(status)}</span>
+      <span className="flex items-center gap-1">
+        {cfg.icon}
+        <span>{result ?? statusFallback(status)}</span>
+      </span>
+      {followUpPath && status === 'executed' && onFollowUp ? (
+        <button
+          type="button"
+          onClick={onFollowUp}
+          className="ml-auto rounded border border-current/30 px-1.5 py-0.5 text-[10px] font-medium hover:bg-current/10"
+        >
+          Open
+        </button>
+      ) : null}
     </div>
   )
 }
