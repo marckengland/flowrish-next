@@ -1,0 +1,250 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import {
+  Briefcase,
+  Building2,
+  ExternalLink,
+  Loader2,
+  Mail,
+  MapPin,
+  Phone,
+  Trash2,
+  TrendingUp,
+} from 'lucide-react'
+
+import { Button } from '@/components/ui/button'
+import { useDeleteContactMutation } from '@/hooks/use-contacts'
+
+export interface ContactDetailLead {
+  id: string
+  firstName: string
+  lastName: string
+}
+
+export interface ContactDetailViewProps {
+  contact: {
+    id: string
+    firstName: string
+    lastName: string
+    email: string | null
+    phone: string | null
+    jobTitle: string | null
+    linkedinUrl: string | null
+    country: string | null
+    state: string | null
+    company: { id: string; name: string } | null
+  }
+  /** Leads this contact is linked to (via the LeadContact join table). */
+  leads: readonly ContactDetailLead[]
+  canManage: boolean
+}
+
+/**
+ * Read-only contact detail surface.
+ *
+ * Mirrors the company detail layout: header with quick-facts, then
+ * sections for the linked company and any associated leads. Edit lives
+ * on the contacts list inline form, so this surface stays read-only;
+ * delete is offered when the user has `contacts:write`.
+ *
+ * Validates: Requirement 19.1
+ */
+export function ContactDetailView({
+  contact,
+  leads,
+  canManage,
+}: ContactDetailViewProps): React.JSX.Element {
+  const router = useRouter()
+  const deleteMutation = useDeleteContactMutation()
+  const [error, setError] = useState<string | null>(null)
+
+  const fullName = `${contact.firstName} ${contact.lastName}`.trim()
+
+  function handleDelete(): void {
+    setError(null)
+    if (!confirm(`Delete contact "${fullName}"? This cannot be undone.`)) {
+      return
+    }
+    deleteMutation.mutate(contact.id, {
+      onSuccess: () => router.push('/contacts'),
+      onError: (err) =>
+        setError(err instanceof Error ? err.message : 'Couldn’t delete contact.'),
+    })
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <nav className="text-sm">
+        <Link
+          href="/contacts"
+          className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <span aria-hidden="true">←</span>
+          <span>Back to contacts</span>
+        </Link>
+      </nav>
+
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{fullName}</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            {contact.jobTitle ? (
+              <span className="flex items-center gap-1">
+                <Briefcase className="size-3.5" aria-hidden="true" />
+                {contact.jobTitle}
+              </span>
+            ) : null}
+            {contact.company ? (
+              <Link
+                href={`/companies/${contact.company.id}`}
+                className="flex items-center gap-1 hover:text-foreground hover:underline"
+              >
+                <Building2 className="size-3.5" aria-hidden="true" />
+                {contact.company.name}
+              </Link>
+            ) : null}
+            {contact.country || contact.state ? (
+              <span className="flex items-center gap-1">
+                <MapPin className="size-3.5" aria-hidden="true" />
+                {[contact.state, contact.country].filter(Boolean).join(', ')}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        {canManage ? (
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={handleDelete}
+            disabled={deleteMutation.isPending}
+          >
+            {deleteMutation.isPending ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                <span>Deleting…</span>
+              </>
+            ) : (
+              <>
+                <Trash2 className="size-3.5" aria-hidden="true" />
+                <span>Delete</span>
+              </>
+            )}
+          </Button>
+        ) : null}
+      </header>
+
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+
+      <section
+        aria-labelledby="contact-info"
+        className="rounded-md border bg-card"
+      >
+        <h2 id="contact-info" className="sr-only">
+          Contact information
+        </h2>
+        <dl className="divide-y text-sm">
+          <DetailRow icon={Mail} label="Email">
+            {contact.email ? (
+              <a
+                href={`mailto:${contact.email}`}
+                className="text-blue-600 hover:underline dark:text-blue-400"
+              >
+                {contact.email}
+              </a>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </DetailRow>
+          <DetailRow icon={Phone} label="Phone">
+            {contact.phone ? (
+              <a
+                href={`tel:${contact.phone}`}
+                className="text-blue-600 hover:underline dark:text-blue-400"
+              >
+                {contact.phone}
+              </a>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </DetailRow>
+          <DetailRow icon={ExternalLink} label="LinkedIn">
+            {contact.linkedinUrl ? (
+              <a
+                href={normalizeUrl(contact.linkedinUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline dark:text-blue-400"
+              >
+                {contact.linkedinUrl}
+              </a>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </DetailRow>
+        </dl>
+      </section>
+
+      <section aria-labelledby="contact-leads">
+        <h2
+          id="contact-leads"
+          className="mb-2 flex items-center gap-2 text-sm font-semibold"
+        >
+          <TrendingUp className="size-4" aria-hidden="true" />
+          Linked leads ({leads.length})
+        </h2>
+        {leads.length === 0 ? (
+          <p className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+            This contact isn’t linked to any leads yet.
+          </p>
+        ) : (
+          <ul className="divide-y rounded-md border">
+            {leads.map((lead) => (
+              <li key={lead.id}>
+                <Link
+                  href={`/leads/${lead.id}`}
+                  className="flex items-center justify-between px-3 py-2.5 text-sm transition-colors hover:bg-muted/40"
+                >
+                  <span className="font-medium">
+                    {lead.firstName} {lead.lastName}
+                  </span>
+                  <span className="text-xs text-muted-foreground">View →</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  )
+}
+
+interface DetailRowProps {
+  icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>
+  label: string
+  children: React.ReactNode
+}
+
+function DetailRow({ icon: Icon, label, children }: DetailRowProps) {
+  return (
+    <div className="grid grid-cols-[140px_1fr] items-center gap-3 px-4 py-2.5">
+      <dt className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <Icon className="size-3.5" aria-hidden />
+        {label}
+      </dt>
+      <dd>{children}</dd>
+    </div>
+  )
+}
+
+function normalizeUrl(input: string): string {
+  return /^https?:\/\//i.test(input) ? input : `https://${input}`
+}

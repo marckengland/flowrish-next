@@ -241,3 +241,39 @@ export async function getTasks(
     isOverdue: !task.isComplete && task.dueDate < now,
   })) as TaskWithOverdue[]
 }
+
+/**
+ * Retrieves a single task by id within an organization.
+ *
+ * - Returns the task with its lead and assignee included so the detail
+ *   page can render names without a second round-trip.
+ * - Computes the same `isOverdue` flag the list endpoint exposes so
+ *   detail and list views stay in sync.
+ *
+ * Throws `AppError('TASK_NOT_FOUND')` if the task does not exist (or is
+ * scoped to a different organization, which the tenant middleware
+ * already prevents from returning).
+ */
+export async function getTaskById(
+  id: string,
+  orgId: string,
+): Promise<TaskWithOverdue> {
+  const db = createTenantPrisma(orgId)
+  const task = await db.task.findFirst({
+    where: { id },
+    include: {
+      lead: { select: { id: true, firstName: true, lastName: true } },
+      assignee: { select: { id: true, name: true, email: true } },
+    },
+  })
+
+  if (!task) {
+    throw new AppError('TASK_NOT_FOUND', 'Task not found', 404)
+  }
+
+  const now = new Date()
+  return {
+    ...task,
+    isOverdue: !task.isComplete && task.dueDate < now,
+  } as TaskWithOverdue
+}

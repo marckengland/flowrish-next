@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Loader2, Trash2 } from 'lucide-react'
 
-import { cn } from '@/lib/utils'
 import { useContactsQuery, useDeleteContactMutation, type ContactListItem } from '@/hooks/use-contacts'
 import { Button } from '@/components/ui/button'
 
@@ -46,6 +46,7 @@ export function ContactTable({
   pageSize = 20,
 }: ContactTableProps): React.JSX.Element {
   const [currentSearch, setCurrentSearch] = useState(search ?? '')
+  const router = useRouter()
 
   const query = useContactsQuery({ search: currentSearch || undefined, companyId, page, pageSize })
   const contactsPage = query.data ?? initialData
@@ -109,11 +110,28 @@ export function ContactTable({
               </tr>
             ) : (
               rows.map((contact) => (
-                <tr key={contact.id} className="border-t transition-colors hover:bg-muted/30">
+                <tr
+                  key={contact.id}
+                  onClick={() => router.push(`/contacts/${contact.id}`)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && e.currentTarget === e.target) {
+                      e.preventDefault()
+                      router.push(`/contacts/${contact.id}`)
+                    }
+                  }}
+                  tabIndex={0}
+                  role="link"
+                  aria-label={`Open ${contact.firstName} ${contact.lastName}`}
+                  className="cursor-pointer border-t transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                >
                   <td className="px-3 py-2 font-medium">
-                    <span className="text-foreground">
+                    <Link
+                      href={`/contacts/${contact.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-foreground hover:underline focus-visible:underline"
+                    >
                       {contact.firstName} {contact.lastName}
-                    </span>
+                    </Link>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {contact.email ?? '—'}
@@ -131,7 +149,10 @@ export function ContactTable({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDelete(contact.id, `${contact.firstName} ${contact.lastName}`)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete(contact.id, `${contact.firstName} ${contact.lastName}`)
+                      }}
                       disabled={deleteMutation.isPending}
                       aria-label={`Delete ${contact.firstName} ${contact.lastName}`}
                     >

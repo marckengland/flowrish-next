@@ -6,6 +6,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { groupTasks, TaskList } from './task-list'
 import type { TaskItem } from '@/hooks/use-tasks'
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => '/tasks',
+}))
+
 /**
  * Unit tests for the task list — covers overdue highlighting, sort
  * order preservation, empty/error/loading states, and the inline
