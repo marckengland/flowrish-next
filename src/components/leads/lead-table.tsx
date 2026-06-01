@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -62,6 +63,7 @@ export function LeadTable({
   const filters = useFiltersStore((s) => s.leads)
   const [sortKey, setSortKey] = useState<SortKey>('createdAt')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const router = useRouter()
 
   const query = useLeadsQuery({ filters, page, pageSize })
   const leadsPage = query.data ?? initialData
@@ -176,11 +178,22 @@ export function LeadTable({
               sorted.map((lead) => (
                 <tr
                   key={lead.id}
-                  className="border-t transition-colors hover:bg-muted/30"
+                  onClick={() => router.push(`/leads/${lead.id}`)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && e.currentTarget === e.target) {
+                      e.preventDefault()
+                      router.push(`/leads/${lead.id}`)
+                    }
+                  }}
+                  tabIndex={0}
+                  role="link"
+                  aria-label={`Open ${fullName(lead)}`}
+                  className="cursor-pointer border-t transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   <td className="px-3 py-2 font-medium">
                     <Link
                       href={`/leads/${lead.id}`}
+                      onClick={(e) => e.stopPropagation()}
                       className="text-foreground hover:underline focus-visible:underline"
                     >
                       {fullName(lead)}

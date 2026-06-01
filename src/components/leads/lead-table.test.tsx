@@ -9,6 +9,14 @@ import { useFiltersStore } from '@/stores/filters'
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/leads',
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+    prefetch: vi.fn(),
+  }),
 }))
 
 function makeLead(overrides: Partial<LeadListItem>): LeadListItem {

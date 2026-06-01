@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Loader2, Trash2 } from 'lucide-react'
 
 import { useCompaniesQuery, useDeleteCompanyMutation, type CompanyListItem } from '@/hooks/use-companies'
@@ -42,6 +43,7 @@ export function CompanyTable({
   pageSize = 20,
 }: CompanyTableProps): React.JSX.Element {
   const [currentSearch, setCurrentSearch] = useState(search ?? '')
+  const router = useRouter()
 
   const query = useCompaniesQuery({ search: currentSearch || undefined, page, pageSize })
   const companiesPage = query.data ?? initialData
@@ -105,10 +107,24 @@ export function CompanyTable({
               </tr>
             ) : (
               rows.map((company) => (
-                <tr key={company.id} className="border-t transition-colors hover:bg-muted/30">
+                <tr
+                  key={company.id}
+                  onClick={() => router.push(`/companies/${company.id}`)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && e.currentTarget === e.target) {
+                      e.preventDefault()
+                      router.push(`/companies/${company.id}`)
+                    }
+                  }}
+                  tabIndex={0}
+                  role="link"
+                  aria-label={`Open ${company.name}`}
+                  className="cursor-pointer border-t transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                >
                   <td className="px-3 py-2 font-medium text-foreground">
                     <Link
                       href={`/companies/${company.id}`}
+                      onClick={(e) => e.stopPropagation()}
                       className="hover:underline"
                     >
                       {company.name}
@@ -123,6 +139,7 @@ export function CompanyTable({
                         href={company.website}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
                         className="text-primary hover:underline"
                       >
                         {new URL(company.website).hostname}
@@ -141,7 +158,10 @@ export function CompanyTable({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDelete(company.id, company.name)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete(company.id, company.name)
+                      }}
                       disabled={deleteMutation.isPending}
                       aria-label={`Delete ${company.name}`}
                     >
