@@ -111,6 +111,8 @@ export function CadenceList({
     })
   }, [enriched, search, sortField, sortDir])
 
+  const router = useRouter()
+
   function toggleSort(field: SortField): void {
     if (sortField === field) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -278,11 +280,26 @@ export function CadenceList({
               {filtered.map((cadence) => (
                 <tr
                   key={cadence.id}
-                  className="cursor-pointer transition-colors hover:bg-muted/40"
+                  onClick={() => router.push(`/cadences/${cadence.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      // Only intercept when the row itself is the event target
+                      // so taps on inner controls keep their own behavior.
+                      if (e.currentTarget === e.target) {
+                        e.preventDefault()
+                        router.push(`/cadences/${cadence.id}`)
+                      }
+                    }
+                  }}
+                  tabIndex={0}
+                  role="link"
+                  aria-label={`Open cadence ${cadence.name}`}
+                  className="cursor-pointer transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   <td className="px-4 py-3">
                     <Link
                       href={`/cadences/${cadence.id}`}
+                      onClick={(e) => e.stopPropagation()}
                       className="font-medium text-foreground hover:underline"
                     >
                       {cadence.name}

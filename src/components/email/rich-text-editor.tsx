@@ -445,6 +445,8 @@ function Toolbar({
           setShowColors((v) => !v)
           setShowFonts(false)
         }}
+        align="right"
+        contentClassName="w-56"
         trigger={
           <button
             type="button"
@@ -455,30 +457,35 @@ function Toolbar({
           </button>
         }
       >
-        <div className="grid grid-cols-5 gap-1">
-          {COLOR_OPTIONS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => {
-                editor.chain().focus().setColor(c).run()
-                setShowColors(false)
-              }}
-              className="size-5 rounded-full border hover:ring-2 hover:ring-ring hover:ring-offset-1"
-              style={{ backgroundColor: c }}
-              title={c}
-              aria-label={`Set text color to ${c}`}
-            />
-          ))}
+        <div className="flex flex-col gap-2">
+          <p className="px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Text color
+          </p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {COLOR_OPTIONS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => {
+                  editor.chain().focus().setColor(c).run()
+                  setShowColors(false)
+                }}
+                className="size-7 rounded-md border border-border/60 transition hover:scale-110 hover:border-foreground/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                style={{ backgroundColor: c }}
+                title={c}
+                aria-label={`Set text color to ${c}`}
+              />
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => {
               editor.chain().focus().unsetColor().run()
               setShowColors(false)
             }}
-            className="col-span-5 mt-1 rounded border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+            className="mt-1 rounded border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            Reset color
+            Reset to default
           </button>
         </div>
       </Popover>
@@ -621,13 +628,27 @@ interface PopoverProps {
   onToggle: () => void
   trigger: React.ReactNode
   children: React.ReactNode
+  /**
+   * Where to anchor the popover panel relative to the trigger.
+   * Defaults to "left" so existing call sites are unchanged.
+   */
+  align?: 'left' | 'right'
+  /** Extra classes for the popover panel (e.g. fixed widths). */
+  contentClassName?: string
 }
 
 /**
  * Tiny popover used for the font and color toolbars. Closes on outside
  * click so each can be dismissed without committing a selection.
  */
-function Popover({ open, onToggle, trigger, children }: PopoverProps) {
+function Popover({
+  open,
+  onToggle,
+  trigger,
+  children,
+  align = 'left',
+  contentClassName,
+}: PopoverProps) {
   const ref = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -652,7 +673,13 @@ function Popover({ open, onToggle, trigger, children }: PopoverProps) {
     <div ref={ref} className="relative">
       <div onClick={onToggle}>{trigger}</div>
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 rounded-md border bg-popover p-2 shadow-lg">
+        <div
+          className={cn(
+            'absolute top-full z-20 mt-1 rounded-md border bg-popover p-2 text-popover-foreground shadow-lg',
+            align === 'right' ? 'right-0' : 'left-0',
+            contentClassName,
+          )}
+        >
           {children}
         </div>
       )}
