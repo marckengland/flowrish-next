@@ -200,12 +200,41 @@ export function replacePersonalizationTags(
 }
 
 /**
- * Wraps email body content in a proper HTML document with base styling
- * for consistent rendering across email clients.
+ * Wraps email body content in a proper HTML document with base
+ * styling for consistent rendering across email clients.
+ *
+ * Email-client realities the wrapper accounts for:
+ *
+ *  1. **Outlook strips `<style>`** in many configurations, so we apply
+ *     the base typography directly to the `<body>` element via
+ *     `style="…"` rather than relying on the `<head>` block alone.
+ *  2. **Tailwind classes don't ship to the recipient** — the rich
+ *     editor outputs `class="text-blue-600 underline"` on links. We
+ *     post-process those into inline `style` attributes so links
+ *     stay blue/underlined even when no stylesheet is loaded.
+ *  3. **Outputs from the editor (TipTap) use semantic tags** —
+ *     `<strong>`, `<em>`, `<u>`, `<s>`, `<ul>`, `<ol>`, plus inline
+ *     `<span style="…">` for color, font-family, and font-size. These
+ *     are all preserved unchanged so the recipient sees identical
+ *     formatting to what the sender authored.
  *
  * Validates: Requirements 7.3
  */
 export function wrapHtmlEmail(body: string): string {
+  // The TipTap link extension applies a Tailwind class to anchors. We
+  // replicate the same look as inline style so the styling survives in
+  // mail clients that drop the `<style>` block.
+  const inlinedBody = body
+    .replace(
+      /<a\b([^>]*?)class="text-blue-600 underline"([^>]*)>/gi,
+      (_match, before, after) => {
+        // If the anchor already has a `style` attribute, don't double-apply.
+        const merged = `${before}${after}`
+        if (/style=/i.test(merged)) return `<a${merged}>`
+        return `<a${before}${after} style="color:#2563eb;text-decoration:underline;">`
+      },
+    )
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -222,12 +251,79 @@ export function wrapHtmlEmail(body: string): string {
   }
   a { color: #2563eb; text-decoration: none; }
   a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 24px; margin: 0 0 12px; }
+  p { margin: 0 0 12px; }
+  blockquote { border-left: 3px solid #d1d5db; margin: 0 0 12px; padding: 0 12px; color: #4b5563; }
 </style>
 </head>
-<body>
-${body}
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:14px;line-height:1.6;color:#333333;margin:0;padding:16px;">
+${inlinedBody}
 </body>
 </html>`
+}
+
+/**
+ * Cheap HTML→plain-text fallback used as the `text/plain` part of the
+ * `multipart/alternative` payload. Email clients that don't render
+ * HTML (or strip it for security) will show this version, so we want
+ * the same words and structure even if the formatting is gone.
+ *
+ * The transformation:
+ *   1. Drops `<style>` and `<script>` blocks entirely.
+ *   2. Translates block-level boundaries to newlines so paragraphs and
+ *      list items don't all run together.
+ *   3. Surfaces link targets as "text (url)" so recipients can still
+ *      see and click them.
+ *   4. Decodes the most common HTML entities.
+ *   5. Collapses runs of blank lines.
+ */
+export function htmlToPlainText(html: string): string {
+  // Strip script/style content entirely
+  let text = html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+
+  // Surface link targets so recipients without HTML can still click.
+  text = text.replace(
+    /<a\b[^>]*?href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi,
+    (_m, href, inner) => {
+      const innerText = String(inner).replace(/<[^>]+>/g, '').trim()
+      if (!innerText) return href as string
+      if (innerText === href) return innerText
+      return `${innerText} (${href})`
+    },
+  )
+
+  // Bullet list items
+  text = text.replace(/<li\b[^>]*>/gi, '\n• ')
+  text = text.replace(/<\/li>/gi, '')
+
+  // Block-level boundaries → newlines
+  text = text.replace(/<\/(p|div|h[1-6]|tr|li|ul|ol)>/gi, '\n')
+  text = text.replace(/<br\s*\/?\s*>/gi, '\n')
+
+  // Strip remaining tags
+  text = text.replace(/<[^>]+>/g, '')
+
+  // Decode the entities the editor is likely to emit
+  text = text
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_m, code) => String.fromCharCode(Number(code)))
+
+  // Collapse trailing whitespace per line, then collapse runs of blank lines.
+  text = text
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+$/g, ''))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  return text
 }
 
 /**
@@ -423,6 +519,15 @@ export async function sendEmail(
  * Builds a raw RFC 2822 email message and encodes it as base64url
  * for the Gmail API send endpoint.
  *
+ * The body is delivered as `multipart/alternative` with a `text/plain`
+ * fallback derived from the HTML — recipients on text-only clients
+ * (or accessibility tools that strip HTML for security) still see the
+ * same content, just without the formatting layer.
+ *
+ * Both parts are emitted with `quoted-printable` Content-Transfer-Encoding
+ * so non-ASCII characters (em dashes, smart quotes, accented names from
+ * personalization tags) survive transit unchanged.
+ *
  * `inReplyTo` (when supplied) sets the `In-Reply-To` and `References`
  * headers so the receiving client threads this message under the
  * referenced conversation (Requirement 7.3).
@@ -434,25 +539,25 @@ function buildRawEmail(
   htmlBody: string,
   inReplyTo: string | null = null,
 ): string {
-  const messageParts = [
+  const altBoundary = makeBoundary('alt')
+  const plainBody = htmlToPlainText(htmlBody)
+
+  const headers = [
     `From: ${from}`,
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodeMimeHeaderValue(subject)}`,
     'MIME-Version: 1.0',
-    'Content-Type: text/html; charset=utf-8',
+    `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
     ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`] : []),
-    '',
-    htmlBody,
   ]
 
-  const message = messageParts.join('\r\n')
+  const message = [
+    headers.join('\r\n'),
+    '',
+    buildMultipartAlternative(altBoundary, plainBody, htmlBody),
+  ].join('\r\n')
 
-  // Base64url encode (Gmail API requirement)
-  return Buffer.from(message)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
+  return base64UrlEncode(message)
 }
 
 /**
@@ -460,7 +565,9 @@ function buildRawEmail(
  * message body. The structure is:
  *
  *   multipart/mixed (top-level)
- *     ├── text/html (the wrapped email body)
+ *     ├── multipart/alternative
+ *     │     ├── text/plain (cheap fallback)
+ *     │     └── text/html  (the wrapped editor output)
  *     └── application/octet-stream … (one part per attachment, base64-encoded)
  *
  * Boundary tokens are randomized per call to avoid collisions with the
@@ -475,27 +582,28 @@ function buildRawEmailWithAttachments(
   attachments: readonly EmailAttachment[],
   inReplyTo: string | null = null,
 ): string {
-  const boundary = `flowrish_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`
+  const mixedBoundary = makeBoundary('mixed')
+  const altBoundary = makeBoundary('alt')
+  const plainBody = htmlToPlainText(htmlBody)
 
   const headers = [
     `From: ${from}`,
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodeMimeHeaderValue(subject)}`,
     'MIME-Version: 1.0',
-    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`,
     ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`] : []),
   ]
 
   const parts: string[] = []
 
-  // 1. Body part — text/html with the same wrapper used by the plain-body path.
+  // 1. Body wrapper — multipart/alternative with text/plain + text/html
   parts.push(
     [
-      `--${boundary}`,
-      'Content-Type: text/html; charset=utf-8',
-      'Content-Transfer-Encoding: 7bit',
+      `--${mixedBoundary}`,
+      `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
       '',
-      htmlBody,
+      buildMultipartAlternative(altBoundary, plainBody, htmlBody),
     ].join('\r\n'),
   )
 
@@ -513,7 +621,7 @@ function buildRawEmailWithAttachments(
       .trim() || 'attachment'
     parts.push(
       [
-        `--${boundary}`,
+        `--${mixedBoundary}`,
         `Content-Type: ${att.mimeType || 'application/octet-stream'}; name="${safeName}"`,
         `Content-Disposition: attachment; filename="${safeName}"`,
         'Content-Transfer-Encoding: base64',
@@ -527,13 +635,147 @@ function buildRawEmailWithAttachments(
     headers.join('\r\n'),
     '',
     parts.join('\r\n'),
-    `--${boundary}--`,
+    `--${mixedBoundary}--`,
     '',
   ].join('\r\n')
 
-  return Buffer.from(message)
+  return base64UrlEncode(message)
+}
+
+// ─── MIME helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Constructs the inner `multipart/alternative` payload shared between
+ * the plain-body and attachment-bearing send paths. Both subparts use
+ * `quoted-printable` encoding so non-ASCII characters survive intact.
+ */
+function buildMultipartAlternative(
+  boundary: string,
+  plainBody: string,
+  htmlBody: string,
+): string {
+  return [
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: quoted-printable',
+    '',
+    encodeQuotedPrintable(plainBody),
+    `--${boundary}`,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: quoted-printable',
+    '',
+    encodeQuotedPrintable(htmlBody),
+    `--${boundary}--`,
+  ].join('\r\n')
+}
+
+function makeBoundary(tag: string): string {
+  return `flowrish_${tag}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`
+}
+
+function base64UrlEncode(message: string): string {
+  return Buffer.from(message, 'utf8')
     .toString('base64')
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '')
+}
+
+/**
+ * Encodes an RFC 2047 "encoded-word" form for the Subject header so
+ * non-ASCII characters (smart quotes, em dashes, accented names from
+ * personalization tags) survive without mojibake. ASCII subjects pass
+ * through untouched.
+ */
+function encodeMimeHeaderValue(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  if (!/[^\x00-\x7F]/.test(value)) return value
+  const encoded = Buffer.from(value, 'utf8').toString('base64')
+  return `=?UTF-8?B?${encoded}?=`
+}
+
+/**
+ * RFC 2045 quoted-printable encoder. The output is safe to embed
+ * inside a MIME body part with `Content-Transfer-Encoding:
+ * quoted-printable`.
+ *
+ *  - Non-ASCII bytes and control characters are encoded as `=XX`.
+ *  - The literal `=` is encoded as `=3D`.
+ *  - Trailing whitespace on a line is encoded so it survives MTA
+ *    line-folding (otherwise some hops trim the final spaces).
+ *  - Lines are soft-wrapped at 76 chars with `=` continuation per the
+ *    RFC, and `\n` is normalized to `\r\n` for Gmail's RFC 5322 wire
+ *    expectations.
+ */
+function encodeQuotedPrintable(input: string): string {
+  const bytes = Buffer.from(input, 'utf8')
+  // Pass 1: encode each byte that needs encoding.
+  let encoded = ''
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i]
+    // Tab (9) and printable ASCII except `=` (61)
+    if (b === 9 || (b >= 32 && b <= 126 && b !== 61)) {
+      encoded += String.fromCharCode(b)
+    } else if (b === 13 && bytes[i + 1] === 10) {
+      // Preserve CRLF line breaks.
+      encoded += '\r\n'
+      i++
+    } else if (b === 10) {
+      encoded += '\r\n'
+    } else {
+      encoded += `=${b.toString(16).toUpperCase().padStart(2, '0')}`
+    }
+  }
+
+  // Pass 2: protect trailing whitespace so MTAs don't strip it, and
+  // soft-wrap to 76 columns. We split on the existing CRLFs so the
+  // wrapping logic doesn't merge separate lines.
+  const lines = encoded.split('\r\n').map((line) => {
+    // Encode trailing whitespace on the line.
+    if (line.length) {
+      const trail = line.match(/[ \t]+$/)
+      if (trail) {
+        const head = line.slice(0, -trail[0].length)
+        const encodedTrail = trail[0]
+          .split('')
+          .map((c) =>
+            c === ' '
+              ? '=20'
+              : '=09',
+          )
+          .join('')
+        line = head + encodedTrail
+      }
+    }
+    // Soft-wrap to 76 chars (75 + `=` continuation).
+    const wrapped: string[] = []
+    let i = 0
+    while (line.length - i > 75) {
+      // Don't split inside a `=XX` triplet — back off if needed.
+      let breakAt = i + 75
+      if (line[breakAt - 1] === '=') breakAt -= 1
+      else if (line[breakAt - 2] === '=') breakAt -= 2
+      wrapped.push(`${line.slice(i, breakAt)}=`)
+      i = breakAt
+    }
+    wrapped.push(line.slice(i))
+    return wrapped.join('\r\n')
+  })
+
+  return lines.join('\r\n')
+}
+
+
+/**
+ * Test-only re-export of the private MIME helpers. Lets the unit
+ * tests assert the on-the-wire shape (multipart parts, encodings,
+ * inlined link styles) without forcing us to make the helpers part of
+ * the public service API.
+ */
+export const __testing__ = {
+  buildRawEmail,
+  buildRawEmailWithAttachments,
+  encodeQuotedPrintable,
+  encodeMimeHeaderValue,
+  base64UrlEncode,
 }
