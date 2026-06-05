@@ -1065,3 +1065,307 @@ export async function handleMeetingBooked(
 
   return result.count
 }
+
+
+// ─── Schedule Service ────────────────────────────────────────────────────────
+
+/**
+ * Shape of a cadence schedule as exposed to API callers and the UI.
+ *
+ * `daysOfWeek` follows the JavaScript convention: 0=Sun, 1=Mon … 6=Sat.
+ * `startTimeMinutes` and `endTimeMinutes` are minutes from midnight in
+ * the schedule's `timezone` so DST shifts don't drag the window away
+ * from local business hours.
+ */
+export interface CadenceScheduleData {
+  id: string
+  cadenceId: string
+  name: string
+  daysOfWeek: number[]
+  startTimeMinutes: number
+  endTimeMinutes: number
+  timezone: string
+}
+
+const ALLOWED_DAYS = [0, 1, 2, 3, 4, 5, 6] as const
+
+/**
+ * Lightweight runtime check for an IANA timezone string. Defers to
+ * `Intl.DateTimeFormat` which throws when handed something unknown — we
+ * catch and rethrow as a 400 so the API layer surfaces a clean error
+ * rather than a stack trace.
+ */
+function assertValidTimezone(tz: string): void {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz })
+  } catch {
+    throw new AppError('VALIDATION_ERROR', `Invalid timezone: ${tz}`, 400)
+  }
+}
+
+/**
+ * Returns the cadence's send-window schedule. Returns `null` when
+ * the cadence has no explicit schedule (in which case the runner
+ * sends immediately, preserving the prior behaviour).
+ */
+export async function getCadenceSchedule(
+  cadenceId: string,
+  orgId: string,
+): Promise<CadenceScheduleData | null> {
+  if (!cadenceId) {
+    throw new AppError('VALIDATION_ERROR', 'Cadence ID is required', 400)
+  }
+  if (!orgId) {
+    throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
+  }
+
+  const db = createTenantPrisma(orgId)
+
+  const cadence = await db.cadence.findFirst({ where: { id: cadenceId } })
+  if (!cadence) {
+    throw new AppError('NOT_FOUND', 'Cadence not found', 404)
+  }
+
+  const schedule = await db.cadenceSchedule.findUnique({
+    where: { cadenceId },
+  })
+
+  if (!schedule) return null
+
+  return {
+    id: schedule.id,
+    cadenceId: schedule.cadenceId,
+    name: schedule.name,
+    daysOfWeek: schedule.daysOfWeek,
+    startTimeMinutes: schedule.startTimeMinutes,
+    endTimeMinutes: schedule.endTimeMinutes,
+    timezone: schedule.timezone,
+  }
+}
+
+export interface CadenceScheduleInput {
+  name?: string
+  daysOfWeek: number[]
+  startTimeMinutes: number
+  endTimeMinutes: number
+  timezone: string
+}
+
+/**
+ * Creates or updates the schedule for a cadence (one-to-one). The
+ * runner consults this record before firing each step; outside the
+ * configured days/hours the enrollment sleeps until the next allowed
+ * window opens.
+ *
+ * Validation:
+ * - daysOfWeek must be a non-empty subset of 0..6
+ * - start/end minutes must be 0..1439 and start < end
+ * - timezone must parse via `Intl.DateTimeFormat`
+ *
+ * Validates: Requirement 6.10 (schedule constraints)
+ */
+export async function setCadenceSchedule(
+  cadenceId: string,
+  input: CadenceScheduleInput,
+  orgId: string,
+): Promise<CadenceScheduleData> {
+  if (!cadenceId) {
+    throw new AppError('VALIDATION_ERROR', 'Cadence ID is required', 400)
+  }
+  if (!orgId) {
+    throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
+  }
+
+  const db = createTenantPrisma(orgId)
+
+  const cadence = await db.cadence.findFirst({ where: { id: cadenceId } })
+  if (!cadence) {
+    throw new AppError('NOT_FOUND', 'Cadence not found', 404)
+  }
+
+  // Normalize and validate days
+  const days = Array.from(new Set(input.daysOfWeek)).sort((a, b) => a - b)
+  if (days.length === 0) {
+    throw new AppError(
+      'VALIDATION_ERROR',
+      'Schedule must include at least one day',
+      400,
+    )
+  }
+  for (const d of days) {
+    if (!ALLOWED_DAYS.includes(d as (typeof ALLOWED_DAYS)[number])) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        `Invalid day-of-week ${d} (must be 0–6)`,
+        400,
+      )
+    }
+  }
+
+  // Validate time window
+  if (
+    !Number.isInteger(input.startTimeMinutes)
+    || input.startTimeMinutes < 0
+    || input.startTimeMinutes > 1439
+  ) {
+    throw new AppError(
+      'VALIDATION_ERROR',
+      'startTimeMinutes must be an integer in 0..1439',
+      400,
+    )
+  }
+  if (
+    !Number.isInteger(input.endTimeMinutes)
+    || input.endTimeMinutes < 0
+    || input.endTimeMinutes > 1439
+  ) {
+    throw new AppError(
+      'VALIDATION_ERROR',
+      'endTimeMinutes must be an integer in 0..1439',
+      400,
+    )
+  }
+  if (input.startTimeMinutes >= input.endTimeMinutes) {
+    throw new AppError(
+      'VALIDATION_ERROR',
+      'startTimeMinutes must be earlier than endTimeMinutes',
+      400,
+    )
+  }
+
+  assertValidTimezone(input.timezone)
+
+  const name = (input.name ?? '').trim() || 'Default schedule'
+
+  const upserted = await db.cadenceSchedule.upsert({
+    where: { cadenceId },
+    create: tenantData({
+      cadenceId,
+      name,
+      daysOfWeek: days,
+      startTimeMinutes: input.startTimeMinutes,
+      endTimeMinutes: input.endTimeMinutes,
+      timezone: input.timezone,
+    }),
+    update: {
+      name,
+      daysOfWeek: days,
+      startTimeMinutes: input.startTimeMinutes,
+      endTimeMinutes: input.endTimeMinutes,
+      timezone: input.timezone,
+    },
+  })
+
+  return {
+    id: upserted.id,
+    cadenceId: upserted.cadenceId,
+    name: upserted.name,
+    daysOfWeek: upserted.daysOfWeek,
+    startTimeMinutes: upserted.startTimeMinutes,
+    endTimeMinutes: upserted.endTimeMinutes,
+    timezone: upserted.timezone,
+  }
+}
+
+/**
+ * Removes the schedule from a cadence. After deletion the runner
+ * resumes immediate execution (no time-of-day gating).
+ */
+export async function deleteCadenceSchedule(
+  cadenceId: string,
+  orgId: string,
+): Promise<void> {
+  if (!cadenceId) {
+    throw new AppError('VALIDATION_ERROR', 'Cadence ID is required', 400)
+  }
+  if (!orgId) {
+    throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
+  }
+
+  const db = createTenantPrisma(orgId)
+
+  const cadence = await db.cadence.findFirst({ where: { id: cadenceId } })
+  if (!cadence) {
+    throw new AppError('NOT_FOUND', 'Cadence not found', 404)
+  }
+
+  await db.cadenceSchedule.deleteMany({ where: { cadenceId } })
+}
+
+/**
+ * Computes the earliest moment at or after `from` when a cadence step
+ * is allowed to run, given a schedule. Returns `from` itself when the
+ * given moment already lies inside the schedule window.
+ *
+ * Pure function — exported so the Inngest runner and the schedule UI
+ * preview can share the logic.
+ */
+export function computeNextAllowedRunTime(
+  schedule: Pick<
+    CadenceScheduleData,
+    'daysOfWeek' | 'startTimeMinutes' | 'endTimeMinutes' | 'timezone'
+  >,
+  from: Date,
+): Date {
+  // Search up to 8 days forward — enough to skip a fully-disabled week
+  // and land on the next enabled day. We compare in the schedule's
+  // timezone using a fixed `en-US` locale so we get a stable, parseable
+  // string regardless of the server locale.
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: schedule.timezone,
+    hour12: false,
+    weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  const dayMap: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  }
+
+  for (let offset = 0; offset < 8; offset++) {
+    const candidate = new Date(from.getTime() + offset * 24 * 60 * 60 * 1000)
+    const parts = fmt.formatToParts(candidate)
+    const partLookup: Record<string, string> = {}
+    for (const p of parts) {
+      partLookup[p.type] = p.value
+    }
+    const weekday = dayMap[partLookup.weekday]
+    if (weekday === undefined) continue
+    if (!schedule.daysOfWeek.includes(weekday)) continue
+
+    const hour = Number(partLookup.hour)
+    const minute = Number(partLookup.minute)
+    const localMinutes = hour * 60 + minute
+
+    if (offset === 0 && localMinutes >= schedule.startTimeMinutes
+      && localMinutes < schedule.endTimeMinutes) {
+      // Already inside the window today — go now.
+      return from
+    }
+
+    if (offset === 0 && localMinutes >= schedule.endTimeMinutes) {
+      // Past today's window; keep walking.
+      continue
+    }
+
+    // Earlier than the window today (offset 0) or any time on a future
+    // allowed day: schedule for the start of that day's window.
+    const offsetMinutes =
+      schedule.startTimeMinutes - localMinutes + offset * 24 * 60
+    return new Date(from.getTime() + offsetMinutes * 60 * 1000)
+  }
+
+  // Should be unreachable when schedule.daysOfWeek is non-empty, but
+  // fall back to running now rather than blocking the runner forever.
+  return from
+}

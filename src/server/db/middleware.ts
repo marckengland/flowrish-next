@@ -14,6 +14,7 @@ export const TENANT_SCOPED_MODELS = [
   'Pipeline',
   'Cadence',
   'CadenceEnrollment',
+  'CadenceSchedule',
   'StepExecutionLog',
   'ScoringRule',
   'ScoreDecayConfig',

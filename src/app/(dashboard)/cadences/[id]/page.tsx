@@ -16,6 +16,7 @@ import {
 } from '@/components/cadences/cadence-analytics'
 import { StatusBadge } from '@/components/cadences/cadence-list'
 import { CadenceSettings } from '@/components/cadences/cadence-settings'
+import { CadenceScheduleEditor } from '@/components/cadences/cadence-schedule-editor'
 import type {
   CadenceAnalytics,
   CadenceDetail,
@@ -180,6 +181,25 @@ export default async function CadenceDetailPage({
 
   const isArchived = cadence.status === 'ARCHIVED'
 
+  // Surface the cadence's send-window schedule on the Schedule tab.
+  // Returns `null` when none is configured — the editor renders the
+  // sensible defaults (Mon–Fri, 9–5, browser timezone) and saving a
+  // fresh schedule creates the row.
+  const scheduleRecord = await db.cadenceSchedule.findUnique({
+    where: { cadenceId: cadence.id },
+  })
+  const initialSchedule = scheduleRecord
+    ? {
+        id: scheduleRecord.id,
+        cadenceId: scheduleRecord.cadenceId,
+        name: scheduleRecord.name,
+        daysOfWeek: scheduleRecord.daysOfWeek,
+        startTimeMinutes: scheduleRecord.startTimeMinutes,
+        endTimeMinutes: scheduleRecord.endTimeMinutes,
+        timezone: scheduleRecord.timezone,
+      }
+    : null
+
   return (
     <div className="flex flex-col gap-5">
       <nav className="text-sm">
@@ -254,6 +274,17 @@ export default async function CadenceDetailPage({
                 initialAnalytics={initialAnalytics}
                 steps={serializedSteps}
                 enrollments={serializedEnrollments}
+              />
+            ),
+          },
+          {
+            value: 'schedule',
+            label: 'Schedule',
+            content: (
+              <CadenceScheduleEditor
+                cadenceId={cadence.id}
+                initialSchedule={initialSchedule}
+                canManage={canManage && !isArchived}
               />
             ),
           },

@@ -23,6 +23,9 @@ const mockDb = {
   cadenceStep: {
     findFirst: vi.fn(),
   },
+  cadenceSchedule: {
+    findUnique: vi.fn(),
+  },
   stepExecutionLog: {
     create: vi.fn(),
   },
@@ -59,6 +62,9 @@ vi.mock('@/lib/supabase/server', () => ({
 const mockCompleteEnrollment = vi.fn()
 vi.mock('@/server/services/cadences', () => ({
   completeEnrollment: (...args: unknown[]) => mockCompleteEnrollment(...args),
+  computeNextAllowedRunTime: vi.fn(
+    (_schedule: unknown, from: Date) => from,
+  ),
 }))
 
 const mockInngestSend = vi.fn()
@@ -100,6 +106,7 @@ function createMockStep() {
   const stepFn = {
     run: vi.fn(async (_name: string, fn: () => Promise<unknown>) => fn()),
     sleep: vi.fn(),
+    sleepUntil: vi.fn(),
   }
   return stepFn
 }
@@ -112,6 +119,9 @@ const handler = (cadenceStepFunction as any).handler
 describe('Cadence Step Execution Function', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Default: no schedule configured. Tests that need to exercise the
+    // schedule gating override this in their own arrange step.
+    mockDb.cadenceSchedule.findUnique.mockResolvedValue(null)
   })
 
   describe('function configuration', () => {

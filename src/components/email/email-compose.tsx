@@ -1,9 +1,10 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import {
   Loader2,
   Mail,
+  MailPlus,
   Paperclip,
   Send,
   X,
@@ -13,6 +14,19 @@ import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/email/rich-text-editor'
 import { EmailGenerator } from '@/components/ai/email-generator'
 import { cn } from '@/lib/utils'
+
+/**
+ * Latest-thread shape consumed by `EmailCompose` so the UI can offer
+ * "reply on the existing thread" by default, falling back to "new
+ * thread" only when the user explicitly opts out.
+ */
+export interface LatestEmailThread {
+  threadId: string
+  /** Most recent subject on the thread (rendered as "Re: …"). */
+  subject: string
+  /** ISO timestamp of the latest message — drives the helper hint. */
+  lastSentAt?: string
+}
 
 export interface EmailComposeProps {
   /** The lead to send the email to. */
@@ -27,11 +41,21 @@ export interface EmailComposeProps {
   defaultBody?: string
   /**
    * When provided, the email is sent as a reply on this Gmail thread.
-   * The subject is locked and prefixed with "Re:" automatically.
+   * The subject is locked and prefixed with "Re:" automatically. Used
+   * when callers want to force a specific reply target (e.g. clicking
+   * "Reply" inside an `EmailThread`).
    */
   replyToThreadId?: string
   /** Subject of the latest message on the thread, used to seed "Re:" subject. */
   replySubject?: string
+  /**
+   * Latest thread that exists for this lead. When present and no
+   * explicit `replyToThreadId` has been supplied, the form defaults
+   * to replying on this thread; the user can flip a toggle to start
+   * a new conversation. When absent, the form starts in new-thread
+   * mode (the original behaviour).
+   */
+  latestThread?: LatestEmailThread
   /** Called after a successful send. */
   onSent?: (result: {
     messageId: string
@@ -84,13 +108,36 @@ export function EmailCompose({
   defaultBody = '',
   replyToThreadId,
   replySubject,
+  latestThread,
   onSent,
   className,
   alwaysOpen = true,
 }: EmailComposeProps): React.JSX.Element {
-  const isReply = Boolean(replyToThreadId)
+  // When the caller supplies an explicit `replyToThreadId` (e.g. from
+  // the EmailThread "Reply" button), the form is locked to that
+  // thread. Otherwise we default to the lead's most recent thread —
+  // user can flip "Start new thread" to override. This mirrors how
+  // mail clients usually keep conversations together by default.
+  const initialThreadMode: 'reply' | 'new' = replyToThreadId
+    ? 'reply'
+    : latestThread
+      ? 'reply'
+      : 'new'
+  const [threadMode, setThreadMode] = useState<'reply' | 'new'>(initialThreadMode)
+
+  const activeThreadId = replyToThreadId
+    ?? (threadMode === 'reply' ? latestThread?.threadId : undefined)
+  const activeReplySubject = replyToThreadId
+    ? replySubject
+    : threadMode === 'reply'
+      ? latestThread?.subject
+      : undefined
+
+  const isReply = Boolean(activeThreadId)
+  const replyLocked = Boolean(replyToThreadId)
+
   const initialSubject = isReply
-    ? prefixReplySubject(defaultSubject || replySubject || '')
+    ? prefixReplySubject(defaultSubject || activeReplySubject || '')
     : defaultSubject
 
   const [open, setOpen] = useState(alwaysOpen)
@@ -106,8 +153,24 @@ export function EmailCompose({
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>): void {
-    const files = Array.from(event.target.files ?? [])
+  // When the user toggles thread mode, re-prefix the subject with "Re:"
+  // (or strip it) so the field reflects the actual outgoing subject.
+  // We don't touch user-typed customizations beyond the prefix.
+  useEffect(() => {
+    setSubject((current) => {
+      if (isReply) {
+        return prefixReplySubject(
+          stripReplyPrefix(current) || activeReplySubject || '',
+        )
+      }
+      return stripReplyPrefix(current)
+    })
+    // Intentionally only respond to thread-mode flips; the user's own
+    // edits should not bounce through this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadMode, replyLocked])
+
+  function appendFiles(files: readonly File[]): void {
     const accepted: UploadedAttachment[] = []
     const rejected: string[] = []
     for (const file of files) {
@@ -117,10 +180,17 @@ export function EmailCompose({
       }
       accepted.push({ file, status: 'pending' })
     }
-    setAttachments((prev) => [...prev, ...accepted])
+    if (accepted.length > 0) {
+      setAttachments((prev) => [...prev, ...accepted])
+    }
     if (rejected.length > 0) {
       setError(`Skipped: ${rejected.join(', ')}`)
     }
+  }
+
+  function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>): void {
+    const files = Array.from(event.target.files ?? [])
+    appendFiles(files)
     event.target.value = ''
   }
 
@@ -166,7 +236,7 @@ export function EmailCompose({
               leadId,
               subject: subject.trim(),
               body: body.trim(),
-              ...(replyToThreadId ? { threadId: replyToThreadId } : {}),
+              ...(activeThreadId ? { threadId: activeThreadId } : {}),
             }),
           )
           for (const att of attachments) {
@@ -189,7 +259,7 @@ export function EmailCompose({
               leadId,
               subject: subject.trim(),
               body: body.trim(),
-              ...(replyToThreadId ? { threadId: replyToThreadId } : {}),
+              ...(activeThreadId ? { threadId: activeThreadId } : {}),
             }),
           })
         }
@@ -270,6 +340,47 @@ export function EmailCompose({
         )}
       </div>
 
+      {/* Thread-mode toggle — only shown when the lead already has a
+          recent thread and the caller hasn't locked the form to a
+          specific reply target. Lets the user opt out of "reply on
+          existing thread" when they want to start a fresh subject. */}
+      {latestThread && !replyLocked && (
+        <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+          <MailPlus
+            className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <div className="flex-1">
+            {threadMode === 'reply' ? (
+              <>
+                <p className="font-medium text-foreground">
+                  Replying on existing thread
+                </p>
+                <p className="mt-0.5 truncate text-muted-foreground">
+                  {latestThread.subject}
+                </p>
+              </>
+            ) : (
+              <p className="font-medium text-foreground">
+                Starting a new thread
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              setThreadMode((m) => (m === 'reply' ? 'new' : 'reply'))
+            }
+            className="shrink-0 rounded border bg-background px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
+            disabled={isPending}
+          >
+            {threadMode === 'reply'
+              ? 'Start new thread'
+              : 'Reply on existing thread'}
+          </button>
+        </div>
+      )}
+
       {/* To field (read-only) */}
       <div className="flex items-center gap-2 text-sm">
         <Mail className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -317,6 +428,7 @@ export function EmailCompose({
           key={editorKey}
           defaultValue={defaultBody}
           onChange={(html) => setBody(html)}
+          onFilesDropped={appendFiles}
           placeholder="Write your email…"
           minHeight="180px"
         />
@@ -447,6 +559,15 @@ function prefixReplySubject(subject: string): string {
   const trimmed = subject.trim()
   if (!trimmed) return 'Re:'
   return /^re:\s/i.test(trimmed) ? trimmed : `Re: ${trimmed}`
+}
+
+/**
+ * Strips a leading `Re:` prefix from a subject. Used when toggling
+ * away from reply mode so the subject doesn't keep accumulating
+ * prefixes if the user flips back and forth.
+ */
+function stripReplyPrefix(subject: string): string {
+  return subject.replace(/^\s*re:\s*/i, '').trim()
 }
 
 function formatFileSize(bytes: number): string {

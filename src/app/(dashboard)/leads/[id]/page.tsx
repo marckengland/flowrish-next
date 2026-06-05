@@ -8,6 +8,7 @@ import { getLeadAccessFilter } from '@/server/services/access'
 import { getLeadById } from '@/server/services/leads'
 import { getActivitiesByLead } from '@/server/services/activities'
 import { getOrCreateDefaultPipeline } from '@/server/services/pipeline'
+import { createTenantPrisma } from '@/server/db/middleware'
 import { AppError } from '@/lib/errors'
 
 import { LeadConvert } from '@/components/leads/lead-convert'
@@ -78,6 +79,37 @@ export default async function LeadDetailPage({
     getActivitiesByLead(id, session.organizationId),
     getOrCreateDefaultPipeline(session.organizationId),
   ])
+
+  // Look up the lead's most recent email thread so the compose form
+  // can default to "reply on existing thread" — matches the typical
+  // mail-client behaviour the original Flowrish app shipped. We only
+  // surface the toggle when a thread exists and the lead has an email.
+  let latestThread: {
+    threadId: string
+    subject: string
+    lastSentAt: string
+  } | undefined
+  if (lead.email) {
+    const tenantDb = createTenantPrisma(session.organizationId)
+    const latestMessage = await tenantDb.emailMessage.findFirst({
+      where: {
+        threadId: { not: null },
+        OR: [
+          { fromEmail: { equals: lead.email, mode: 'insensitive' } },
+          { toEmail: { equals: lead.email, mode: 'insensitive' } },
+        ],
+      },
+      orderBy: { sentAt: 'desc' },
+      select: { threadId: true, subject: true, sentAt: true },
+    })
+    if (latestMessage?.threadId) {
+      latestThread = {
+        threadId: latestMessage.threadId,
+        subject: latestMessage.subject,
+        lastSentAt: latestMessage.sentAt.toISOString(),
+      }
+    }
+  }
 
   const stages: LeadFormStage[] = pipeline.stages
     .slice()
@@ -184,6 +216,7 @@ export default async function LeadDetailPage({
             leadName={`${lead.firstName} ${lead.lastName}`.trim()}
             leadEmail={lead.email}
             initialActivities={initialActivities}
+            latestThread={latestThread}
             contacts={(lead.contacts ?? []).map((entry) => ({
               contact: {
                 id: entry.contact.id,

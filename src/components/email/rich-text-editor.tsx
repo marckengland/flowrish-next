@@ -1,6 +1,7 @@
 'use client'
 
 import { useEditor, EditorContent, type Editor } from '@tiptap/react'
+import { Mark, mergeAttributes } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
@@ -42,6 +43,14 @@ export interface RichTextEditorProps {
    * email/cadence body editors get the full experience without extra props.
    */
   enablePersonalization?: boolean
+  /**
+   * Called when the user drops or pastes files into the editor. The
+   * parent decides what to do — typically appending them to an
+   * outgoing email's attachment list. The default behaviour (no
+   * handler supplied) is to do nothing so the editor doesn't try to
+   * embed binary data into the document.
+   */
+  onFilesDropped?: (files: readonly File[]) => void
 }
 
 const FONT_OPTIONS = [
@@ -51,6 +60,24 @@ const FONT_OPTIONS = [
   { label: 'Arial', value: 'Arial, Helvetica, sans-serif' },
   { label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
   { label: 'Courier', value: '"Courier New", Courier, monospace' },
+] as const
+
+/**
+ * Pixel font sizes the toolbar exposes. These values match the
+ * inline-style `font-size` attribute the FontSize extension writes,
+ * so the dropdown is a perfect round-trip with the editor's current
+ * mark state.
+ */
+const FONT_SIZE_OPTIONS = [
+  { label: 'Default', value: '' },
+  { label: '12px', value: '12px' },
+  { label: '14px', value: '14px' },
+  { label: '16px', value: '16px' },
+  { label: '18px', value: '18px' },
+  { label: '20px', value: '20px' },
+  { label: '24px', value: '24px' },
+  { label: '28px', value: '28px' },
+  { label: '32px', value: '32px' },
 ] as const
 
 const COLOR_OPTIONS = [
@@ -67,11 +94,79 @@ const COLOR_OPTIONS = [
 ] as const
 
 /**
- * Personalization tags supported by the email send pipeline. Imported
- * from `@/lib/personalization-tags` so the list of available tokens
- * here always matches the substitutions the email service performs at
- * send time — adding or renaming a tag in one place updates the other.
+ * TipTap doesn't ship a font-size extension. We layer one on top of
+ * the existing `TextStyle` mark — which is already loaded for color
+ * and font-family — by augmenting it with a `fontSize` attribute and
+ * exposing `setFontSize` / `unsetFontSize` commands.
+ *
+ * Storing the size as an inline `style="font-size: …"` keeps the
+ * output compatible with email clients (the wrapper service still
+ * inlines and sanitizes the body) without introducing a new mark.
  */
+const FontSize = Mark.create<Record<string, never>>({
+  name: 'fontSize',
+
+  addOptions() {
+    return {}
+  },
+
+  addAttributes() {
+    return {
+      size: {
+        default: null,
+        parseHTML: (element) => {
+          return (element as HTMLElement).style.fontSize || null
+        },
+        renderHTML: (attributes) => {
+          if (!attributes.size) return {}
+          return { style: `font-size: ${attributes.size}` }
+        },
+      },
+    }
+  },
+
+  parseHTML() {
+    return [
+      {
+        style: 'font-size',
+        getAttrs: (value) => {
+          if (!value) return false
+          return { size: value }
+        },
+      },
+    ]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes), 0]
+  },
+
+  addCommands() {
+    return {
+      setFontSize:
+        (size: string) =>
+        ({ chain }) => {
+          return chain().setMark('fontSize', { size }).run()
+        },
+      unsetFontSize:
+        () =>
+        ({ chain }) => {
+          return chain().unsetMark('fontSize').run()
+        },
+    }
+  },
+})
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    fontSize: {
+      /** Apply the given CSS font-size (e.g. "16px") to the selection. */
+      setFontSize: (size: string) => ReturnType
+      /** Clear any font-size mark on the selection. */
+      unsetFontSize: () => ReturnType
+    }
+  }
+}
 
 /**
  * Rich text editor for email composition.
@@ -79,13 +174,14 @@ const COLOR_OPTIONS = [
  * Features:
  * - Bold / Italic / Underline / Strikethrough
  * - Bulleted and ordered lists
- * - Font family + text color (popovers)
+ * - Font family + font size + text color (popovers)
  * - Hyperlink (highlight text → add URL) and unlink
  * - Personalization tag insertion via toolbar button, chip row, and an
  *   inline autocomplete that fires when the user types `{{`. Suggestions
  *   support arrow-key navigation, Tab/Enter to commit, Escape to cancel.
  * - Optional preview pane that renders the body with sample tag values
  *   so users can sanity-check before sending.
+ * - Optional drag-and-drop attachment forwarding via `onFilesDropped`
  *
  * Outputs clean HTML for the email render pipeline.
  */
@@ -96,12 +192,14 @@ export function RichTextEditor({
   className,
   minHeight = '200px',
   enablePersonalization = true,
+  onFilesDropped,
 }: RichTextEditorProps): React.JSX.Element {
   const [tagState, setTagState] = useState<{
     open: boolean
     filter: string
     selected: number
   }>(() => ({ open: false, filter: '', selected: 0 }))
+  const [isDragOver, setIsDragOver] = useState(false)
 
   const filteredTags = PERSONALIZATION_TAGS.filter((t) => {
     const q = tagState.filter.toLowerCase()
@@ -124,6 +222,7 @@ export function RichTextEditor({
       TextStyle,
       Color,
       FontFamily,
+      FontSize,
       Link.configure({
         openOnClick: false,
         HTMLAttributes: { class: 'text-blue-600 underline' },
@@ -154,9 +253,6 @@ export function RichTextEditor({
         setTagState({ open: true, filter: match[1], selected: 0 })
       } else {
         setTagState((prev) =>
-          // Keep the toolbar-opened panel visible if the user opened it
-          // explicitly (filter empty). Only auto-close when the inline
-          // trigger goes away.
           prev.filter ? { open: false, filter: '', selected: 0 } : prev,
         )
       }
@@ -172,7 +268,6 @@ export function RichTextEditor({
       )
       const match = text.match(/\{\{([^}]*)$/)
       if (match) {
-        // Replace the in-progress `{{xyz` token with the chosen tag.
         const deleteFrom = editor.state.selection.from - match[0].length
         editor
           .chain()
@@ -242,8 +337,59 @@ export function RichTextEditor({
     )
   }
 
+  /**
+   * Drag-drop forwarding. We don't try to embed binary content in the
+   * TipTap document — instead we hand the files up to the parent so
+   * they can be added to the email's attachment list (or dropped on
+   * the floor when the parent doesn't supply a handler).
+   *
+   * We deliberately call `preventDefault` only when a handler is
+   * registered, otherwise the browser's native paste/drop behaviour
+   * (e.g. dropping a text file as inline text) still works.
+   */
+  function handleDragOver(event: React.DragEvent<HTMLDivElement>) {
+    if (!onFilesDropped) return
+    if (event.dataTransfer.types.includes('Files')) {
+      event.preventDefault()
+      setIsDragOver(true)
+    }
+  }
+  function handleDragLeave(event: React.DragEvent<HTMLDivElement>) {
+    if (!onFilesDropped) return
+    // Ignore drag-leaves that bubble up from children inside the panel.
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      return
+    }
+    setIsDragOver(false)
+  }
+  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+    if (!onFilesDropped) return
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    setIsDragOver(false)
+    const files = Array.from(event.dataTransfer.files)
+    if (files.length > 0) onFilesDropped(files)
+  }
+  function handlePaste(event: React.ClipboardEvent<HTMLDivElement>) {
+    if (!onFilesDropped) return
+    const files = Array.from(event.clipboardData.files)
+    if (files.length === 0) return
+    event.preventDefault()
+    onFilesDropped(files)
+  }
+
   return (
-    <div className={cn('flex flex-col rounded-md border', className)}>
+    <div
+      className={cn(
+        'relative flex flex-col rounded-md border transition-colors',
+        isDragOver && 'border-primary ring-1 ring-primary/30',
+        className,
+      )}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onPaste={handlePaste}
+    >
       <Toolbar
         editor={editor}
         enablePersonalization={enablePersonalization}
@@ -284,6 +430,16 @@ export function RichTextEditor({
           <p className="pointer-events-none absolute left-3 top-2 text-sm text-muted-foreground">
             {placeholder}
           </p>
+        )}
+
+        {/* Drop overlay surfaces clearly when the user is dragging files in */}
+        {isDragOver && onFilesDropped && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-primary/5 text-sm font-medium text-primary"
+          >
+            Drop files to attach
+          </div>
         )}
 
         {/* Inline autocomplete dropdown — appears when the user types `{{` */}
@@ -349,6 +505,7 @@ function Toolbar({
   const [linkUrl, setLinkUrl] = useState('')
   const [showFonts, setShowFonts] = useState(false)
   const [showColors, setShowColors] = useState(false)
+  const [showSizes, setShowSizes] = useState(false)
 
   const setLink = useCallback(() => {
     if (!linkUrl) {
@@ -363,6 +520,10 @@ function Toolbar({
     setLinkUrl('')
   }, [editor, linkUrl])
 
+  const currentFontSize =
+    (editor.getAttributes('fontSize') as { size?: string } | undefined)?.size
+    ?? ''
+
   return (
     <div className="flex flex-wrap items-center gap-0.5 border-b bg-muted/30 px-2 py-1">
       {/* Font family */}
@@ -371,6 +532,7 @@ function Toolbar({
         onToggle={() => {
           setShowFonts((v) => !v)
           setShowColors(false)
+          setShowSizes(false)
         }}
         trigger={
           <button
@@ -400,6 +562,52 @@ function Toolbar({
               style={{ fontFamily: f.value }}
             >
               {f.label}
+            </button>
+          ))}
+        </div>
+      </Popover>
+
+      {/* Font size */}
+      <Popover
+        open={showSizes}
+        onToggle={() => {
+          setShowSizes((v) => !v)
+          setShowFonts(false)
+          setShowColors(false)
+        }}
+        trigger={
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Font size"
+          >
+            <span className="font-mono">A</span>
+            <span className="text-[10px] tabular-nums">
+              {currentFontSize || 'auto'}
+            </span>
+          </button>
+        }
+      >
+        <div className="flex flex-col">
+          {FONT_SIZE_OPTIONS.map((option) => (
+            <button
+              key={option.label}
+              type="button"
+              onClick={() => {
+                if (option.value === '') {
+                  editor.chain().focus().unsetFontSize().run()
+                } else {
+                  editor.chain().focus().setFontSize(option.value).run()
+                }
+                setShowSizes(false)
+              }}
+              className={cn(
+                'rounded px-3 py-1.5 text-left text-xs hover:bg-muted',
+                currentFontSize === option.value && 'bg-muted',
+              )}
+              style={{ fontSize: option.value || undefined }}
+            >
+              {option.label}
             </button>
           ))}
         </div>
@@ -444,9 +652,8 @@ function Toolbar({
         onToggle={() => {
           setShowColors((v) => !v)
           setShowFonts(false)
+          setShowSizes(false)
         }}
-        align="right"
-        contentClassName="w-56"
         trigger={
           <button
             type="button"
@@ -457,35 +664,30 @@ function Toolbar({
           </button>
         }
       >
-        <div className="flex flex-col gap-2">
-          <p className="px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Text color
-          </p>
-          <div className="grid grid-cols-5 gap-1.5">
-            {COLOR_OPTIONS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => {
-                  editor.chain().focus().setColor(c).run()
-                  setShowColors(false)
-                }}
-                className="size-7 rounded-md border border-border/60 transition hover:scale-110 hover:border-foreground/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                style={{ backgroundColor: c }}
-                title={c}
-                aria-label={`Set text color to ${c}`}
-              />
-            ))}
-          </div>
+        <div className="grid grid-cols-5 gap-1">
+          {COLOR_OPTIONS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => {
+                editor.chain().focus().setColor(c).run()
+                setShowColors(false)
+              }}
+              className="size-5 rounded-full border hover:ring-2 hover:ring-ring hover:ring-offset-1"
+              style={{ backgroundColor: c }}
+              title={c}
+              aria-label={`Set text color to ${c}`}
+            />
+          ))}
           <button
             type="button"
             onClick={() => {
               editor.chain().focus().unsetColor().run()
               setShowColors(false)
             }}
-            className="mt-1 rounded border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="col-span-5 mt-1 rounded border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
           >
-            Reset to default
+            Reset color
           </button>
         </div>
       </Popover>
@@ -628,27 +830,14 @@ interface PopoverProps {
   onToggle: () => void
   trigger: React.ReactNode
   children: React.ReactNode
-  /**
-   * Where to anchor the popover panel relative to the trigger.
-   * Defaults to "left" so existing call sites are unchanged.
-   */
-  align?: 'left' | 'right'
-  /** Extra classes for the popover panel (e.g. fixed widths). */
-  contentClassName?: string
 }
 
 /**
- * Tiny popover used for the font and color toolbars. Closes on outside
- * click so each can be dismissed without committing a selection.
+ * Tiny popover used for the font, size, and color toolbars. Closes
+ * on outside click so each can be dismissed without committing a
+ * selection.
  */
-function Popover({
-  open,
-  onToggle,
-  trigger,
-  children,
-  align = 'left',
-  contentClassName,
-}: PopoverProps) {
+function Popover({ open, onToggle, trigger, children }: PopoverProps) {
   const ref = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -673,13 +862,7 @@ function Popover({
     <div ref={ref} className="relative">
       <div onClick={onToggle}>{trigger}</div>
       {open && (
-        <div
-          className={cn(
-            'absolute top-full z-20 mt-1 rounded-md border bg-popover p-2 text-popover-foreground shadow-lg',
-            align === 'right' ? 'right-0' : 'left-0',
-            contentClassName,
-          )}
-        >
+        <div className="absolute left-0 top-full z-20 mt-1 rounded-md border bg-popover p-2 shadow-lg">
           {children}
         </div>
       )}

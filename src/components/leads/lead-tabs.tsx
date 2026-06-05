@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 import { ActivityTimeline } from '@/components/activities/activity-timeline'
 import { ActivityForm } from '@/components/activities/activity-form'
 import { AuditLogTable } from '@/components/admin/audit-log-table'
-import { EmailCompose } from '@/components/email/email-compose'
+import { EmailCompose, type LatestEmailThread } from '@/components/email/email-compose'
 import {
   EmailThread,
   type EmailThreadMessage,
@@ -71,6 +71,13 @@ export interface LeadTabsProps {
   initialActivities: ActivityItem[]
   /** Linked contacts pre-loaded by the page. */
   contacts: readonly LeadContactSummary[]
+  /**
+   * Most recent thread for this lead. When supplied, the email
+   * compose form defaults to replying on this thread; the user can
+   * still flip a toggle to start a fresh conversation. Hydrated
+   * server-side by the lead detail page.
+   */
+  latestThread?: LatestEmailThread
   canWrite: boolean
 }
 
@@ -80,6 +87,7 @@ export function LeadTabs({
   leadEmail,
   initialActivities,
   contacts,
+  latestThread,
   canWrite,
 }: LeadTabsProps): React.JSX.Element {
   const [active, setActive] = useState<TabKey>('activities')
@@ -119,6 +127,7 @@ export function LeadTabs({
             leadName={leadName}
             leadEmail={leadEmail}
             initialActivities={initialActivities}
+            latestThread={latestThread}
             canWrite={canWrite}
           />
         )}
@@ -127,6 +136,7 @@ export function LeadTabs({
             leadId={leadId}
             leadName={leadName}
             leadEmail={leadEmail}
+            latestThread={latestThread}
             canWrite={canWrite}
           />
         )}
@@ -155,12 +165,14 @@ function ActivitiesTab({
   leadName,
   leadEmail,
   initialActivities,
+  latestThread,
   canWrite,
 }: {
   leadId: string
   leadName: string
   leadEmail: string | null
   initialActivities: ActivityItem[]
+  latestThread?: LatestEmailThread
   canWrite: boolean
 }): React.JSX.Element {
   const [showFileUpload, setShowFileUpload] = useState(false)
@@ -171,6 +183,7 @@ function ActivitiesTab({
           leadId={leadId}
           leadEmail={leadEmail}
           leadName={leadName}
+          latestThread={latestThread}
           alwaysOpen={false}
         />
       ) : null}
@@ -547,11 +560,13 @@ function EmailsTab({
   leadId,
   leadName,
   leadEmail,
+  latestThread,
   canWrite,
 }: {
   leadId: string
   leadName: string
   leadEmail: string | null
+  latestThread?: LatestEmailThread
   canWrite: boolean
 }): React.JSX.Element {
   const [replyContext, setReplyContext] = useState<
@@ -597,6 +612,7 @@ function EmailsTab({
             leadId={leadId}
             leadEmail={leadEmail}
             leadName={leadName}
+            latestThread={latestThread}
             alwaysOpen={false}
           />
         )

@@ -82,6 +82,7 @@ model Organization {
   companies         Company[]
   pipelines         Pipeline[]
   cadences          Cadence[]
+  cadenceSchedules  CadenceSchedule[]
   activities        Activity[]
   tasks             Task[]
   scoringRules      ScoringRule[]
@@ -456,6 +457,7 @@ model Cadence {
 
   steps       CadenceStep[]
   enrollments CadenceEnrollment[]
+  schedule    CadenceSchedule?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -463,6 +465,43 @@ model Cadence {
   @@index([organizationId])
   @@index([status])
   @@index([createdById])
+}
+
+/**
+ * Per-cadence sending window. Constrains when the Inngest cadence
+ * runner is allowed to fire steps for any enrollment on the
+ * cadence — outside the window the runner sleeps the enrollment
+ * until the next allowed slot. Storing minutes-of-day rather than
+ * a `DateTime` keeps the schedule timezone-aware and lets us
+ * compare against a localized "now" without DST drift bugs.
+ */
+model CadenceSchedule {
+  id        String  @id @default(uuid())
+  cadenceId String  @unique
+  cadence   Cadence @relation(fields: [cadenceId], references: [id], onDelete: Cascade)
+
+  /** Optional friendly name (e.g. "US business hours"). */
+  name String @default("Default schedule")
+
+  /** Days of week the cadence is allowed to send. 0=Sun .. 6=Sat. */
+  daysOfWeek Int[] @default([1, 2, 3, 4, 5])
+
+  /** Start of allowed window, in minutes from midnight (0–1439). */
+  startTimeMinutes Int @default(540) // 9:00 AM
+
+  /** End of allowed window, in minutes from midnight (0–1439). */
+  endTimeMinutes Int @default(1020) // 5:00 PM
+
+  /** IANA timezone string (e.g. "America/Los_Angeles"). */
+  timezone String @default("UTC")
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
 }
 
 model CadenceStep {

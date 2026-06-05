@@ -1,7 +1,10 @@
 import { inngest } from './client'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
-import { completeEnrollment } from '@/server/services/cadences'
+import {
+  completeEnrollment,
+  computeNextAllowedRunTime,
+} from '@/server/services/cadences'
 
 /**
  * Event payload for cadence step execution.
@@ -49,6 +52,34 @@ export const cadenceStepFunction = inngest.createFunction(
 
     if (!enrollment || enrollment.status !== 'ACTIVE') {
       return { skipped: true, reason: 'enrollment_not_active' }
+    }
+
+    // Step 1.5: Honor the cadence sending window. If the cadence has a
+    // schedule and we're currently outside its allowed days/hours, sleep
+    // until the next allowed slot before doing any work. We check this
+    // before executing the action so reps don't get an email or task
+    // appearing at 2am even when their org configured a 9–5 window.
+    const scheduleSleep = await step.run('compute-schedule-sleep', async () => {
+      const schedule = await db.cadenceSchedule.findUnique({
+        where: { cadenceId },
+        select: {
+          daysOfWeek: true,
+          startTimeMinutes: true,
+          endTimeMinutes: true,
+          timezone: true,
+        },
+      })
+      if (!schedule) return null
+      const now = new Date()
+      const next = computeNextAllowedRunTime(schedule, now)
+      // Only sleep if we'd push the run forward by at least a minute —
+      // tiny clock differences shouldn't cause spurious sleeps.
+      if (next.getTime() - now.getTime() <= 60 * 1000) return null
+      return next.toISOString()
+    })
+
+    if (scheduleSleep) {
+      await step.sleepUntil('wait-for-schedule-window', scheduleSleep)
     }
 
     // Step 2: Execute the step action
