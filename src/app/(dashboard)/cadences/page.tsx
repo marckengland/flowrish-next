@@ -105,6 +105,7 @@ function toCadenceListItem(
       emailBody: string | null
       taskTitle: string | null
       taskDescription: string | null
+      startNewThread: boolean
       createdAt: Date
       updatedAt: Date
     }>
@@ -128,6 +129,7 @@ function toCadenceListItem(
       emailBody: s.emailBody,
       taskTitle: s.taskTitle,
       taskDescription: s.taskDescription,
+      startNewThread: s.startNewThread,
       createdAt: s.createdAt.toISOString(),
       updatedAt: s.updatedAt.toISOString(),
     })),

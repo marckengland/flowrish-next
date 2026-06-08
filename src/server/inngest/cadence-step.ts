@@ -93,6 +93,7 @@ export const cadenceStepFunction = inngest.createFunction(
           emailBody: true,
           taskTitle: true,
           taskDescription: true,
+          startNewThread: true,
         },
       })
 
@@ -103,43 +104,88 @@ export const cadenceStepFunction = inngest.createFunction(
       // Execute action based on type — creates activities and tasks on the lead
       switch (cadenceStep.actionType) {
         case 'EMAIL': {
-          // Get enrollment details including threadId for email threading
+          // Get enrollment details including the Gmail threadId so the
+          // follow-up sends as a reply on the same conversation.
           const enrollmentForEmail = await db.cadenceEnrollment.findFirst({
             where: { id: enrollmentId },
             select: { enrolledById: true, emailThreadId: true },
           })
-
-          // Create an EMAIL activity on the lead with the cadence step's subject/body.
-          // If this is a follow-up email (threadId exists), it will be sent as a reply.
-          const emailSubject = enrollmentForEmail?.emailThreadId
-            ? `Re: ${cadenceStep.emailSubject ?? 'Follow up'}`
-            : (cadenceStep.emailSubject ?? 'Email step')
-
-          await db.activity.create({
-            data: tenantData({
-              type: 'EMAIL',
-              leadId,
-              createdById: enrollmentForEmail!.enrolledById,
-              notes: `[Cadence] ${emailSubject}`,
-              description: cadenceStep.emailBody ?? null,
-            }),
-          })
-
-          // If this is the first EMAIL step, store a placeholder threadId
-          // (In production with Gmail API integration, the actual threadId from
-          // Gmail's response would be stored here after sending)
-          if (!enrollmentForEmail?.emailThreadId) {
-            await db.cadenceEnrollment.update({
-              where: { id: enrollmentId },
-              data: { emailThreadId: `thread-${enrollmentId}-${Date.now()}` },
-            })
+          if (!enrollmentForEmail) {
+            throw new Error(`Enrollment ${enrollmentId} not found`)
           }
 
-          // Update lead's lastActivityAt
-          await db.lead.update({
-            where: { id: leadId },
-            data: { lastActivityAt: new Date() },
+          // Skip if the lead has no email address — we can't deliver
+          // anything, but the step still counts as "executed" so the
+          // enrollment advances to the next step (matches how reps
+          // would manually skip a step they couldn't run).
+          const lead = await db.lead.findFirst({
+            where: { id: leadId, deletedAt: null },
+            select: { email: true },
           })
+          if (!lead?.email) {
+            await db.activity.create({
+              data: tenantData({
+                type: 'NOTE' as const,
+                leadId,
+                createdById: enrollmentForEmail.enrolledById,
+                notes: `[Cadence] Skipped email step — lead has no email address`,
+              }),
+            })
+            break
+          }
+
+          // Pull the step's template-level attachments. Lazy-imported
+          // so the runner doesn't load Supabase storage at module init,
+          // keeping the test mock surface narrow.
+          const { fetchCadenceStepAttachmentBytes } = await import(
+            '@/server/services/cadences'
+          )
+          const attachments = await fetchCadenceStepAttachmentBytes(
+            stepId,
+            organizationId,
+          )
+
+          // Send via Gmail. The send service creates the EMAIL
+          // activity on the lead and updates `lastActivityAt`, so we
+          // don't duplicate either here.
+          //
+          // `startNewThread` lets the step opt out of replying on the
+          // enrollment's running thread — useful for breakup steps or
+          // re-engagement sequences that read better as a fresh
+          // subject. When set, we ignore the existing thread id and
+          // overwrite it with whatever Gmail returns so subsequent
+          // steps continue on the new conversation.
+          const useExistingThread =
+            !cadenceStep.startNewThread
+            && Boolean(enrollmentForEmail.emailThreadId)
+          const replyThreadId = useExistingThread
+            ? enrollmentForEmail.emailThreadId ?? undefined
+            : undefined
+
+          const { sendEmail } = await import('@/server/services/email')
+          const result = await sendEmail(
+            leadId,
+            cadenceStep.emailSubject ?? '',
+            cadenceStep.emailBody ?? '',
+            enrollmentForEmail.enrolledById,
+            organizationId,
+            replyThreadId,
+            attachments,
+          )
+
+          // Persist the Gmail thread id whenever:
+          //   - this is the first send (no thread yet), or
+          //   - the step explicitly opened a new thread, replacing
+          //     whatever the enrollment had.
+          if (
+            (!enrollmentForEmail.emailThreadId || cadenceStep.startNewThread)
+            && result.threadId
+          ) {
+            await db.cadenceEnrollment.update({
+              where: { id: enrollmentId },
+              data: { emailThreadId: result.threadId },
+            })
+          }
           break
         }
         case 'CALL': {

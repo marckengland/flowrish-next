@@ -247,6 +247,7 @@ export async function addStep(
       emailBody: validated.body ?? null,
       taskTitle,
       taskDescription: validated.taskDescription ?? null,
+      startNewThread: validated.startNewThread ?? false,
     }),
   })
 
@@ -330,6 +331,9 @@ export async function updateStep(
   if (validated.taskTitle !== undefined) update.taskTitle = validated.taskTitle ?? null
   if (validated.taskDescription !== undefined) {
     update.taskDescription = validated.taskDescription ?? null
+  }
+  if (validated.startNewThread !== undefined) {
+    update.startNewThread = validated.startNewThread
   }
 
   const updated = await db.cadenceStep.update({
@@ -1368,4 +1372,306 @@ export function computeNextAllowedRunTime(
   // Should be unreachable when schedule.daysOfWeek is non-empty, but
   // fall back to running now rather than blocking the runner forever.
   return from
+}
+
+
+// ─── Cadence step attachments ────────────────────────────────────────────────
+
+/**
+ * Public-facing shape of a cadence step attachment. The `storagePath`
+ * is internal and never returned to the client.
+ */
+export interface CadenceStepAttachmentSummary {
+  id: string
+  stepId: string
+  fileName: string
+  fileSize: number
+  mimeType: string
+  uploadedById: string
+  createdAt: string
+}
+
+/**
+ * Lists the attachments associated with a cadence step. Used by the
+ * step editor UI and the runner.
+ */
+export async function listCadenceStepAttachments(
+  cadenceId: string,
+  stepId: string,
+  orgId: string,
+): Promise<CadenceStepAttachmentSummary[]> {
+  if (!orgId) {
+    throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
+  }
+  const db = createTenantPrisma(orgId)
+
+  // Verify the step belongs to the cadence in this tenant before returning.
+  const step = await db.cadenceStep.findFirst({
+    where: { id: stepId, cadenceId },
+    select: { id: true },
+  })
+  if (!step) {
+    throw new AppError('NOT_FOUND', 'Step not found', 404)
+  }
+
+  const rows = await db.cadenceStepAttachment.findMany({
+    where: { stepId },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  return rows.map((r) => ({
+    id: r.id,
+    stepId: r.stepId,
+    fileName: r.fileName,
+    fileSize: r.fileSize,
+    mimeType: r.mimeType,
+    uploadedById: r.uploadedById,
+    createdAt: r.createdAt.toISOString(),
+  }))
+}
+
+export interface AttachmentUploadInput {
+  data: ArrayBuffer | Buffer | Uint8Array
+  fileName: string
+  mimeType: string
+  size: number
+}
+
+/**
+ * Uploads a file as a template-level attachment on a cadence step.
+ *
+ * Files live in the same `attachments` Supabase Storage bucket the
+ * lead-level uploads use, but under a separate `cadences/…` prefix so
+ * they don't collide with per-lead uploads. When the runner fires the
+ * step it pulls these bytes and bundles them into the outgoing email.
+ *
+ * Validates: Requirements 6.10, 13.4
+ */
+export async function uploadCadenceStepAttachment(
+  cadenceId: string,
+  stepId: string,
+  input: AttachmentUploadInput,
+  userId: string,
+  orgId: string,
+): Promise<CadenceStepAttachmentSummary> {
+  if (!cadenceId) throw new AppError('VALIDATION_ERROR', 'Cadence ID is required', 400)
+  if (!stepId) throw new AppError('VALIDATION_ERROR', 'Step ID is required', 400)
+  if (!userId) throw new AppError('VALIDATION_ERROR', 'User ID is required', 400)
+  if (!orgId) throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
+
+  // Lazy-import the file service so this module's tests don't need to
+  // mock Supabase storage. The runner and API route both go through the
+  // same upload path so the storage layout is consistent.
+  const { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES, FILE_ATTACHMENTS_BUCKET } =
+    await import('@/server/services/files')
+  const { createSupabaseAdmin } = await import('@/lib/supabase/admin')
+
+  if (input.size <= 0) {
+    throw new AppError('FILE_EMPTY', 'File is empty', 400)
+  }
+  if (input.size > MAX_FILE_SIZE_BYTES) {
+    throw new AppError(
+      'FILE_TOO_LARGE',
+      `File exceeds the maximum size of 25 MB (got ${input.size} bytes)`,
+      400,
+    )
+  }
+  if (!ALLOWED_MIME_TYPES.has(input.mimeType)) {
+    throw new AppError(
+      'UNSUPPORTED_FILE_TYPE',
+      `MIME type "${input.mimeType}" is not allowed`,
+      400,
+    )
+  }
+  if (!input.fileName || input.fileName.trim().length === 0) {
+    throw new AppError('INVALID_FILE_NAME', 'File name is required', 400)
+  }
+
+  const db = createTenantPrisma(orgId)
+
+  const cadence = await db.cadence.findFirst({ where: { id: cadenceId } })
+  if (!cadence) throw new AppError('NOT_FOUND', 'Cadence not found', 404)
+  if (cadence.status === 'ARCHIVED') {
+    throw new AppError(
+      'INVALID_STATE',
+      'Cannot modify steps on an archived cadence',
+      400,
+    )
+  }
+  const step = await db.cadenceStep.findFirst({
+    where: { id: stepId, cadenceId },
+    select: { id: true },
+  })
+  if (!step) throw new AppError('NOT_FOUND', 'Step not found', 404)
+
+  // Pre-allocate the attachment id so we can build the storage path
+  // with a stable filename collision-resistant prefix.
+  const attachmentId = crypto.randomUUID()
+  const safeName = sanitizeAttachmentFileName(input.fileName)
+  const storagePath = `cadences/${orgId}/${stepId}/${attachmentId}-${safeName}`
+
+  const supabase = createSupabaseAdmin()
+  const bytes = toAttachmentBytes(input.data)
+
+  const { error: uploadError } = await supabase.storage
+    .from(FILE_ATTACHMENTS_BUCKET)
+    .upload(storagePath, bytes, {
+      contentType: input.mimeType,
+      upsert: false,
+    })
+
+  if (uploadError) {
+    throw new AppError(
+      'STORAGE_UPLOAD_FAILED',
+      `Failed to upload file to storage: ${uploadError.message}`,
+      500,
+    )
+  }
+
+  let row
+  try {
+    row = await db.cadenceStepAttachment.create({
+      data: tenantData({
+        id: attachmentId,
+        stepId,
+        fileName: input.fileName,
+        fileSize: input.size,
+        mimeType: input.mimeType,
+        storagePath,
+        uploadedById: userId,
+      }),
+    })
+  } catch (error) {
+    // Roll back the storage upload if the DB write fails.
+    await supabase.storage
+      .from(FILE_ATTACHMENTS_BUCKET)
+      .remove([storagePath])
+      .catch(() => {})
+    throw error
+  }
+
+  return {
+    id: row.id,
+    stepId: row.stepId,
+    fileName: row.fileName,
+    fileSize: row.fileSize,
+    mimeType: row.mimeType,
+    uploadedById: row.uploadedById,
+    createdAt: row.createdAt.toISOString(),
+  }
+}
+
+/**
+ * Removes a cadence step attachment from both Supabase Storage and the
+ * database. Storage cleanup is best-effort — if the DB row is gone but
+ * the blob remains, that's a leak but not a correctness issue.
+ */
+export async function deleteCadenceStepAttachment(
+  cadenceId: string,
+  stepId: string,
+  attachmentId: string,
+  orgId: string,
+): Promise<void> {
+  if (!attachmentId) {
+    throw new AppError('VALIDATION_ERROR', 'Attachment ID is required', 400)
+  }
+  if (!orgId) {
+    throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
+  }
+
+  const { FILE_ATTACHMENTS_BUCKET } = await import('@/server/services/files')
+  const { createSupabaseAdmin } = await import('@/lib/supabase/admin')
+
+  const db = createTenantPrisma(orgId)
+
+  const attachment = await db.cadenceStepAttachment.findFirst({
+    where: { id: attachmentId, stepId },
+  })
+  if (!attachment) {
+    throw new AppError('NOT_FOUND', 'Attachment not found', 404)
+  }
+
+  // Verify the parent step still belongs to the cadence in this tenant
+  // (defensive — the FK + tenant scope already enforce this).
+  const step = await db.cadenceStep.findFirst({
+    where: { id: stepId, cadenceId },
+    select: { id: true },
+  })
+  if (!step) throw new AppError('NOT_FOUND', 'Step not found', 404)
+
+  await db.cadenceStepAttachment.delete({ where: { id: attachmentId } })
+
+  const supabase = createSupabaseAdmin()
+  await supabase.storage
+    .from(FILE_ATTACHMENTS_BUCKET)
+    .remove([attachment.storagePath])
+    .catch(() => {})
+}
+
+/**
+ * Downloads the bytes for a cadence step's attachments so the runner
+ * can bundle them into the outgoing email. Used during step execution.
+ *
+ * Returns one record per attachment with the file name, MIME type, and
+ * raw bytes ready to feed into `sendEmail`'s `attachments` array.
+ */
+export async function fetchCadenceStepAttachmentBytes(
+  stepId: string,
+  orgId: string,
+): Promise<
+  Array<{ fileName: string; mimeType: string; data: Uint8Array }>
+> {
+  if (!stepId) {
+    throw new AppError('VALIDATION_ERROR', 'Step ID is required', 400)
+  }
+  if (!orgId) {
+    throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
+  }
+
+  const { FILE_ATTACHMENTS_BUCKET } = await import('@/server/services/files')
+  const { createSupabaseAdmin } = await import('@/lib/supabase/admin')
+
+  const db = createTenantPrisma(orgId)
+  const rows = await db.cadenceStepAttachment.findMany({
+    where: { stepId },
+    orderBy: { createdAt: 'asc' },
+  })
+  if (rows.length === 0) return []
+
+  const supabase = createSupabaseAdmin()
+  const out: Array<{ fileName: string; mimeType: string; data: Uint8Array }> = []
+  for (const row of rows) {
+    const { data, error } = await supabase.storage
+      .from(FILE_ATTACHMENTS_BUCKET)
+      .download(row.storagePath)
+    if (error || !data) {
+      throw new AppError(
+        'ATTACHMENT_FETCH_FAILED',
+        `Failed to download attachment "${row.fileName}": ${error?.message ?? 'unknown error'}`,
+        500,
+      )
+    }
+    const buf = await data.arrayBuffer()
+    out.push({
+      fileName: row.fileName,
+      mimeType: row.mimeType,
+      data: new Uint8Array(buf),
+    })
+  }
+  return out
+}
+
+function sanitizeAttachmentFileName(name: string): string {
+  const trimmed = name.replace(/\0/g, '').trim()
+  const noPaths = trimmed.replace(/[\\/]/g, '_')
+  const safe = noPaths.replace(/[^A-Za-z0-9._-]+/g, '_')
+  return safe.replace(/^\.+/, '').replace(/_{2,}/g, '_') || 'file'
+}
+
+function toAttachmentBytes(
+  data: ArrayBuffer | Buffer | Uint8Array,
+): Uint8Array {
+  if (data instanceof Uint8Array) return data
+  if (data instanceof ArrayBuffer) return new Uint8Array(data)
+  return new Uint8Array(data as unknown as ArrayBufferLike)
 }

@@ -7,6 +7,7 @@ import {
   Handshake,
   Loader2,
   Mail,
+  Paperclip,
   Phone,
   Trash2,
   X,
@@ -108,6 +109,9 @@ export function StepEditor({
   })
   const [emailSubject, setEmailSubject] = useState(step?.emailSubject ?? '')
   const [emailBody, setEmailBody] = useState(step?.emailBody ?? '')
+  const [startNewThread, setStartNewThread] = useState<boolean>(
+    step?.startNewThread ?? false,
+  )
   const [taskTitle, setTaskTitle] = useState(step?.taskTitle ?? '')
   const [taskDescription, setTaskDescription] = useState(
     step?.taskDescription ?? '',
@@ -115,6 +119,87 @@ export function StepEditor({
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pending, startTransition] = useTransition()
+
+  // Cadence step attachments. Loaded only in edit mode (new steps
+  // don't have an id yet so the upload route can't associate files).
+  const [attachments, setAttachments] = useState<StepAttachment[]>([])
+  const [uploading, setUploading] = useState(false)
+
+  // Refresh attachment list whenever the editor opens on a step or the
+  // step swaps under us. We tolerate fetch failures silently — the rest
+  // of the editor still works without attachments.
+  useEffect(() => {
+    if (!step?.id) {
+      setAttachments([])
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/cadences/${cadenceId}/steps/${step.id}/attachments`,
+          { credentials: 'same-origin' },
+        )
+        if (!res.ok) return
+        const body = (await res.json()) as { data: StepAttachment[] }
+        if (!cancelled) setAttachments(body.data)
+      } catch {
+        // ignore
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [cadenceId, step?.id])
+
+  async function uploadAttachmentFiles(
+    files: readonly File[],
+  ): Promise<void> {
+    if (!step?.id || files.length === 0) return
+    setError(null)
+    setUploading(true)
+    try {
+      for (const file of files) {
+        const formData = new FormData()
+        formData.append('file', file, file.name)
+        const res = await fetch(
+          `/api/cadences/${cadenceId}/steps/${step.id}/attachments`,
+          { method: 'POST', credentials: 'same-origin', body: formData },
+        )
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as {
+            error?: { message?: string }
+          }
+          setError(
+            body.error?.message
+              ?? `Failed to upload ${file.name} (${res.status})`,
+          )
+          continue
+        }
+        const body = (await res.json()) as { data: StepAttachment }
+        setAttachments((prev) => [...prev, body.data])
+      }
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function removeAttachment(attachmentId: string): Promise<void> {
+    if (!step?.id) return
+    setError(null)
+    const res = await fetch(
+      `/api/cadences/${cadenceId}/steps/${step.id}/attachments/${attachmentId}`,
+      { method: 'DELETE', credentials: 'same-origin' },
+    )
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: { message?: string }
+      }
+      setError(body.error?.message ?? `Failed to remove (${res.status})`)
+      return
+    }
+    setAttachments((prev) => prev.filter((a) => a.id !== attachmentId))
+  }
 
   // Re-sync local state if the parent swaps which step is being edited
   // without unmounting the modal.
@@ -131,6 +216,7 @@ export function StepEditor({
     }
     setEmailSubject(step.emailSubject ?? '')
     setEmailBody(step.emailBody ?? '')
+    setStartNewThread(step.startNewThread ?? false)
     setTaskTitle(step.taskTitle ?? '')
     setTaskDescription(step.taskDescription ?? '')
   }, [step])
@@ -157,6 +243,7 @@ export function StepEditor({
         if (actionType === 'EMAIL') {
           formData.set('subject', emailSubject)
           formData.set('body', emailBody)
+          if (startNewThread) formData.set('startNewThread', 'true')
         } else {
           formData.set('taskTitle', taskTitle)
           formData.set('taskDescription', taskDescription)
@@ -186,6 +273,9 @@ export function StepEditor({
         }
         if (emailBody !== (step!.emailBody ?? '')) {
           patch.body = emailBody || null
+        }
+        if (startNewThread !== (step!.startNewThread ?? false)) {
+          patch.startNewThread = startNewThread
         }
       } else {
         if (taskTitle !== (step!.taskTitle ?? '')) {
@@ -361,6 +451,40 @@ export function StepEditor({
                 </span>
               </div>
 
+              {/* Threading control — by default a follow-up step is
+                  sent as a reply on whatever Gmail thread the
+                  enrollment opened on its first email. Flip this on
+                  for breakup or re-engagement steps that read better
+                  as a fresh subject line. The first email step in a
+                  cadence always opens a new thread regardless. */}
+              <div className="flex items-start gap-2 rounded-md border bg-background px-3 py-2">
+                <input
+                  id="step-thread-mode"
+                  type="checkbox"
+                  checked={startNewThread}
+                  onChange={(e) => setStartNewThread(e.target.checked)}
+                  disabled={!canEdit}
+                  className="mt-0.5 size-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                />
+                <label
+                  htmlFor="step-thread-mode"
+                  className={cn(
+                    'flex flex-1 flex-col gap-0.5 text-xs',
+                    !canEdit && 'cursor-not-allowed opacity-60',
+                    canEdit && 'cursor-pointer',
+                  )}
+                >
+                  <span className="font-medium text-foreground">
+                    Start a new email thread
+                  </span>
+                  <span className="text-muted-foreground">
+                    {startNewThread
+                      ? 'This step opens a fresh Gmail conversation with its own subject line.'
+                      : 'This step replies on the same Gmail thread the cadence opened on its first email.'}
+                  </span>
+                </label>
+              </div>
+
               <div>
                 <label
                   htmlFor="step-subject"
@@ -387,6 +511,11 @@ export function StepEditor({
                     onChange={setEmailBody}
                     placeholder="Hi {{FirstName}}, I noticed your team at {{CompanyName}}…"
                     minHeight="160px"
+                    onFilesDropped={
+                      step?.id
+                        ? (files) => uploadAttachmentFiles(files)
+                        : undefined
+                    }
                   />
                 ) : (
                   <div
@@ -399,6 +528,25 @@ export function StepEditor({
                   />
                 )}
               </div>
+
+              {/* Template-level attachments. Render only in edit mode —
+                  new steps can't attach until the row exists in the
+                  database (we need the stepId to associate files). */}
+              {canEdit && step?.id ? (
+                <AttachmentSection
+                  cadenceId={cadenceId}
+                  stepId={step.id}
+                  attachments={attachments}
+                  onUpload={uploadAttachmentFiles}
+                  onDelete={removeAttachment}
+                  uploading={uploading}
+                />
+              ) : canEdit && !step?.id ? (
+                <p className="rounded-md border border-dashed bg-background/40 px-3 py-2 text-xs text-muted-foreground">
+                  Save the step first to attach files. Attachments travel with
+                  every email this step sends.
+                </p>
+              ) : null}
 
               {/* AI generation is intentionally excluded here — cadence
                   steps are templates that aren't tied to a single lead,
@@ -547,6 +695,7 @@ function serializeStep(raw: unknown): CadenceStep {
     emailBody: string | null
     taskTitle: string | null
     taskDescription: string | null
+    startNewThread?: boolean
     createdAt: Date | string
     updatedAt: Date | string
   }
@@ -560,9 +709,139 @@ function serializeStep(raw: unknown): CadenceStep {
     emailBody: r.emailBody,
     taskTitle: r.taskTitle,
     taskDescription: r.taskDescription,
+    startNewThread: r.startNewThread ?? false,
     createdAt:
       r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
     updatedAt:
       r.updatedAt instanceof Date ? r.updatedAt.toISOString() : r.updatedAt,
   }
+}
+
+
+// ─── Attachment section ─────────────────────────────────────────────────────
+
+/**
+ * Shape of a cadence step attachment summary as returned by the API.
+ * Mirrors `CadenceStepAttachmentSummary` on the server.
+ */
+interface StepAttachment {
+  id: string
+  stepId: string
+  fileName: string
+  fileSize: number
+  mimeType: string
+  uploadedById: string
+  createdAt: string
+}
+
+interface AttachmentSectionProps {
+  cadenceId: string
+  stepId: string
+  attachments: StepAttachment[]
+  onUpload: (files: readonly File[]) => Promise<void>
+  onDelete: (attachmentId: string) => Promise<void>
+  uploading: boolean
+}
+
+/**
+ * Template-level attachments section for an EMAIL cadence step. Files
+ * uploaded here travel with every email the step sends — the runner
+ * fetches them at execution time and bundles them into the outgoing
+ * Gmail payload.
+ *
+ * The section ties in with the rich-text editor: dragging or pasting
+ * files into the body also routes through the same upload path, so the
+ * paperclip button below is just one of three ways to add files.
+ */
+function AttachmentSection({
+  cadenceId,
+  stepId,
+  attachments,
+  onUpload,
+  onDelete,
+  uploading,
+}: AttachmentSectionProps): React.JSX.Element {
+  // The inputId guards against id collisions when more than one step
+  // editor lives on the page (rare today but cheap insurance).
+  const inputId = `step-attach-${cadenceId}-${stepId}`
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-foreground">
+          Attachments
+        </span>
+        <label
+          htmlFor={inputId}
+          className={cn(
+            'inline-flex cursor-pointer items-center gap-1 rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted',
+            uploading && 'cursor-wait opacity-60',
+          )}
+        >
+          {uploading ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <Paperclip className="size-3.5" aria-hidden="true" />
+          )}
+          <span>Attach file</span>
+        </label>
+        <input
+          id={inputId}
+          type="file"
+          multiple
+          className="hidden"
+          disabled={uploading}
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? [])
+            if (files.length > 0) void onUpload(files)
+            e.target.value = ''
+          }}
+        />
+      </div>
+      {attachments.length === 0 ? (
+        <p className="rounded-md border border-dashed bg-background/40 px-3 py-2 text-[11px] text-muted-foreground">
+          No attachments yet. Use the paperclip in the editor toolbar, the
+          button above, or drag &amp; drop files into the body. Up to 25 MB
+          each.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {attachments.map((att) => (
+            <li
+              key={att.id}
+              className="flex items-center justify-between rounded-md border bg-background px-2.5 py-1.5 text-xs"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <Paperclip
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span className="truncate font-medium text-foreground">
+                  {att.fileName}
+                </span>
+                <span className="shrink-0 text-muted-foreground">
+                  {formatStepFileSize(att.fileSize)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void onDelete(att.id)}
+                className="ml-2 shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                title={`Remove ${att.fileName}`}
+                aria-label={`Remove ${att.fileName}`}
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function formatStepFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }

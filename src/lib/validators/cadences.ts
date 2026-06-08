@@ -40,6 +40,16 @@ export const stepCreateSchema = z.object({
   instructions: nullableSanitizedString,
   taskTitle: nullableSanitizedString,
   taskDescription: nullableSanitizedString,
+  /**
+   * EMAIL step only. When true, the runner ignores the enrollment's
+   * existing Gmail thread and starts a new conversation instead of
+   * replying. Useful for breakup or re-engagement sequences. Coerced
+   * from the string `'true'` / `'on'` posted by HTML form fields.
+   */
+  startNewThread: z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((v) => v === true || v === 'true' || v === 'on'),
 })
 
 export type StepCreateInput = z.infer<typeof stepCreateSchema>
@@ -63,6 +73,8 @@ export const stepUpdateSchema = z
     body: nullableSanitizedString,
     taskTitle: nullableSanitizedString,
     taskDescription: nullableSanitizedString,
+    /** See `stepCreateSchema.startNewThread` — same semantics. */
+    startNewThread: z.boolean().optional(),
   })
   .refine(
     (val) =>
@@ -71,7 +83,8 @@ export const stepUpdateSchema = z
       || val.subject !== undefined
       || val.body !== undefined
       || val.taskTitle !== undefined
-      || val.taskDescription !== undefined,
+      || val.taskDescription !== undefined
+      || val.startNewThread !== undefined,
     { message: 'At least one field must be provided to update' },
   )
 

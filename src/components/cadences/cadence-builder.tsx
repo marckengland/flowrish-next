@@ -386,6 +386,14 @@ function renderStepDetails(step: CadenceStep): React.JSX.Element | null {
             No body configured yet.
           </span>
         )}
+        {step.startNewThread ? (
+          <span
+            className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+            title="This step starts a new Gmail thread instead of replying on the cadence's existing conversation."
+          >
+            New thread
+          </span>
+        ) : null}
       </span>
     )
   }

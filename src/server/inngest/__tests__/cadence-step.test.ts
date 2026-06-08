@@ -33,6 +33,7 @@ const mockDb = {
     create: vi.fn(),
   },
   lead: {
+    findFirst: vi.fn(),
     update: vi.fn(),
   },
   task: {
@@ -60,11 +61,31 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 const mockCompleteEnrollment = vi.fn()
+const mockFetchAttachments = vi.fn<(...args: unknown[]) => Promise<unknown[]>>(
+  async () => [],
+)
 vi.mock('@/server/services/cadences', () => ({
   completeEnrollment: (...args: unknown[]) => mockCompleteEnrollment(...args),
   computeNextAllowedRunTime: vi.fn(
     (_schedule: unknown, from: Date) => from,
   ),
+  fetchCadenceStepAttachmentBytes: (...args: unknown[]) =>
+    mockFetchAttachments(...args),
+}))
+
+const mockSendEmail = vi.fn<
+  (...args: unknown[]) => Promise<{
+    messageId: string
+    threadId: string
+    attachmentCount: number
+  }>
+>(async () => ({
+  messageId: 'msg-1',
+  threadId: 'gmail-thread-1',
+  attachmentCount: 0,
+}))
+vi.mock('@/server/services/email', () => ({
+  sendEmail: (...args: unknown[]) => mockSendEmail(...args),
 }))
 
 const mockInngestSend = vi.fn()
@@ -122,6 +143,17 @@ describe('Cadence Step Execution Function', () => {
     // Default: no schedule configured. Tests that need to exercise the
     // schedule gating override this in their own arrange step.
     mockDb.cadenceSchedule.findUnique.mockResolvedValue(null)
+    // Default: no template attachments on the step. EMAIL tests can
+    // override this if they need to exercise the attachment path.
+    mockFetchAttachments.mockResolvedValue([])
+    // Default: lead with an email so EMAIL steps can dispatch.
+    mockDb.lead.findFirst.mockResolvedValue({ email: 'lead@example.com' })
+    // Default: send succeeds with a fresh Gmail thread id.
+    mockSendEmail.mockResolvedValue({
+      messageId: 'msg-1',
+      threadId: 'gmail-thread-1',
+      attachmentCount: 0,
+    })
   })
 
   describe('function configuration', () => {

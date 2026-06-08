@@ -244,6 +244,7 @@ export async function updateStep(
     body?: string | null
     taskTitle?: string | null
     taskDescription?: string | null
+    startNewThread?: boolean
   },
 ) {
   const session = await requireSession()

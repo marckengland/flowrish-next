@@ -34,6 +34,11 @@ export interface CadenceStep {
   emailBody: string | null
   taskTitle: string | null
   taskDescription: string | null
+  /**
+   * EMAIL step only. When true, the runner starts a fresh Gmail
+   * thread instead of replying on the enrollment's running thread.
+   */
+  startNewThread: boolean
   createdAt: string
   updatedAt: string
 }

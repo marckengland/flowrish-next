@@ -83,6 +83,7 @@ model Organization {
   pipelines         Pipeline[]
   cadences          Cadence[]
   cadenceSchedules  CadenceSchedule[]
+  cadenceStepAttachments CadenceStepAttachment[]
   activities        Activity[]
   tasks             Task[]
   scoringRules      ScoringRule[]
@@ -516,13 +517,48 @@ model CadenceStep {
   taskTitle       String?
   taskDescription String?
 
+  /**
+   * Whether this EMAIL step starts a fresh Gmail thread instead of
+   * replying on the enrollment's existing thread. Default false so
+   * follow-ups thread together by default; flip to true on a breakup
+   * step or a re-engagement sequence where a fresh subject reads
+   * better than yet another "Re:" reply. Ignored for non-EMAIL steps.
+   */
+  startNewThread  Boolean    @default(false)
+
   executionLogs StepExecutionLog[]
+  attachments   CadenceStepAttachment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([cadenceId, stepOrder])
   @@index([cadenceId])
+}
+
+/**
+ * Template-level file attachment on a cadence step. Files are uploaded
+ * once when the step is authored and re-attached to every outbound
+ * email when the step fires for any enrolled lead. Storage layout is
+ * per-org: `cadences/{orgId}/{stepId}/{attachmentId}-{filename}`.
+ */
+model CadenceStepAttachment {
+  id           String      @id @default(uuid())
+  stepId       String
+  step         CadenceStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  fileName     String
+  fileSize     Int
+  mimeType     String
+  storagePath  String
+  uploadedById String
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([stepId])
 }
 
 model CadenceEnrollment {
