@@ -190,6 +190,8 @@ export async function addStep(formData: FormData) {
     instructions: formData.get('instructions') as string | null,
     taskTitle: formData.get('taskTitle') as string | null,
     taskDescription: formData.get('taskDescription') as string | null,
+    // Defaults to false; the validator coerces 'true'/'on'/boolean.
+    startNewThread: formData.get('startNewThread') as string | null,
   }
 
   try {
