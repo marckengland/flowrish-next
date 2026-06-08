@@ -1521,11 +1521,10 @@ export async function uploadCadenceStepAttachment(
     })
 
   if (uploadError) {
-    throw new AppError(
-      'STORAGE_UPLOAD_FAILED',
-      `Failed to upload file to storage: ${uploadError.message}`,
-      500,
-    )
+    const friendly = isBucketMissing(uploadError.message)
+      ? `Storage bucket "${FILE_ATTACHMENTS_BUCKET}" not found. Run "npm run setup:storage" to create it (one-time setup), or create it manually in Supabase Dashboard → Storage → New bucket.`
+      : `Failed to upload file to storage: ${uploadError.message}`
+    throw new AppError('STORAGE_UPLOAD_FAILED', friendly, 500)
   }
 
   let row
@@ -1666,6 +1665,16 @@ function sanitizeAttachmentFileName(name: string): string {
   const noPaths = trimmed.replace(/[\\/]/g, '_')
   const safe = noPaths.replace(/[^A-Za-z0-9._-]+/g, '_')
   return safe.replace(/^\.+/, '').replace(/_{2,}/g, '_') || 'file'
+}
+
+/**
+ * Whether a Supabase Storage error message indicates the target
+ * bucket doesn't exist. Used to surface a friendlier setup-script
+ * pointer in the upload error path.
+ */
+function isBucketMissing(message: string): boolean {
+  const lower = message.toLowerCase()
+  return lower.includes('bucket not found') || lower.includes('not_found')
 }
 
 function toAttachmentBytes(

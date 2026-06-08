@@ -124,6 +124,10 @@ export function StepEditor({
   // don't have an id yet so the upload route can't associate files).
   const [attachments, setAttachments] = useState<StepAttachment[]>([])
   const [uploading, setUploading] = useState(false)
+  // Pending files staged while authoring a brand-new step. Uploaded
+  // immediately after the step is created so users don't have to
+  // save, reopen, then attach.
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
 
   // Refresh attachment list whenever the editor opens on a step or the
   // step swaps under us. We tolerate fetch failures silently — the rest
@@ -155,7 +159,12 @@ export function StepEditor({
   async function uploadAttachmentFiles(
     files: readonly File[],
   ): Promise<void> {
-    if (!step?.id || files.length === 0) return
+    if (files.length === 0) return
+    // New step path — buffer files locally and upload after save.
+    if (!step?.id) {
+      setPendingFiles((prev) => [...prev, ...files])
+      return
+    }
     setError(null)
     setUploading(true)
     try {
@@ -182,6 +191,39 @@ export function StepEditor({
     } finally {
       setUploading(false)
     }
+  }
+
+  /**
+   * Uploads a list of staged files to the just-created step. Used by
+   * the "save then attach" flow when the editor is in add mode and
+   * the user dropped files in before saving.
+   */
+  async function flushPendingFiles(stepId: string): Promise<void> {
+    if (pendingFiles.length === 0) return
+    for (const file of pendingFiles) {
+      const formData = new FormData()
+      formData.append('file', file, file.name)
+      const res = await fetch(
+        `/api/cadences/${cadenceId}/steps/${stepId}/attachments`,
+        { method: 'POST', credentials: 'same-origin', body: formData },
+      )
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: { message?: string }
+        }
+        // Surface the failure but don't block save — the step itself
+        // exists; users can re-attempt from the editor.
+        setError(
+          body.error?.message
+            ?? `Step saved but failed to attach ${file.name} (${res.status})`,
+        )
+      }
+    }
+    setPendingFiles([])
+  }
+
+  function removePendingFile(index: number): void {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
   async function removeAttachment(attachmentId: string): Promise<void> {
@@ -254,7 +296,12 @@ export function StepEditor({
           return
         }
         if (result && 'data' in result && result.data) {
-          onSaved?.(serializeStep(result.data))
+          const saved = serializeStep(result.data)
+          // Upload any files the user staged before saving the new step.
+          if (pendingFiles.length > 0) {
+            await flushPendingFiles(saved.id)
+          }
+          onSaved?.(saved)
         }
         onClose()
         router.refresh()
@@ -511,11 +558,7 @@ export function StepEditor({
                     onChange={setEmailBody}
                     placeholder="Hi {{FirstName}}, I noticed your team at {{CompanyName}}…"
                     minHeight="160px"
-                    onFilesDropped={
-                      step?.id
-                        ? (files) => uploadAttachmentFiles(files)
-                        : undefined
-                    }
+                    onFilesDropped={(files) => uploadAttachmentFiles(files)}
                   />
                 ) : (
                   <div
@@ -529,9 +572,10 @@ export function StepEditor({
                 )}
               </div>
 
-              {/* Template-level attachments. Render only in edit mode —
-                  new steps can't attach until the row exists in the
-                  database (we need the stepId to associate files). */}
+              {/* Template-level attachments. Edit mode shows the
+                  server-persisted list with delete controls. Add mode
+                  buffers files locally and uploads them as soon as the
+                  step is created on save. */}
               {canEdit && step?.id ? (
                 <AttachmentSection
                   cadenceId={cadenceId}
@@ -541,11 +585,12 @@ export function StepEditor({
                   onDelete={removeAttachment}
                   uploading={uploading}
                 />
-              ) : canEdit && !step?.id ? (
-                <p className="rounded-md border border-dashed bg-background/40 px-3 py-2 text-xs text-muted-foreground">
-                  Save the step first to attach files. Attachments travel with
-                  every email this step sends.
-                </p>
+              ) : canEdit ? (
+                <PendingAttachmentSection
+                  files={pendingFiles}
+                  onAdd={uploadAttachmentFiles}
+                  onRemove={removePendingFile}
+                />
               ) : null}
 
               {/* AI generation is intentionally excluded here — cadence
@@ -844,4 +889,95 @@ function formatStepFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+
+interface PendingAttachmentSectionProps {
+  files: File[]
+  onAdd: (files: readonly File[]) => Promise<void>
+  onRemove: (index: number) => void
+}
+
+/**
+ * Buffered attachment section used when authoring a brand-new step.
+ * Files are held in component state until the step is saved, then
+ * uploaded against the freshly-created step id. Mirrors the affordances
+ * of the live `AttachmentSection` (paperclip + drag-drop + remove
+ * buttons) so the UX is the same in both modes.
+ */
+function PendingAttachmentSection({
+  files,
+  onAdd,
+  onRemove,
+}: PendingAttachmentSectionProps): React.JSX.Element {
+  const inputId = 'step-attach-pending'
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-foreground">
+          Attachments
+        </span>
+        <label
+          htmlFor={inputId}
+          className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+        >
+          <Paperclip className="size-3.5" aria-hidden="true" />
+          <span>Attach file</span>
+        </label>
+        <input
+          id={inputId}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const list = Array.from(e.target.files ?? [])
+            if (list.length > 0) void onAdd(list)
+            e.target.value = ''
+          }}
+        />
+      </div>
+      {files.length === 0 ? (
+        <p className="rounded-md border border-dashed bg-background/40 px-3 py-2 text-[11px] text-muted-foreground">
+          Stage files for this step. They&apos;ll upload as soon as you save.
+          Use the paperclip in the editor toolbar, the button above, or drag
+          &amp; drop into the body.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {files.map((file, i) => (
+            <li
+              key={`${file.name}-${i}`}
+              className="flex items-center justify-between rounded-md border border-dashed bg-background px-2.5 py-1.5 text-xs"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <Paperclip
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span className="truncate font-medium text-foreground">
+                  {file.name}
+                </span>
+                <span className="shrink-0 text-muted-foreground">
+                  {formatStepFileSize(file.size)}
+                </span>
+                <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  pending
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onRemove(i)}
+                className="ml-2 shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                title={`Remove ${file.name}`}
+                aria-label={`Remove ${file.name}`}
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
 }
