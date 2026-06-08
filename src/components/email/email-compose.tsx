@@ -466,7 +466,7 @@ export function EmailCompose({
             <span>Attach file</span>
           </Button>
           <span className="text-[11px] text-muted-foreground">
-            Up to 25 MB each. Sent as attachments inside the email.
+            Up to 25 MB each. Drag &amp; drop or paste into the body to attach.
           </span>
         </div>
         {attachments.length > 0 && (

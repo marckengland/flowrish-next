@@ -18,12 +18,23 @@ export interface HelpTooltipProps {
 
 /**
  * Small inline tooltip used to add hover/focus help text next to fields
- * and labels. Hover and keyboard focus both expand the bubble; clicking
- * elsewhere or pressing Escape collapses it.
+ * and labels.
  *
- * Renders as a `<button>` so screen readers can reach the explanation
- * via Tab navigation — the previous frontend used `<span title>` which is
- * inaccessible to keyboard users.
+ * Implementation notes:
+ *   - The bubble is **always rendered** so opening it doesn't trigger
+ *     mount/unmount layout thrash. CSS drives visibility via the
+ *     parent `group` Tailwind utility (`group-hover` / `group-focus-within`)
+ *     so we don't churn React state on every hover event — that was the
+ *     root cause of the "shaking" effect users reported (cursor hovers,
+ *     React mounts the bubble, browser reflows, the icon shifts a pixel,
+ *     `mouseleave` fires, React unmounts, repeat).
+ *   - `pointer-events-none` on the bubble guarantees the cursor never
+ *     interacts with the bubble itself, so moving the cursor between the
+ *     icon and the bubble can't cause a flicker loop.
+ *   - Click toggles a separate `pinned` state for keyboard / touch users.
+ *     Click outside or Escape un-pins.
+ *   - The bubble's width clamps to the viewport so it can't push out a
+ *     horizontal scrollbar near the right edge of the page.
  */
 export function HelpTooltip({
   text,
@@ -31,17 +42,17 @@ export function HelpTooltip({
   size = 14,
   label = 'Help',
 }: HelpTooltipProps): React.JSX.Element {
-  const [open, setOpen] = useState(false)
+  const [pinned, setPinned] = useState(false)
   const id = useId()
-  const ref = useRef<HTMLDivElement | null>(null)
+  const ref = useRef<HTMLSpanElement | null>(null)
 
   useEffect(() => {
-    if (!open) return
+    if (!pinned) return
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') setPinned(false)
     }
     function onClickOutside(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+      if (!ref.current?.contains(e.target as Node)) setPinned(false)
     }
     document.addEventListener('keydown', onKey)
     document.addEventListener('mousedown', onClickOutside)
@@ -49,20 +60,16 @@ export function HelpTooltip({
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('mousedown', onClickOutside)
     }
-  }, [open])
+  }, [pinned])
 
   return (
-    <span ref={ref as unknown as React.RefObject<HTMLSpanElement>} className="relative inline-flex">
+    <span ref={ref} className="group relative inline-flex align-middle">
       <button
         type="button"
         aria-label={label}
-        aria-describedby={open ? id : undefined}
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
+        aria-describedby={id}
+        aria-expanded={pinned}
+        onClick={() => setPinned((v) => !v)}
         className={cn(
           'inline-flex shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           className,
@@ -70,15 +77,24 @@ export function HelpTooltip({
       >
         <HelpCircle aria-hidden="true" style={{ width: size, height: size }} />
       </button>
-      {open && (
-        <span
-          id={id}
-          role="tooltip"
-          className="absolute left-1/2 top-full z-30 mt-1.5 w-56 -translate-x-1/2 rounded-md border bg-popover px-2 py-1.5 text-xs leading-relaxed text-foreground shadow-md"
-        >
-          {text}
-        </span>
-      )}
+      <span
+        id={id}
+        role="tooltip"
+        className={cn(
+          // Always present in the DOM. We toggle opacity + visibility
+          // (rather than mount/unmount) so the icon's surrounding
+          // layout never reflows, which is what caused the shake.
+          'pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 -translate-x-1/2',
+          'w-56 max-w-[calc(100vw-1rem)]',
+          'rounded-md border bg-popover px-2 py-1.5 text-xs leading-relaxed text-foreground shadow-md',
+          'opacity-0 invisible transition-opacity duration-100',
+          'group-hover:opacity-100 group-hover:visible',
+          'group-focus-within:opacity-100 group-focus-within:visible',
+          pinned && 'opacity-100 visible',
+        )}
+      >
+        {text}
+      </span>
     </span>
   )
 }

@@ -17,6 +17,7 @@ import {
   List,
   ListOrdered,
   Palette,
+  Paperclip,
   Strikethrough,
   Type,
   Underline as UnderlineIcon,
@@ -401,6 +402,7 @@ export function RichTextEditor({
               : { open: true, filter: '', selected: 0 },
           )
         }
+        onAttachFiles={onFilesDropped}
       />
 
       {/* Click-to-insert chips when the user opens the tag panel from the toolbar */}
@@ -493,6 +495,13 @@ interface ToolbarProps {
   enablePersonalization: boolean
   tagPanelOpen: boolean
   onToggleTagPanel: () => void
+  /**
+   * When supplied, the toolbar renders a paperclip button that opens
+   * a native file picker. Selected files are forwarded straight to
+   * the parent — same path used by drag-drop and paste — so the
+   * editor itself never tries to embed binary content.
+   */
+  onAttachFiles?: (files: readonly File[]) => void
 }
 
 function Toolbar({
@@ -500,12 +509,14 @@ function Toolbar({
   enablePersonalization,
   tagPanelOpen,
   onToggleTagPanel,
+  onAttachFiles,
 }: ToolbarProps) {
   const [showLinkInput, setShowLinkInput] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
   const [showFonts, setShowFonts] = useState(false)
   const [showColors, setShowColors] = useState(false)
   const [showSizes, setShowSizes] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const setLink = useCallback(() => {
     if (!linkUrl) {
@@ -786,6 +797,31 @@ function Toolbar({
             title="Insert personalization tag (or type {{ in the editor)"
           >
             <AtSign className="size-3.5" />
+          </ToolbarButton>
+        </>
+      )}
+
+      {onAttachFiles && (
+        <>
+          <Divider />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? [])
+              if (files.length > 0) onAttachFiles(files)
+              // Reset so picking the same file twice still fires onChange.
+              e.target.value = ''
+            }}
+          />
+          <ToolbarButton
+            active={false}
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach file (or drag & drop into the editor)"
+          >
+            <Paperclip className="size-3.5" />
           </ToolbarButton>
         </>
       )}
