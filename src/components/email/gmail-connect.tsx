@@ -57,6 +57,7 @@ export function GmailConnect({
   })
   const [error, setError] = useState<string | null>(null)
   const [popupOpen, setPopupOpen] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
 
   // Fetch the current connection state on mount so the UI reflects
   // what's actually stored on the server (so a page reload after a
@@ -127,6 +128,37 @@ export function GmailConnect({
     return () => window.removeEventListener('message', handleOAuthMessage)
   }, [handleOAuthMessage])
 
+  async function disconnect(): Promise<void> {
+    if (
+      !confirm(
+        'Disconnect Gmail? You\u2019ll need to reconnect before sending or syncing email again.',
+      )
+    ) {
+      return
+    }
+    setError(null)
+    setDisconnecting(true)
+    try {
+      const res = await fetch('/api/email/account', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: { message?: string }
+        }
+        throw new Error(
+          body.error?.message ?? `Failed to disconnect (${res.status})`,
+        )
+      }
+      setState({ status: 'disconnected', email: null })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to disconnect.')
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
   function startOAuthFlow(): void {
     setError(null)
 
@@ -186,22 +218,43 @@ export function GmailConnect({
 
   if (state.status === 'connected') {
     return (
-      <div
-        className={cn(
-          'flex items-center gap-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3',
-          className,
-        )}
-      >
-        <CheckCircle2
-          className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400"
-          aria-hidden="true"
-        />
-        <div className="flex-1">
-          <p className="text-sm font-medium text-foreground">Gmail connected</p>
-          {state.email ? (
-            <p className="text-xs text-muted-foreground">{state.email}</p>
-          ) : null}
+      <div className={cn('flex flex-col gap-2', className)}>
+        <div className="flex items-center gap-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+          <CheckCircle2
+            className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400"
+            aria-hidden="true"
+          />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-foreground">Gmail connected</p>
+            {state.email ? (
+              <p className="text-xs text-muted-foreground">{state.email}</p>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={disconnect}
+            disabled={disconnecting}
+          >
+            {disconnecting ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                <span>Disconnecting…</span>
+              </>
+            ) : (
+              <>
+                <Unplug className="size-3.5" aria-hidden="true" />
+                <span>Disconnect</span>
+              </>
+            )}
+          </Button>
         </div>
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
       </div>
     )
   }

@@ -118,6 +118,55 @@ export async function connectGmail(
 }
 
 /**
+ * Disconnects the user's Gmail account.
+ *
+ * - Revokes the refresh token at Google so any stored copy becomes
+ *   immediately useless if it ever leaks. Best-effort: if Google's
+ *   revoke endpoint is unreachable or returns an error (e.g. the token
+ *   was already revoked from the user's Google account page), we still
+ *   delete the local row so the app stops using it.
+ * - Deletes the EmailAccount row. Existing EmailMessage / Activity
+ *   records are kept — they're history, not credentials.
+ *
+ * Validates: Requirements 7.1
+ */
+export async function disconnectGmail(
+  userId: string,
+  orgId: string,
+): Promise<{ disconnected: boolean }> {
+  const db = createTenantPrisma(orgId)
+
+  const account = await db.emailAccount.findFirst({
+    where: { userId, provider: 'gmail' },
+  })
+
+  if (!account) {
+    // Nothing to do — already disconnected.
+    return { disconnected: false }
+  }
+
+  // Best-effort token revocation. Wrapped in a try so a transient
+  // Google outage doesn't strand the user with a "connected" UI they
+  // can't get rid of.
+  try {
+    const refreshToken = decrypt(account.refreshToken)
+    await fetch('https://oauth2.googleapis.com/revoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token: refreshToken }),
+    })
+  } catch {
+    // Swallow — the local delete below is the source of truth for the
+    // app. Users can also revoke from Google's side at
+    // https://myaccount.google.com/permissions.
+  }
+
+  await db.emailAccount.delete({ where: { id: account.id } })
+
+  return { disconnected: true }
+}
+
+/**
  * Checks if the token for an EmailAccount is about to expire (within 5-minute buffer)
  * and refreshes it if needed. Updates the stored encrypted tokens.
  *
