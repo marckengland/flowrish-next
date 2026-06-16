@@ -11,9 +11,11 @@ import {
   Trash2,
   TrendingUp,
   Users,
+  X,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { CompanyForm } from '@/components/companies/company-form'
 import { DeleteCompanyDialog } from '@/components/companies/delete-company-dialog'
 
 export interface CompanyDetailContact {
@@ -56,8 +58,9 @@ export interface CompanyDetailViewProps {
  * dialog that warns when there are linked leads (those leads keep
  * existing but lose the company association).
  *
- * Edit lives on the companies list page through the inline form, so
- * this surface is intentionally read-only with a back link.
+ * Edit toggles an inline `CompanyForm` so the user can update fields
+ * without leaving the page; the table/companies list also offers create
+ * via its own dialog.
  *
  * Validates: Requirements 19.3, 19.4
  */
@@ -70,6 +73,7 @@ export function CompanyDetailView({
 }: CompanyDetailViewProps): React.JSX.Element {
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   return (
     <div className="flex flex-col gap-6">
@@ -115,12 +119,21 @@ export function CompanyDetailView({
           <div className="flex gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant={editing ? 'secondary' : 'outline'}
               size="sm"
-              onClick={() => router.push(`/companies?edit=${company.id}`)}
+              onClick={() => setEditing((v) => !v)}
             >
-              <Pencil className="size-3.5" aria-hidden="true" />
-              <span>Edit</span>
+              {editing ? (
+                <>
+                  <X className="size-3.5" aria-hidden="true" />
+                  <span>Cancel edit</span>
+                </>
+              ) : (
+                <>
+                  <Pencil className="size-3.5" aria-hidden="true" />
+                  <span>Edit</span>
+                </>
+              )}
             </Button>
             <Button
               type="button"
@@ -134,6 +147,27 @@ export function CompanyDetailView({
           </div>
         ) : null}
       </header>
+
+      {editing ? (
+        <section
+          aria-label="Edit company"
+          className="rounded-md border bg-card p-4"
+        >
+          <CompanyForm
+            company={{
+              id: company.id,
+              name: company.name,
+              industry: company.industry,
+              website: company.website,
+            }}
+            onSuccess={() => {
+              setEditing(false)
+              router.refresh()
+            }}
+            onCancel={() => setEditing(false)}
+          />
+        </section>
+      ) : null}
 
       <section aria-labelledby="company-contacts">
         <h2
