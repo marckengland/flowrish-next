@@ -178,9 +178,10 @@ export const emailSyncFunction = inngest.createFunction(
         const subject = getHeader(msgData.payload.headers, 'Subject')
         const sentAt = new Date(parseInt(msgData.internalDate, 10))
 
-        // Create EmailMessage record
+        // Create EmailMessage record first so we can link the activity
+        // back to it via the dedicated `emailMessageId` foreign key.
         // Note: organizationId is auto-injected by the tenant middleware at runtime
-        await db.emailMessage.create({
+        const emailMessage = await db.emailMessage.create({
           data: tenantData({
             externalId: msgData.id,
             threadId: msgData.threadId,
@@ -207,7 +208,10 @@ export const emailSyncFunction = inngest.createFunction(
           })
 
           if (lead) {
-            // Create an EMAIL activity linked to this lead
+            // Create an EMAIL activity linked to this lead and to the
+            // EmailMessage we just persisted. The Activity model uses
+            // `notes` for free-form copy and `emailMessageId` to thread
+            // the activity to the actual message body.
             await db.activity.create({
               data: tenantData({
                 type: 'EMAIL',
@@ -216,7 +220,8 @@ export const emailSyncFunction = inngest.createFunction(
                   where: { id: accountId },
                   select: { userId: true },
                 }))!.userId,
-                description: `Email: ${subject}`,
+                notes: subject ? `Email: ${subject}` : 'Email',
+                emailMessageId: emailMessage.id,
               }),
             })
 

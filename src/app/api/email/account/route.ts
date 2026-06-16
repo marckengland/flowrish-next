@@ -19,7 +19,7 @@ export async function GET(): Promise<NextResponse> {
     const db = createTenantPrisma(session.organizationId)
     const account = await db.emailAccount.findFirst({
       where: { userId: session.dbUser.id, provider: 'gmail' },
-      select: { id: true, email: true },
+      select: { id: true, email: true, lastSyncAt: true },
     })
 
     return NextResponse.json({ data: account })
