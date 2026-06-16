@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useTransition } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, Loader2, Mail, Unplug } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -15,10 +15,6 @@ const GMAIL_SCOPES = [
 ].join(' ')
 
 export interface GmailConnectProps {
-  /** Whether the user already has a connected Gmail account. */
-  isConnected: boolean
-  /** The connected email address (if already connected). */
-  connectedEmail?: string | null
   /** Google OAuth Client ID (public, safe to expose to client). */
   googleClientId: string
   /** The redirect URI for the OAuth callback. */
@@ -29,53 +25,101 @@ export interface GmailConnectProps {
   className?: string
 }
 
+interface ConnectionState {
+  status: 'loading' | 'connected' | 'disconnected'
+  email: string | null
+}
+
 /**
  * Gmail OAuth connection flow component.
  *
- * When not connected, shows a "Connect Gmail" button that opens the
- * Google OAuth consent screen. After the user grants access, the OAuth
- * callback redirects back with an authorization code which is exchanged
- * for tokens via `POST /api/email/connect`.
+ * On mount, queries `/api/email/account` to see whether the user has
+ * already connected a Gmail account. The result drives whether the
+ * "Connect Gmail" button or the connected-state card renders.
  *
- * When already connected, shows the connected email address with a
- * success indicator.
+ * When the user clicks Connect, a popup opens to Google's consent
+ * screen. The callback page (`/api/email/callback`) handles the code
+ * exchange server-side (which lets us pass the exact request origin as
+ * `redirect_uri` and avoids fragile env-derived URIs), then posts a
+ * `gmail-oauth-success` message back to this window.
  *
  * Validates: Requirements 7.1
  */
 export function GmailConnect({
-  isConnected: initialConnected,
-  connectedEmail: initialEmail,
   googleClientId,
   redirectUri,
   onConnected,
   className,
 }: GmailConnectProps): React.JSX.Element {
-  const [isConnected, setIsConnected] = useState(initialConnected)
-  const [connectedEmail, setConnectedEmail] = useState(initialEmail ?? null)
+  const [state, setState] = useState<ConnectionState>({
+    status: 'loading',
+    email: null,
+  })
   const [error, setError] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const [popupOpen, setPopupOpen] = useState(false)
+
+  // Fetch the current connection state on mount so the UI reflects
+  // what's actually stored on the server (so a page reload after a
+  // previous connect still shows "connected").
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const res = await fetch('/api/email/account', {
+          credentials: 'same-origin',
+          cache: 'no-store',
+        })
+        if (!res.ok) throw new Error(`Failed (${res.status})`)
+        const body = (await res.json()) as {
+          data: { id: string; email: string } | null
+        }
+        if (cancelled) return
+        if (body.data) {
+          setState({ status: 'connected', email: body.data.email })
+        } else {
+          setState({ status: 'disconnected', email: null })
+        }
+      } catch (err) {
+        if (cancelled) return
+        // Treat fetch failure as "not connected" so the user can still
+        // see and click the connect button.
+        setState({ status: 'disconnected', email: null })
+        setError(
+          err instanceof Error ? err.message : 'Failed to load Gmail status.',
+        )
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   /**
-   * Listen for the OAuth callback message from the popup window.
-   * The callback page posts the authorization code back to this window.
+   * Receives the popup callback. The server-rendered close-page in
+   * /api/email/callback already exchanges the authorization code for
+   * tokens, so the message we get here either reports success (with the
+   * connected email) or an error string we should surface.
    */
   const handleOAuthMessage = useCallback(
     (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return
-      const data = event.data as { type?: string; code?: string; error?: string }
-      if (data.type !== 'gmail-oauth-callback') return
-
-      if (data.error) {
-        setError(data.error)
-        return
+      const data = event.data as {
+        type?: string
+        data?: { email: string; accountId: string }
+        error?: string
       }
-
-      if (data.code) {
-        exchangeCode(data.code)
+      if (data.type === 'gmail-oauth-success' && data.data) {
+        setState({ status: 'connected', email: data.data.email })
+        setError(null)
+        setPopupOpen(false)
+        onConnected?.(data.data)
+      } else if (data.type === 'gmail-oauth-error') {
+        setError(data.error ?? 'Failed to connect Gmail.')
+        setPopupOpen(false)
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [onConnected],
   )
 
   useEffect(() => {
@@ -83,46 +127,15 @@ export function GmailConnect({
     return () => window.removeEventListener('message', handleOAuthMessage)
   }, [handleOAuthMessage])
 
-  function exchangeCode(code: string): void {
-    setError(null)
-    startTransition(async () => {
-      try {
-        const res = await fetch('/api/email/connect', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-          credentials: 'same-origin',
-          body: JSON.stringify({ code }),
-        })
-
-        if (!res.ok) {
-          let message = `Failed to connect Gmail (${res.status})`
-          try {
-            const body = (await res.json()) as { error?: { message?: string } }
-            if (body.error?.message) message = body.error.message
-          } catch {
-            // ignore parse failure
-          }
-          setError(message)
-          return
-        }
-
-        const body = (await res.json()) as {
-          data: { email: string; accountId: string }
-        }
-        setIsConnected(true)
-        setConnectedEmail(body.data.email)
-        onConnected?.(body.data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to connect Gmail.')
-      }
-    })
-  }
-
   function startOAuthFlow(): void {
     setError(null)
+
+    if (!googleClientId) {
+      setError(
+        'Gmail integration is not configured. Set NEXT_PUBLIC_GOOGLE_CLIENT_ID and redeploy.',
+      )
+      return
+    }
 
     const params = new URLSearchParams({
       client_id: googleClientId,
@@ -135,20 +148,43 @@ export function GmailConnect({
 
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
 
-    // Open in a popup so the user doesn't lose their current page context
     const width = 500
     const height = 600
     const left = window.screenX + (window.outerWidth - width) / 2
     const top = window.screenY + (window.outerHeight - height) / 2
 
-    window.open(
+    setPopupOpen(true)
+    const popup = window.open(
       authUrl,
       'gmail-oauth',
       `width=${width},height=${height},left=${left},top=${top},popup=yes`,
     )
+
+    if (!popup) {
+      setPopupOpen(false)
+      setError(
+        'Popup blocked. Please allow popups for this site and try again.',
+      )
+    }
   }
 
-  if (isConnected) {
+  if (state.status === 'loading') {
+    return (
+      <div
+        className={cn(
+          'flex items-center gap-2 rounded-md border bg-card px-4 py-3 text-sm text-muted-foreground',
+          className,
+        )}
+        role="status"
+        aria-live="polite"
+      >
+        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        <span>Checking Gmail connection…</span>
+      </div>
+    )
+  }
+
+  if (state.status === 'connected') {
     return (
       <div
         className={cn(
@@ -162,8 +198,8 @@ export function GmailConnect({
         />
         <div className="flex-1">
           <p className="text-sm font-medium text-foreground">Gmail connected</p>
-          {connectedEmail ? (
-            <p className="text-xs text-muted-foreground">{connectedEmail}</p>
+          {state.email ? (
+            <p className="text-xs text-muted-foreground">{state.email}</p>
           ) : null}
         </div>
       </div>
@@ -188,12 +224,12 @@ export function GmailConnect({
             type="button"
             size="sm"
             onClick={startOAuthFlow}
-            disabled={isPending}
+            disabled={popupOpen}
           >
-            {isPending ? (
+            {popupOpen ? (
               <>
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                <span>Connecting…</span>
+                <span>Waiting for Google…</span>
               </>
             ) : (
               <>

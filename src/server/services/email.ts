@@ -45,8 +45,14 @@ export async function connectGmail(
   code: string,
   userId: string,
   orgId: string,
+  redirectUri: string,
 ): Promise<{ email: string; accountId: string }> {
-  // Exchange authorization code for tokens
+  // Exchange authorization code for tokens. The `redirect_uri` here MUST
+  // be byte-for-byte identical to the one the browser sent in the
+  // initial /o/oauth2/v2/auth request, otherwise Google rejects with
+  // `redirect_uri_mismatch`. Callers pass it explicitly so the value
+  // travels with the code rather than being reconstructed from a
+  // separate (and easy to drift) env var.
   const tokenResponse = await fetch(GMAIL_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -55,7 +61,7 @@ export async function connectGmail(
       client_id: env.GOOGLE_CLIENT_ID,
       client_secret: env.GOOGLE_CLIENT_SECRET,
       grant_type: 'authorization_code',
-      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/email/callback`,
+      redirect_uri: redirectUri,
     }),
   })
 

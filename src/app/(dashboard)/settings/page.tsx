@@ -87,7 +87,6 @@ export default function SettingsPage(): React.JSX.Element {
           {activeTab === 'email' && (
             <div className="flex flex-col gap-4">
               <GmailConnect
-                isConnected={false}
                 googleClientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''}
                 redirectUri={typeof window !== 'undefined' ? `${window.location.origin}/api/email/callback` : '/api/email/callback'}
               />

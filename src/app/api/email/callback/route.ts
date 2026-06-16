@@ -64,7 +64,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const session = await requireSession()
-    const result = await connectGmail(code, session.dbUser.id, session.organizationId)
+    const redirectUri = `${request.nextUrl.origin}/api/email/callback`
+    const result = await connectGmail(
+      code,
+      session.dbUser.id,
+      session.organizationId,
+      redirectUri,
+    )
 
     return renderClosePage({
       type: 'gmail-oauth-success',
