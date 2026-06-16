@@ -119,6 +119,55 @@ export function StepEditor({
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pending, startTransition] = useTransition()
+  const [testStatus, setTestStatus] = useState<
+    | { kind: 'idle' }
+    | { kind: 'sending' }
+    | { kind: 'sent'; recipient: string }
+    | { kind: 'error'; message: string }
+  >({ kind: 'idle' })
+
+  /**
+   * Posts the current subject + body to `/api/email/test`, which sends
+   * the message to the user's own connected Gmail account with sample
+   * personalization data. Useful for previewing the rendered HTML and
+   * tag substitution before activating the cadence.
+   */
+  async function sendTestEmail(): Promise<void> {
+    if (!emailSubject.trim() || !emailBody.trim()) {
+      setTestStatus({
+        kind: 'error',
+        message: 'Subject and body are required to send a test.',
+      })
+      return
+    }
+    setTestStatus({ kind: 'sending' })
+    try {
+      const res = await fetch('/api/email/test', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject: emailSubject, body: emailBody }),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: { message?: string }
+        }
+        setTestStatus({
+          kind: 'error',
+          message:
+            data.error?.message ?? `Failed to send test (${res.status})`,
+        })
+        return
+      }
+      const data = (await res.json()) as { data: { recipient: string } }
+      setTestStatus({ kind: 'sent', recipient: data.data.recipient })
+    } catch (err) {
+      setTestStatus({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Failed to send test.',
+      })
+    }
+  }
 
   // Cadence step attachments. Loaded only in edit mode (new steps
   // don't have an id yet so the upload route can't associate files).
@@ -551,7 +600,41 @@ export function StepEditor({
               </div>
 
               <div>
-                <span className="mb-1 block text-sm font-medium">Body</span>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="block text-sm font-medium">Body</span>
+                  {canEdit ? (
+                    <div className="flex items-center gap-2">
+                      {testStatus.kind === 'sent' ? (
+                        <span className="text-xs text-emerald-700 dark:text-emerald-300">
+                          Sent to {testStatus.recipient}
+                        </span>
+                      ) : testStatus.kind === 'error' ? (
+                        <span
+                          role="alert"
+                          className="text-xs text-destructive"
+                        >
+                          {testStatus.message}
+                        </span>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="outline"
+                        onClick={sendTestEmail}
+                        disabled={
+                          testStatus.kind === 'sending'
+                          || !emailSubject.trim()
+                          || !emailBody.trim()
+                        }
+                        title="Send a preview to your own Gmail with sample personalization"
+                      >
+                        {testStatus.kind === 'sending'
+                          ? 'Sending…'
+                          : 'Send test email'}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
                 {canEdit ? (
                   <RichTextEditor
                     defaultValue={emailBody}

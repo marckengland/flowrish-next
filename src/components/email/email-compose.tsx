@@ -150,6 +150,54 @@ export function EmailCompose({
   // Re-keys the editor when we apply an AI draft so its internal state
   // resets to the new defaultValue (TipTap doesn't react to prop changes).
   const [editorKey, setEditorKey] = useState(0)
+  const [testStatus, setTestStatus] = useState<
+    | { kind: 'idle' }
+    | { kind: 'sending' }
+    | { kind: 'sent'; recipient: string }
+    | { kind: 'error'; message: string }
+  >({ kind: 'idle' })
+
+  /**
+   * Sends a preview of the current subject + body to the connected
+   * Gmail account itself with sample personalization values. Lets the
+   * user inspect the rendered email — including formatting and tag
+   * substitution — before sending it to the actual lead.
+   */
+  async function sendPreview(): Promise<void> {
+    if (!subject.trim() || !body.trim()) {
+      setTestStatus({
+        kind: 'error',
+        message: 'Subject and body are required to send a test.',
+      })
+      return
+    }
+    setTestStatus({ kind: 'sending' })
+    try {
+      const res = await fetch('/api/email/test', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject, body }),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: { message?: string }
+        }
+        setTestStatus({
+          kind: 'error',
+          message: data.error?.message ?? `Failed to send test (${res.status})`,
+        })
+        return
+      }
+      const data = (await res.json()) as { data: { recipient: string } }
+      setTestStatus({ kind: 'sent', recipient: data.data.recipient })
+    } catch (err) {
+      setTestStatus({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Failed to send test.',
+      })
+    }
+  }
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -522,7 +570,38 @@ export function EmailCompose({
         </div>
       ) : null}
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {testStatus.kind === 'sent' ? (
+          <span className="mr-auto text-xs text-emerald-700 dark:text-emerald-300">
+            Test sent to {testStatus.recipient}
+          </span>
+        ) : testStatus.kind === 'error' ? (
+          <span role="alert" className="mr-auto text-xs text-destructive">
+            {testStatus.message}
+          </span>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={sendPreview}
+          disabled={
+            isPending
+            || testStatus.kind === 'sending'
+            || !subject.trim()
+            || !body.trim()
+          }
+          title="Send a preview of this email to your own Gmail with sample personalization"
+        >
+          {testStatus.kind === 'sending' ? (
+            <>
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              <span>Sending test…</span>
+            </>
+          ) : (
+            <span>Send test email</span>
+          )}
+        </Button>
         {!alwaysOpen && (
           <Button
             type="button"

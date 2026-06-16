@@ -516,6 +516,124 @@ export async function sendEmail(
 }
 
 /**
+ * Sample lead used to substitute personalization tags in test emails.
+ * Mirrors the sample values surfaced in the rich text editor preview.
+ */
+const TEST_PERSONALIZATION_LEAD: PersonalizationLead = {
+  firstName: 'John',
+  lastName: 'Smith',
+  companyName: 'Acme Corp',
+  title: 'VP of Sales',
+}
+
+/**
+ * Sends a one-off test email to the user's own connected Gmail
+ * inbox. Used by the cadence step editor and the per-lead composer
+ * so reps can preview the rendered email — including formatting,
+ * personalization-tag substitution, and the wrapping HTML — before
+ * activating a cadence or hitting send for real.
+ *
+ * Differences from {@link sendEmail}:
+ *   - Recipient is the connected Gmail account (the sender), not a lead.
+ *   - Personalization tags are substituted with sample values so
+ *     `{{FirstName}}` etc. render the same way the editor preview shows.
+ *   - The subject is prefixed with `[Test]` so the user can tell test
+ *     sends apart from real outbound mail in their inbox.
+ *   - No EmailMessage / Activity rows are created — tests don't appear
+ *     in the lead timeline.
+ */
+export async function sendTestEmail(
+  subject: string,
+  body: string,
+  userId: string,
+  orgId: string,
+  attachments: readonly EmailAttachment[] = [],
+): Promise<{ messageId: string; recipient: string }> {
+  const db = createTenantPrisma(orgId)
+
+  const emailAccount = await db.emailAccount.findFirst({
+    where: { userId, provider: 'gmail' },
+  })
+
+  if (!emailAccount) {
+    throw new AppError(
+      'NO_EMAIL_ACCOUNT',
+      'No connected Gmail account. Please connect your Gmail account first.',
+      400,
+    )
+  }
+
+  await refreshTokenIfNeeded(emailAccount.id, orgId)
+
+  const updatedAccount = await db.emailAccount.findFirst({
+    where: { id: emailAccount.id },
+  })
+
+  if (!updatedAccount) {
+    throw new AppError(
+      'EMAIL_ACCOUNT_NOT_FOUND',
+      'Email account not found after refresh',
+      500,
+    )
+  }
+
+  const accessToken = decrypt(updatedAccount.accessToken)
+
+  // Substitute tags with the same sample values the editor preview
+  // shows so the test email matches what the user already saw.
+  const renderedSubject = `[Test] ${replacePersonalizationTags(
+    subject,
+    TEST_PERSONALIZATION_LEAD,
+  )}`
+  const renderedBody = replacePersonalizationTags(
+    body,
+    TEST_PERSONALIZATION_LEAD,
+  )
+  const htmlBody = wrapHtmlEmail(renderedBody)
+
+  // Send to self — same address Gmail just authenticated as.
+  const recipient = updatedAccount.email
+  const rawEmail =
+    attachments.length > 0
+      ? buildRawEmailWithAttachments(
+          recipient,
+          recipient,
+          renderedSubject,
+          htmlBody,
+          attachments,
+          null,
+        )
+      : buildRawEmail(recipient, recipient, renderedSubject, htmlBody, null)
+
+  const sendResponse = await fetch(
+    `${GMAIL_API_BASE}/users/me/messages/send`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ raw: rawEmail }),
+    },
+  )
+
+  if (!sendResponse.ok) {
+    const errorText = await sendResponse.text()
+    throw new AppError(
+      'EMAIL_SEND_FAILED',
+      `Failed to send test email: ${errorText}`,
+      500,
+    )
+  }
+
+  const sendData = (await sendResponse.json()) as GmailSendResponse
+
+  // Intentionally skip EmailMessage / Activity creation — test sends
+  // shouldn't pollute the lead timeline or the inbox sync state.
+  return { messageId: sendData.id, recipient }
+}
+
+/**
  * Builds a raw RFC 2822 email message and encodes it as base64url
  * for the Gmail API send endpoint.
  *
