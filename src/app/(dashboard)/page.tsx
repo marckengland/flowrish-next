@@ -27,10 +27,8 @@ import {
   calculateWinRate,
 } from '@/server/services/forecast'
 import {
-  calculateDealEngagementScore,
   calculatePriorityScore,
-  classifyDealHealth,
-  identifyDealGaps,
+  getRhythmSnapshot,
 } from '@/server/services/rhythm'
 
 /**
@@ -173,18 +171,27 @@ export default async function DashboardPage({
       && d.getDate() === now.getDate()
   }).length
 
-  // ── Derived: Deal Health ───────────────────────────────────────────────────
-  // Score each open lead. For scalability we process the capped list only.
-  const engagement = await Promise.all(
-    openLeads.map(async (lead) => {
-      const score = await calculateDealEngagementScore(lead.id, orgId)
-      return {
-        lead,
-        score,
-        health: classifyDealHealth(score),
-      }
-    }),
+  // ── Derived: Deal Health + Deal Gaps (batched) ─────────────────────────────
+  // A single batch call fetches everything needed to score every open
+  // lead and identify its gaps. Previously this loop issued ~6 queries
+  // per lead × 500 leads = 3,000 DB round-trips per dashboard render;
+  // the batch version does it in 4 queries flat regardless of size.
+  const rhythmSnapshot = await getRhythmSnapshot(
+    openLeads.map((l) => l.id),
+    orgId,
   )
+
+  const engagement = openLeads.map((lead) => {
+    const entry = rhythmSnapshot.get(lead.id)
+    // A lead missing from the snapshot was filtered out by the query
+    // (deleted between reads or scoped out) — treat it as Critical with
+    // the minimum score so it still appears in the "worst health" list.
+    const score = entry?.engagementScore ?? 1
+    const health = entry?.health ?? 'Critical'
+    const gaps = entry?.gaps ?? []
+    return { lead, score, health, gaps }
+  })
+
   const healthSummary = engagement.reduce(
     (acc, e) => {
       if (e.health === 'Healthy') acc.healthy++
@@ -206,14 +213,7 @@ export default async function DashboardPage({
       dealValue: e.lead.dealValue ? Number(e.lead.dealValue) : null,
     }))
 
-  // ── Derived: Deal Gaps ─────────────────────────────────────────────────────
-  const gapResults = await Promise.all(
-    openLeads.map(async (lead) => {
-      const gaps = await identifyDealGaps(lead.id, orgId)
-      return { lead, gaps }
-    }),
-  )
-  const gapSummary = gapResults.reduce(
+  const gapSummary = engagement.reduce(
     (acc, g) => {
       if (g.gaps.includes('no_recent_activity')) acc.noRecentActivity++
       if (g.gaps.includes('no_future_meeting')) acc.noFutureMeeting++
@@ -222,7 +222,7 @@ export default async function DashboardPage({
     },
     { noRecentActivity: 0, noFutureMeeting: 0, singleThreaded: 0 },
   )
-  const gapRows: DealGapRow[] = gapResults
+  const gapRows: DealGapRow[] = engagement
     .filter((g) => g.gaps.length > 0)
     .slice(0, 10)
     .map((g) => ({

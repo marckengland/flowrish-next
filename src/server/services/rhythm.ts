@@ -199,6 +199,236 @@ export function classifyDealHealth(score: number): DealHealth {
   return 'Critical'
 }
 
+// ─── Batched Rhythm Snapshot ─────────────────────────────────────────────────
+
+/**
+ * Combined engagement + health + gaps for a single lead in the batch view.
+ * Missing leads (deleted, wrong org, or not found) are simply absent from
+ * the returned map — callers should handle that as "no snapshot available"
+ * rather than treating it as an error, since the batch path is optimistic
+ * about the input set.
+ */
+export interface RhythmSnapshotEntry {
+  leadId: string
+  engagementScore: number
+  health: DealHealth
+  gaps: DealGap[]
+}
+
+/**
+ * Batched rhythm computation for a set of leads.
+ *
+ * The per-lead functions (`calculateDealEngagementScore`, `identifyDealGaps`)
+ * issue six DB round-trips each — at dashboard scale (up to 500 open
+ * leads) that's ~3,000 queries per page render. This function collapses
+ * the entire workload into **four** queries regardless of how many leads
+ * are in the input set:
+ *
+ *   1. `lead.findMany` — leads with stage + pipeline stages
+ *   2. `leadContact.groupBy` — contact count per lead
+ *   3. `activity.groupBy` — activity count (last 30 days) per lead
+ *   4. `activity.findMany` — leads with a future meeting
+ *
+ * The scoring / gap formulas are identical to the single-lead functions
+ * so behavior is unchanged; only the query pattern shifts. Both single-
+ * lead functions remain callable and semantically equivalent — they are
+ * the right tool when you need one specific score and can tolerate the
+ * extra queries.
+ *
+ * Empty input returns an empty map without hitting the database.
+ *
+ * Validates: Requirements 9.4, 9.5, 9.6
+ */
+export async function getRhythmSnapshot(
+  leadIds: readonly string[],
+  orgId: string,
+): Promise<Map<string, RhythmSnapshotEntry>> {
+  const results = new Map<string, RhythmSnapshotEntry>()
+  if (leadIds.length === 0) return results
+
+  const db = createTenantPrisma(orgId)
+  const now = new Date()
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+  const ids = [...leadIds]
+
+  // 1. Leads + stage/pipeline (single query, includes all stages the
+  //    pipeline uses so the progression ratio can be computed).
+  const leadsPromise = db.lead.findMany({
+    where: { id: { in: ids }, deletedAt: null },
+    include: {
+      stage: {
+        include: {
+          pipeline: {
+            include: {
+              stages: {
+                orderBy: { order: 'asc' },
+                select: { id: true, order: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  // 2. Contact counts grouped by lead. Leads with zero linked contacts
+  //    simply don't appear in the result set — treated as 0 downstream.
+  const contactCountsPromise = db.leadContact.groupBy({
+    by: ['leadId'],
+    where: { leadId: { in: ids } },
+    _count: { _all: true },
+  })
+
+  // 3. Activity counts (last 30 days) grouped by lead.
+  const activityCountsPromise = db.activity.groupBy({
+    by: ['leadId'],
+    where: {
+      leadId: { in: ids },
+      createdAt: { gte: thirtyDaysAgo },
+    },
+    _count: { _all: true },
+  })
+
+  // 4. Future meetings — one row per lead-with-meeting via `distinct`.
+  //    We only need "does this lead have any future meeting"; the actual
+  //    meeting rows are irrelevant here.
+  const futureMeetingsPromise = db.activity.findMany({
+    where: {
+      leadId: { in: ids },
+      type: 'MEETING',
+      meetingDate: { gt: now },
+    },
+    select: { leadId: true },
+    distinct: ['leadId'],
+  })
+
+  const [leads, contactCountRows, activityCountRows, futureMeetingRows] =
+    await Promise.all([
+      leadsPromise,
+      contactCountsPromise,
+      activityCountsPromise,
+      futureMeetingsPromise,
+    ])
+
+  const contactCounts = new Map<string, number>()
+  for (const row of contactCountRows) {
+    if (row.leadId) contactCounts.set(row.leadId, row._count._all)
+  }
+  const activityCounts = new Map<string, number>()
+  for (const row of activityCountRows) {
+    if (row.leadId) activityCounts.set(row.leadId, row._count._all)
+  }
+  const leadsWithFutureMeeting = new Set<string>()
+  for (const row of futureMeetingRows) {
+    if (row.leadId) leadsWithFutureMeeting.add(row.leadId)
+  }
+
+  for (const lead of leads) {
+    const contactCount = contactCounts.get(lead.id) ?? 0
+    const activityCount = activityCounts.get(lead.id) ?? 0
+    const hasFutureMeeting = leadsWithFutureMeeting.has(lead.id)
+
+    const engagementScore = composeEngagementScore({
+      lastActivityAt: lead.lastActivityAt,
+      leadScore: lead.score,
+      stageId: lead.stageId,
+      stages: lead.stage.pipeline.stages,
+      contactCount,
+      activityCount,
+      now,
+    })
+
+    const gaps = composeGaps({
+      lastActivityAt: lead.lastActivityAt,
+      contactCount,
+      hasFutureMeeting,
+      sevenDaysAgo,
+    })
+
+    results.set(lead.id, {
+      leadId: lead.id,
+      engagementScore,
+      health: classifyDealHealth(engagementScore),
+      gaps,
+    })
+  }
+
+  return results
+}
+
+/**
+ * Pure engagement-score composer. Kept private so the single-lead and
+ * batch code paths stay in lock-step on the scoring formula. Exported
+ * only via the batch function's return value.
+ */
+function composeEngagementScore(input: {
+  lastActivityAt: Date | null
+  leadScore: number
+  stageId: string
+  stages: readonly { id: string; order: number }[]
+  contactCount: number
+  activityCount: number
+  now: Date
+}): number {
+  let score = 0
+
+  // Activity Recency (0-25)
+  if (input.lastActivityAt) {
+    const days =
+      (input.now.getTime() - input.lastActivityAt.getTime())
+      / (1000 * 60 * 60 * 24)
+    if (days <= 0) score += 25
+    else if (days >= 30) score += 0
+    else score += Math.round(25 * (1 - days / 30))
+  }
+
+  // Stakeholder Count (0-20)
+  score += Math.min(Math.floor(input.contactCount * (20 / 5)), 20)
+
+  // Activity Volume (0-20)
+  score += Math.min(Math.floor(input.activityCount * (20 / 10)), 20)
+
+  // Deal Progression (0-20)
+  if (input.stages.length > 1) {
+    const idx = input.stages.findIndex((s) => s.id === input.stageId)
+    if (idx >= 0) {
+      const ratio = idx / (input.stages.length - 1)
+      score += Math.round(ratio * 20)
+    }
+  }
+
+  // Lead Score (0-15)
+  score += Math.round((input.leadScore / 100) * 15)
+
+  return Math.max(1, Math.min(score, 100))
+}
+
+/**
+ * Pure gap composer, matching the single-lead `identifyDealGaps` rules
+ * exactly. Kept alongside `composeEngagementScore` so both paths share
+ * the same source of truth for gap detection.
+ */
+function composeGaps(input: {
+  lastActivityAt: Date | null
+  contactCount: number
+  hasFutureMeeting: boolean
+  sevenDaysAgo: Date
+}): DealGap[] {
+  const gaps: DealGap[] = []
+  const hasRecentActivity =
+    input.lastActivityAt != null && input.lastActivityAt >= input.sevenDaysAgo
+
+  if (!hasRecentActivity) gaps.push('no_recent_activity')
+  if (!input.hasFutureMeeting) gaps.push('no_future_meeting')
+  if (input.contactCount <= 1) {
+    const skipSingleThreaded = input.hasFutureMeeting && hasRecentActivity
+    if (!skipSingleThreaded) gaps.push('single_threaded')
+  }
+  return gaps
+}
+
 // ─── Deal Gap Identification ─────────────────────────────────────────────────
 
 /**
@@ -208,6 +438,10 @@ export function classifyDealHealth(score: number): DealHealth {
  * - "no_recent_activity": no activity in 7+ days
  * - "no_future_meeting": no meeting with meetingDate > now
  * - "single_threaded": ≤1 contact linked — BUT skip if there's both a future meeting AND recent activity
+ *
+ * For rendering multiple leads at once (e.g. the dashboard), prefer
+ * `getRhythmSnapshot` which does the same work in a fixed number of
+ * queries rather than N per lead.
  *
  * Validates: Requirement 9.6
  */

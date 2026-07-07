@@ -17,13 +17,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockDb = {
   lead: {
     findFirst: vi.fn(),
+    findMany: vi.fn(),
   },
   leadContact: {
     count: vi.fn(),
+    groupBy: vi.fn(),
   },
   activity: {
     count: vi.fn(),
     findFirst: vi.fn(),
+    findMany: vi.fn(),
+    groupBy: vi.fn(),
   },
 }
 
@@ -44,6 +48,7 @@ import {
   calculatePriorityScore,
   calculateDealEngagementScore,
   classifyDealHealth,
+  getRhythmSnapshot,
   identifyDealGaps,
 } from '@/server/services/rhythm'
 
@@ -509,6 +514,167 @@ describe('Rhythm Engine', () => {
       const gaps = await identifyDealGaps(leadId, orgId)
 
       expect(gaps).toContain('no_recent_activity')
+    })
+  })
+
+  // ─── getRhythmSnapshot (batched) ─────────────────────────────────────────
+
+  describe('getRhythmSnapshot', () => {
+    const leadA = 'aaaaaaaa-1111-1111-1111-111111111111'
+    const leadB = 'bbbbbbbb-2222-2222-2222-222222222222'
+
+    const stages = [
+      { id: 'stage-1', order: 1 },
+      { id: 'stage-2', order: 2 },
+      { id: 'stage-3', order: 3 },
+      { id: 'stage-4', order: 4 },
+      { id: 'stage-5', order: 5 },
+    ]
+
+    function mockBatch(config: {
+      leads: Array<{
+        id: string
+        score: number
+        lastActivityAt: Date | null
+        stageId: string
+      }>
+      contacts?: Record<string, number>
+      activities?: Record<string, number>
+      futureMeetings?: string[]
+    }): void {
+      mockDb.lead.findMany.mockResolvedValue(
+        config.leads.map((l) => ({
+          ...l,
+          deletedAt: null,
+          stage: {
+            id: l.stageId,
+            order: stages.find((s) => s.id === l.stageId)?.order ?? 1,
+            pipeline: { id: 'pipeline-1', stages },
+          },
+        })),
+      )
+      mockDb.leadContact.groupBy.mockResolvedValue(
+        Object.entries(config.contacts ?? {}).map(([leadId, count]) => ({
+          leadId,
+          _count: { _all: count },
+        })),
+      )
+      mockDb.activity.groupBy.mockResolvedValue(
+        Object.entries(config.activities ?? {}).map(([leadId, count]) => ({
+          leadId,
+          _count: { _all: count },
+        })),
+      )
+      mockDb.activity.findMany.mockResolvedValue(
+        (config.futureMeetings ?? []).map((leadId) => ({ leadId })),
+      )
+    }
+
+    it('returns an empty map when no lead IDs are supplied without hitting the DB', async () => {
+      const snapshot = await getRhythmSnapshot([], orgId)
+      expect(snapshot.size).toBe(0)
+      expect(mockDb.lead.findMany).not.toHaveBeenCalled()
+    })
+
+    it('composes engagement, health, and gaps for every lead in one pass', async () => {
+      const now = new Date()
+      mockBatch({
+        leads: [
+          {
+            id: leadA,
+            score: 80,
+            lastActivityAt: now, // recent
+            stageId: 'stage-3',
+          },
+          {
+            id: leadB,
+            score: 20,
+            lastActivityAt: new Date(now.getTime() - 40 * 24 * 60 * 60 * 1000),
+            stageId: 'stage-1',
+          },
+        ],
+        contacts: { [leadA]: 5, [leadB]: 1 },
+        activities: { [leadA]: 10, [leadB]: 0 },
+        futureMeetings: [leadA],
+      })
+
+      const snapshot = await getRhythmSnapshot([leadA, leadB], orgId)
+
+      // Lead A: full engagement, no gaps
+      const a = snapshot.get(leadA)
+      expect(a).toBeDefined()
+      // 25 (recency) + 20 (contacts) + 20 (activities) + 10 (stage 3/5) + 12 (score 80)
+      expect(a!.engagementScore).toBe(87)
+      expect(a!.health).toBe('Healthy')
+      expect(a!.gaps).toEqual([])
+
+      // Lead B: stale, single-threaded, no future meeting
+      const b = snapshot.get(leadB)
+      expect(b).toBeDefined()
+      expect(b!.gaps).toContain('no_recent_activity')
+      expect(b!.gaps).toContain('no_future_meeting')
+      expect(b!.gaps).toContain('single_threaded')
+      expect(b!.health).toBe('Critical')
+    })
+
+    it('respects the single-threaded skip rule when both signals are healthy', async () => {
+      // Lead has one contact but recent activity + future meeting →
+      // should NOT be flagged as single-threaded.
+      mockBatch({
+        leads: [
+          {
+            id: leadA,
+            score: 50,
+            lastActivityAt: new Date(),
+            stageId: 'stage-2',
+          },
+        ],
+        contacts: { [leadA]: 1 },
+        activities: { [leadA]: 3 },
+        futureMeetings: [leadA],
+      })
+
+      const snapshot = await getRhythmSnapshot([leadA], orgId)
+      const entry = snapshot.get(leadA)!
+      expect(entry.gaps).not.toContain('single_threaded')
+      expect(entry.gaps).not.toContain('no_recent_activity')
+      expect(entry.gaps).not.toContain('no_future_meeting')
+    })
+
+    it('issues exactly four DB queries regardless of input size', async () => {
+      mockBatch({
+        leads: [
+          { id: leadA, score: 50, lastActivityAt: new Date(), stageId: 'stage-2' },
+          { id: leadB, score: 50, lastActivityAt: new Date(), stageId: 'stage-2' },
+        ],
+        contacts: { [leadA]: 2, [leadB]: 2 },
+        activities: { [leadA]: 4, [leadB]: 4 },
+        futureMeetings: [leadA, leadB],
+      })
+
+      await getRhythmSnapshot([leadA, leadB], orgId)
+
+      expect(mockDb.lead.findMany).toHaveBeenCalledTimes(1)
+      expect(mockDb.leadContact.groupBy).toHaveBeenCalledTimes(1)
+      expect(mockDb.activity.groupBy).toHaveBeenCalledTimes(1)
+      expect(mockDb.activity.findMany).toHaveBeenCalledTimes(1)
+    })
+
+    it('omits leads that fail the tenant/deleted filter', async () => {
+      // Only lead A comes back from findMany; lead B was filtered out
+      // (e.g. deletedAt set between reads). It should be absent from the map.
+      mockBatch({
+        leads: [
+          { id: leadA, score: 50, lastActivityAt: new Date(), stageId: 'stage-2' },
+        ],
+        contacts: { [leadA]: 3 },
+        activities: { [leadA]: 5 },
+        futureMeetings: [leadA],
+      })
+
+      const snapshot = await getRhythmSnapshot([leadA, leadB], orgId)
+      expect(snapshot.has(leadA)).toBe(true)
+      expect(snapshot.has(leadB)).toBe(false)
     })
   })
 })
