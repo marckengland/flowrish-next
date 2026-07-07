@@ -43,7 +43,6 @@ interface AuditFilters {
 }
 
 const ENTITY_TYPES = ['Lead', 'Contact', 'Company', 'Task', 'Cadence', 'Pipeline']
-const ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'IMPORT']
 
 export function AuditLog(): React.JSX.Element {
   const [page, setPage] = useState(1)

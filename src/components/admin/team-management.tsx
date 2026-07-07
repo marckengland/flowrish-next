@@ -195,7 +195,11 @@ function TeamNode({ team, depth }: { team: Team; depth: number }): React.JSX.Ele
   const hasChildren = team.childTeams && team.childTeams.length > 0
 
   return (
-    <li role="treeitem" aria-expanded={hasChildren ? expanded : undefined}>
+    <li
+      role="treeitem"
+      aria-selected={false}
+      aria-expanded={hasChildren ? expanded : undefined}
+    >
       <div
         className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50"
         style={{ paddingLeft: `${depth * 20 + 8}px` }}

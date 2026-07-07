@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useActionState } from 'react'
+
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { createOrg, joinOrg } from '@/server/actions/onboarding'
 
 type Tab = 'create' | 'join'
@@ -68,14 +70,13 @@ export function OnboardingForm() {
             >
               Organization Name
             </label>
-            <input
+            <Input
               id="org-name"
               name="name"
               type="text"
               required
               placeholder="Acme Corp"
               autoComplete="organization"
-              className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
 
@@ -86,16 +87,16 @@ export function OnboardingForm() {
             >
               URL Slug
             </label>
-            <input
+            <Input
               id="org-slug"
               name="slug"
               type="text"
               required
               placeholder="acme-corp"
               pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
-              className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              aria-describedby="org-slug-hint"
             />
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p id="org-slug-hint" className="mt-1 text-xs text-muted-foreground">
               Lowercase letters, numbers, and hyphens only.
             </p>
           </div>
@@ -125,15 +126,15 @@ export function OnboardingForm() {
             >
               Invite Code
             </label>
-            <input
+            <Input
               id="invite-code"
               name="inviteCode"
               type="text"
               required
               placeholder="Enter your invite code"
-              className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              aria-describedby="invite-code-hint"
             />
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p id="invite-code-hint" className="mt-1 text-xs text-muted-foreground">
               Ask your team admin for an invite code to join their organization.
             </p>
           </div>

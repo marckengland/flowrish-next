@@ -377,6 +377,12 @@ export default async function DashboardPage({
 /**
  * Parses the optional `from` / `to` URL query params into a date range.
  * Values outside YYYY-MM-DD are ignored (falls back to the service default).
+ *
+ * Date-only inputs (`YYYY-MM-DD`) are anchored to the server's local
+ * timezone rather than parsed as UTC. `new Date('2026-01-01')` would
+ * otherwise resolve to UTC midnight, which shifts the effective day in
+ * every non-UTC timezone — a common source of "the range dropped a day"
+ * bugs. Full ISO timestamps still round-trip through the native parser.
  */
 function parseDateRange(
   params: Record<string, string | string[] | undefined>,
@@ -385,18 +391,37 @@ function parseDateRange(
   const toStr = typeof params.to === 'string' ? params.to : undefined
   const out: { from?: Date; to?: Date } = {}
   if (fromStr) {
-    const d = new Date(fromStr)
-    if (!Number.isNaN(d.getTime())) out.from = d
+    const d = parseDateInput(fromStr, false)
+    if (d) out.from = d
   }
   if (toStr) {
-    const d = new Date(toStr)
-    if (!Number.isNaN(d.getTime())) {
-      // Treat `to` as end-of-day so a same-day range includes the whole day.
-      d.setHours(23, 59, 59, 999)
-      out.to = d
-    }
+    const d = parseDateInput(toStr, true)
+    if (d) out.to = d
   }
   return out
+}
+
+/**
+ * Parses `YYYY-MM-DD` as local-time midnight (start of day) or
+ * end-of-day, and leaves any other value to the native `Date` parser
+ * so ISO timestamps still work.
+ */
+function parseDateInput(input: string, endOfDay: boolean): Date | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input)
+  if (match) {
+    const y = Number(match[1])
+    const m = Number(match[2]) - 1
+    const day = Number(match[3])
+    const d = endOfDay
+      ? new Date(y, m, day, 23, 59, 59, 999)
+      : new Date(y, m, day, 0, 0, 0, 0)
+    if (Number.isNaN(d.getTime())) return undefined
+    return d
+  }
+  const d = new Date(input)
+  if (Number.isNaN(d.getTime())) return undefined
+  if (endOfDay) d.setHours(23, 59, 59, 999)
+  return d
 }
 
 /**

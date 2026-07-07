@@ -119,7 +119,6 @@ export async function logAudit(
     })
   } catch (err) {
     // Audit failure must never block the primary operation.
-    // eslint-disable-next-line no-console
     console.error('Audit log failed:', {
       action,
       entityType,

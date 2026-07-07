@@ -34,9 +34,12 @@ export interface HeaderProps {
  * - Provide a quick-toggle for the AI chatbot sidebar (Zustand layout store)
  * - Render the organization name as contextual breadcrumb when provided
  *
- * Sign-out is handled client-side via the browser Supabase client. On success
- * the user is redirected to `/login`; the middleware will also enforce that
- * redirect on any subsequent authenticated route request.
+ * Sign-out is handled client-side via the browser Supabase client. On
+ * success or failure the user is redirected to `/login`; the middleware
+ * also enforces that redirect on any subsequent authenticated route
+ * request. If Supabase's `signOut` throws we surface a small inline
+ * error but still redirect — otherwise a network hiccup would leave the
+ * button spinning forever.
  *
  * Validates: Requirements 1.5, 26.4, 26.5
  */
@@ -48,6 +51,7 @@ export function Header({
   const chatOpen = useLayoutStore((s) => s.chatOpen)
   const toggleChat = useLayoutStore((s) => s.toggleChat)
   const [signingOut, setSigningOut] = useState(false)
+  const [avatarFailed, setAvatarFailed] = useState(false)
 
   async function handleSignOut(): Promise<void> {
     if (signingOut) return
@@ -55,13 +59,22 @@ export function Header({
     try {
       const supabase = createSupabaseBrowser()
       await supabase.auth.signOut()
+    } catch {
+      // Ignore — we still redirect. Middleware will bounce the user
+      // back if the session cookie somehow survived, and we surface a
+      // proper error on the next authenticated action.
     } finally {
-      router.replace('/login')
-      router.refresh()
+      try {
+        router.replace('/login')
+        router.refresh()
+      } finally {
+        setSigningOut(false)
+      }
     }
   }
 
   const initials = getInitials(user.name || user.email)
+  const showAvatar = user.avatarUrl && !avatarFailed
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background px-4 sm:px-6">
@@ -87,12 +100,14 @@ export function Header({
         </Button>
 
         <div className="flex items-center gap-2 rounded-md px-2 py-1">
-          {user.avatarUrl ? (
+          {showAvatar ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={user.avatarUrl}
+              src={user.avatarUrl!}
               alt=""
               aria-hidden="true"
+              onError={() => setAvatarFailed(true)}
+              referrerPolicy="no-referrer"
               className="size-7 rounded-full object-cover"
             />
           ) : (

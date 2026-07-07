@@ -12,13 +12,11 @@ type Theme = 'light' | 'dark'
 /**
  * Toggle between light and dark mode.
  *
- * Persists the choice in localStorage and applies the `dark` class to
- * `<html>` so Tailwind's `dark:` variants pick it up. The initial paint
- * follows the user's system preference unless they've explicitly set
- * one — same convention the original Flowrish theme context used.
- *
- * Renders nothing until mounted to avoid an SSR / CSR mismatch (the
- * server can't know the user's preference).
+ * The initial theme is applied by an inline script in `<head>` (see
+ * `src/app/layout.tsx`) so the correct class is present on `<html>`
+ * before React hydrates — this avoids a light-to-dark flash for
+ * dark-mode users. This component simply reads the current state on
+ * mount and drives subsequent toggles.
  */
 export function ThemeToggle(): React.JSX.Element | null {
   const [mounted, setMounted] = useState(false)
@@ -26,20 +24,21 @@ export function ThemeToggle(): React.JSX.Element | null {
 
   useEffect(() => {
     setMounted(true)
-    const saved = window.localStorage.getItem(STORAGE_KEY) as Theme | null
-    const initial: Theme =
-      saved
-      ?? (window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light')
-    applyTheme(initial)
-    setTheme(initial)
+    // The inline `<head>` script has already set the `dark` class if
+    // appropriate. Read it back so the toggle icon matches reality.
+    const isDark = document.documentElement.classList.contains('dark')
+    setTheme(isDark ? 'dark' : 'light')
   }, [])
 
   function toggle(): void {
     const next: Theme = theme === 'dark' ? 'light' : 'dark'
     applyTheme(next)
-    window.localStorage.setItem(STORAGE_KEY, next)
+    try {
+      window.localStorage.setItem(STORAGE_KEY, next)
+    } catch {
+      // Storage can throw in private mode / sandboxed frames; the visual
+      // toggle should still work even if we can't persist the choice.
+    }
     setTheme(next)
   }
 

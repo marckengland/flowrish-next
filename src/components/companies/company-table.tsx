@@ -2,11 +2,11 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Loader2, Trash2 } from 'lucide-react'
 
 import { useCompaniesQuery, useDeleteCompanyMutation, type CompanyListItem } from '@/hooks/use-companies'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 export interface CompanyTableProps {
   /** Initial data rendered server-side for instant paint. */
@@ -43,7 +43,6 @@ export function CompanyTable({
   pageSize = 20,
 }: CompanyTableProps): React.JSX.Element {
   const [currentSearch, setCurrentSearch] = useState(search ?? '')
-  const router = useRouter()
 
   const query = useCompaniesQuery({ search: currentSearch || undefined, page, pageSize })
   const companiesPage = query.data ?? initialData
@@ -61,13 +60,13 @@ export function CompanyTable({
     <div className="flex flex-col gap-3">
       {/* Search input */}
       <div className="flex items-center gap-3">
-        <input
+        <Input
           type="search"
           value={currentSearch}
           onChange={(e) => setCurrentSearch(e.target.value)}
           placeholder="Search companies…"
           aria-label="Search companies"
-          className="h-9 w-full max-w-sm rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="max-w-sm"
         />
         {query.isFetching && (
           <div role="status" aria-live="polite" className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -109,23 +108,12 @@ export function CompanyTable({
               rows.map((company) => (
                 <tr
                   key={company.id}
-                  onClick={() => router.push(`/companies/${company.id}`)}
-                  onKeyDown={(e) => {
-                    if ((e.key === 'Enter' || e.key === ' ') && e.currentTarget === e.target) {
-                      e.preventDefault()
-                      router.push(`/companies/${company.id}`)
-                    }
-                  }}
-                  tabIndex={0}
-                  role="link"
-                  aria-label={`Open ${company.name}`}
-                  className="cursor-pointer border-t transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="relative cursor-pointer border-t transition-colors hover:bg-muted/30 focus-within:bg-muted/30"
                 >
                   <td className="px-3 py-2 font-medium text-foreground">
                     <Link
                       href={`/companies/${company.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="hover:underline"
+                      className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
                     >
                       {company.name}
                     </Link>
@@ -133,16 +121,15 @@ export function CompanyTable({
                   <td className="px-3 py-2 text-muted-foreground">
                     {company.industry ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">
+                  <td className="relative z-10 px-3 py-2 text-muted-foreground">
                     {company.website ? (
                       <a
                         href={company.website}
                         target="_blank"
                         rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
                         className="text-primary hover:underline"
                       >
-                        {new URL(company.website).hostname}
+                        {safeHostname(company.website)}
                       </a>
                     ) : (
                       '—'
@@ -154,14 +141,11 @@ export function CompanyTable({
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                     {company._count.leads}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="relative z-10 px-3 py-2 text-right">
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDelete(company.id, company.name)
-                      }}
+                      onClick={() => handleDelete(company.id, company.name)}
                       disabled={deleteMutation.isPending}
                       aria-label={`Delete ${company.name}`}
                     >
@@ -185,4 +169,17 @@ export function CompanyTable({
       )}
     </div>
   )
+}
+
+/**
+ * Extracts a hostname from a URL for display. Falls back to the raw URL
+ * when parsing fails so a malformed website string doesn't crash the
+ * whole table.
+ */
+function safeHostname(url: string): string {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return url
+  }
 }

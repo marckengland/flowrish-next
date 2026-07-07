@@ -25,7 +25,6 @@ import type { EnrollmentListItem, EnrollmentStatus } from '@/hooks/use-cadences'
  */
 
 export interface EnrollmentListProps {
-  cadenceId: string
   initialEnrollments: readonly EnrollmentListItem[]
 }
 
@@ -40,7 +39,6 @@ const STATUS_FILTERS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
 ]
 
 export function EnrollmentList({
-  cadenceId,
   initialEnrollments,
 }: EnrollmentListProps): React.JSX.Element {
   const [filter, setFilter] = useState<StatusFilter>('ALL')

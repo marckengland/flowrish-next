@@ -411,11 +411,20 @@ export function ChatbotSidebar(): React.JSX.Element | null {
   }
 
   return (
-    <aside
-      aria-label="AI assistant"
-      role="complementary"
-      className="flex h-full w-80 shrink-0 flex-col border-l bg-background shadow-sm sm:w-96"
-    >
+    <>
+      {/* Mobile backdrop — visible only below the `sm` breakpoint,
+          where the sidebar renders as a fixed overlay rather than an
+          inline column. Tapping outside the sidebar dismisses it. */}
+      <div
+        aria-hidden="true"
+        onClick={() => setOpen(false)}
+        className="fixed inset-0 z-30 bg-black/40 sm:hidden"
+      />
+      <aside
+        aria-label="AI assistant"
+        role="complementary"
+        className="fixed inset-y-0 right-0 z-40 flex w-[min(22rem,calc(100vw-2rem))] flex-col border-l bg-background shadow-lg sm:static sm:h-full sm:w-96 sm:shrink-0 sm:shadow-sm"
+      >
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
         <div className="flex items-center gap-2">
           <span
@@ -520,7 +529,8 @@ export function ChatbotSidebar(): React.JSX.Element | null {
           Press Enter to send. Shift+Enter for a new line.
         </p>
       </form>
-    </aside>
+      </aside>
+    </>
   )
 }
 

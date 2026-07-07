@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Mail } from 'lucide-react'
+
 import { createSupabaseBrowser } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
-import { Mail } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 
 /**
  * Login page with email magic link and Google OAuth sign-in options.
@@ -15,10 +17,25 @@ import { Mail } from 'lucide-react'
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
+  const [oauthLoading, setOauthLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const supabase = createSupabaseBrowser()
+
+  // Safety net: if the OAuth redirect gets swallowed (popup blocker, ad
+  // blocker, browser extension), release the loading state after a
+  // reasonable wait so the button isn't stuck forever.
+  useEffect(() => {
+    if (!oauthLoading) return
+    const t = window.setTimeout(() => {
+      setOauthLoading(false)
+      setError(
+        'Redirect blocked. Check your browser settings and try Google again, or use a magic link.',
+      )
+    }, 8000)
+    return () => window.clearTimeout(t)
+  }, [oauthLoading])
 
   async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault()
@@ -43,7 +60,7 @@ export default function LoginPage() {
   }
 
   async function handleGoogleOAuth() {
-    setLoading(true)
+    setOauthLoading(true)
     setError(null)
 
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
@@ -55,9 +72,13 @@ export default function LoginPage() {
 
     if (oauthError) {
       setError(oauthError.message)
-      setLoading(false)
+      setOauthLoading(false)
     }
+    // On success the browser navigates away and this component
+    // unmounts, so no explicit success handling is needed.
   }
+
+  const busy = loading || oauthLoading
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -78,7 +99,7 @@ export default function LoginPage() {
             size="lg"
             className="w-full"
             onClick={handleGoogleOAuth}
-            disabled={loading}
+            disabled={busy}
           >
             <svg
               className="size-4"
@@ -102,7 +123,7 @@ export default function LoginPage() {
                 fill="#EA4335"
               />
             </svg>
-            Continue with Google
+            {oauthLoading ? 'Redirecting…' : 'Continue with Google'}
           </Button>
 
           <div className="relative">
@@ -125,7 +146,7 @@ export default function LoginPage() {
               >
                 Email address
               </label>
-              <input
+              <Input
                 id="email"
                 type="email"
                 value={email}
@@ -133,17 +154,16 @@ export default function LoginPage() {
                 placeholder="you@example.com"
                 required
                 autoComplete="email"
-                className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
             <Button
               type="submit"
               size="lg"
               className="w-full"
-              disabled={loading || !email}
+              disabled={busy || !email}
             >
               <Mail className="size-4" />
-              Send Magic Link
+              {loading ? 'Sending…' : 'Send Magic Link'}
             </Button>
           </form>
 
@@ -154,7 +174,7 @@ export default function LoginPage() {
             </p>
           )}
           {error && (
-            <p className="text-sm text-center text-destructive">
+            <p role="alert" className="text-sm text-center text-destructive">
               {error}
             </p>
           )}

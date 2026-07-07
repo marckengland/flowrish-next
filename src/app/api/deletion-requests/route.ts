@@ -12,7 +12,7 @@ import { errorResponse } from '@/lib/errors'
  *
  * Validates: Requirement 33.6
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'admin:settings')

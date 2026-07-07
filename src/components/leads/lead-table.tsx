@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -63,16 +62,14 @@ export function LeadTable({
   const filters = useFiltersStore((s) => s.leads)
   const [sortKey, setSortKey] = useState<SortKey>('createdAt')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
-  const router = useRouter()
 
   const query = useLeadsQuery({ filters, page, pageSize })
   const leadsPage = query.data ?? initialData
-  const rows = leadsPage?.data ?? []
 
-  const sorted = useMemo(
-    () => sortLeads(rows, sortKey, sortDir),
-    [rows, sortKey, sortDir],
-  )
+  const sorted = useMemo(() => {
+    const rows = leadsPage?.data ?? []
+    return sortLeads(rows, sortKey, sortDir)
+  }, [leadsPage, sortKey, sortDir])
 
   function toggleSort(nextKey: SortKey): void {
     if (nextKey === sortKey) {
@@ -178,23 +175,12 @@ export function LeadTable({
               sorted.map((lead) => (
                 <tr
                   key={lead.id}
-                  onClick={() => router.push(`/leads/${lead.id}`)}
-                  onKeyDown={(e) => {
-                    if ((e.key === 'Enter' || e.key === ' ') && e.currentTarget === e.target) {
-                      e.preventDefault()
-                      router.push(`/leads/${lead.id}`)
-                    }
-                  }}
-                  tabIndex={0}
-                  role="link"
-                  aria-label={`Open ${fullName(lead)}`}
-                  className="cursor-pointer border-t transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="relative cursor-pointer border-t transition-colors hover:bg-muted/30 focus-within:bg-muted/30"
                 >
                   <td className="px-3 py-2 font-medium">
                     <Link
                       href={`/leads/${lead.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-foreground hover:underline focus-visible:underline"
+                      className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
                     >
                       {fullName(lead)}
                     </Link>

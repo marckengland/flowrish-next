@@ -1,7 +1,15 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
-import { FileUp, Loader2, CheckCircle2, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react'
+import {
+  FileUp,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
+  ArrowLeft,
+  ChevronRight,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
@@ -107,6 +115,13 @@ export function ImportWizard({
         return
       }
 
+      if (file.size > MAX_CSV_FILE_SIZE) {
+        setError(
+          `File is too large (${formatBytes(file.size)}). Split it into files under ${formatBytes(MAX_CSV_FILE_SIZE)} and upload separately.`,
+        )
+        return
+      }
+
       setIsLoading(true)
       try {
         const text = await file.text()
@@ -115,28 +130,40 @@ export function ImportWizard({
           return
         }
 
-        // Parse headers from first line
-        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0)
-        if (lines.length < 2) {
+        // Parse the CSV as a full document so quoted fields containing
+        // newlines are handled correctly. Splitting on `\r?\n` first (as
+        // an earlier version did) breaks any RFC 4180 CSV with multi-line
+        // values — a common shape in real exports.
+        let records: string[][]
+        try {
+          records = parseCsv(text)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to parse the file')
+          return
+        }
+        if (records.length < 2) {
           setError('CSV must have a header row and at least one data row')
           return
         }
 
-        const headers = parseCSVLine(lines[0])
+        const headers = records[0]!
         setCsvContent(text)
         setCsvHeaders(headers)
-        setCsvRowCount(lines.length - 1) // Exclude header
+        setCsvRowCount(records.length - 1) // Exclude header
         setFileName(file.name)
 
-        // Auto-map columns that match system field names (case-insensitive)
+        // Auto-map columns that match system field names (case-insensitive,
+        // punctuation-tolerant, alias-aware).
         const autoMapping: Record<string, string> = {}
+        const seen = new Set<string>()
         for (const header of headers) {
-          const normalized = header.toLowerCase().replace(/[\s_-]+/g, '')
-          const match = SYSTEM_FIELDS.find(
-            (f) => f.value.toLowerCase() === normalized,
-          )
-          if (match) {
-            autoMapping[header] = match.value
+          const key = normalizeHeader(header)
+          const match =
+            FIELD_ALIASES[key]
+            ?? SYSTEM_FIELDS.find((f) => f.value.toLowerCase() === key)?.value
+          if (match && !seen.has(match)) {
+            autoMapping[header] = match
+            seen.add(match)
           }
         }
         setMapping(autoMapping)
@@ -196,17 +223,19 @@ export function ImportWizard({
     setError(null)
     setIsLoading(true)
     try {
-      // Client-side preview: parse and validate first few rows locally
-      const lines = csvContent
-        .split(/\r?\n/)
-        .filter((l) => l.trim().length > 0)
-      const dataLines = lines.slice(1, 11) // Preview up to 10 rows
-      const headers = parseCSVLine(lines[0])
+      let records: string[][]
+      try {
+        records = parseCsv(csvContent)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to parse the file')
+        return
+      }
+      const headers = records[0] ?? []
+      const dataRecords = records.slice(1)
+      const previewRecords = dataRecords.slice(0, PREVIEW_ROW_LIMIT)
 
-      const rows: PreviewRow[] = dataLines.map((line, index) => {
-        const values = parseCSVLine(line)
+      const rows: PreviewRow[] = previewRecords.map((values, index) => {
         const mapped: Record<string, string> = {}
-
         for (const [csvHeader, systemField] of Object.entries(mapping)) {
           const headerIndex = headers.indexOf(csvHeader)
           if (headerIndex >= 0 && values[headerIndex] !== undefined) {
@@ -214,7 +243,6 @@ export function ImportWizard({
           }
         }
 
-        // Basic validation: check required fields
         const errors: string[] = []
         if (!mapped.firstName?.trim()) errors.push('First name is required')
         if (!mapped.lastName?.trim()) errors.push('Last name is required')
@@ -301,9 +329,10 @@ export function ImportWizard({
             (s, i) => (
               <li key={s} className="flex items-center gap-2">
                 {i > 0 && (
-                  <span className="text-muted-foreground" aria-hidden="true">
-                    →
-                  </span>
+                  <ChevronRight
+                    className="size-3.5 text-muted-foreground rtl:rotate-180"
+                    aria-hidden="true"
+                  />
                 )}
                 <span
                   className={
@@ -492,7 +521,7 @@ function MappingStep({
             CSV Column
           </div>
           <div className="border-b bg-muted/50 px-3 py-2" role="columnheader" aria-hidden="true">
-            →
+            <ChevronRight className="size-3.5 text-muted-foreground rtl:rotate-180" />
           </div>
           <div className="border-b bg-muted/50 px-3 py-2 font-medium" role="columnheader">
             System Field
@@ -554,7 +583,7 @@ function MappingRow({
     <>
       <div className="border-b px-3 py-2 font-mono text-xs">{csvHeader}</div>
       <div className="border-b px-3 py-2 text-muted-foreground" aria-hidden="true">
-        →
+        <ChevronRight className="size-3.5 rtl:rotate-180" />
       </div>
       <div className="border-b px-3 py-2">
         <select
@@ -602,17 +631,23 @@ function PreviewStep({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      {/* Summary */}
+      {/* Summary — labels are explicit that the valid/invalid counts
+          are drawn from the preview sample, not the whole file. Without
+          that hedge users assume any "invalid" here reflects the entire
+          import, which the counts don't measure. */}
       <div className="flex flex-wrap gap-4 rounded-md border bg-muted/30 px-4 py-3 text-sm">
         <span>
-          Total rows: <strong>{totalRows}</strong>
+          Total rows in file: <strong>{totalRows}</strong>
         </span>
         <span className="text-green-600 dark:text-green-400">
-          Preview valid: <strong>{validCount}</strong>
+          Valid in preview: <strong>{validCount}</strong>
+          <span className="ml-1 text-xs text-muted-foreground">
+            (of {previewRows.length} sampled)
+          </span>
         </span>
         {invalidCount > 0 && (
           <span className="text-destructive">
-            Preview invalid: <strong>{invalidCount}</strong>
+            Invalid in preview: <strong>{invalidCount}</strong>
           </span>
         )}
       </div>
@@ -765,6 +800,87 @@ function ResultStep({
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
+const MAX_CSV_FILE_SIZE = 10 * 1024 * 1024 // 10 MB — larger files should be split
+const PREVIEW_ROW_LIMIT = 10
+
+/**
+ * Alias map from a normalized header string to a system field value.
+ * The user-visible names have punctuation and spacing variance we can't
+ * infer from the field key alone; this dictionary captures the common
+ * forms exported by Salesforce, HubSpot, Excel, and spreadsheet-first
+ * workflows so auto-mapping does the right thing without user input.
+ */
+const FIELD_ALIASES: Record<string, string> = {
+  firstname: 'firstName',
+  givenname: 'firstName',
+  fname: 'firstName',
+  lastname: 'lastName',
+  surname: 'lastName',
+  familyname: 'lastName',
+  lname: 'lastName',
+  fullname: 'firstName', // Split rarely; user can adjust
+  email: 'email',
+  emailaddress: 'email',
+  workemail: 'email',
+  primaryemail: 'email',
+  altemail: 'altEmail',
+  alternateemail: 'altEmail',
+  secondaryemail: 'altEmail',
+  personalemail: 'altEmail',
+  phone: 'phone',
+  phonenumber: 'phone',
+  mobile: 'phone',
+  mobilephone: 'phone',
+  workphone: 'phone',
+  jobtitle: 'title',
+  title: 'title',
+  position: 'title',
+  role: 'title',
+  description: 'description',
+  notes: 'description',
+  dealvalue: 'dealValue',
+  amount: 'dealValue',
+  value: 'dealValue',
+  opportunityamount: 'dealValue',
+  currency: 'currency',
+  leadstatus: 'leadStatus',
+  status: 'leadStatus',
+  tier: 'tier',
+  linkedin: 'linkedinUrl',
+  linkedinurl: 'linkedinUrl',
+  linkedinprofile: 'linkedinUrl',
+  country: 'country',
+  state: 'state',
+  region: 'state',
+  province: 'state',
+  companyname: 'companyName',
+  company: 'companyName',
+  organization: 'companyName',
+  account: 'companyName',
+  accountname: 'companyName',
+  companyindustry: 'companyIndustry',
+  industry: 'companyIndustry',
+  companywebsite: 'companyWebsite',
+  website: 'companyWebsite',
+  domain: 'companyWebsite',
+  url: 'companyWebsite',
+  stageid: 'stageId',
+  stage: 'stageId',
+}
+
+/**
+ * Lowercases and strips whitespace/punctuation from a CSV header so the
+ * alias lookup matches variants like "First Name", "first_name", and
+ * "First-Name" to the same normalized key.
+ */
+function normalizeHeader(header: string): string {
+  return header
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\s_\-.\/()]+/g, '')
+    .replace(/[^a-z0-9]/g, '')
+}
+
 function stepLabel(step: WizardStep): string {
   switch (step) {
     case 'upload':
@@ -778,42 +894,93 @@ function stepLabel(step: WizardStep): string {
   }
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 /**
- * Simple CSV line parser that handles quoted fields.
- * Handles commas within quoted fields and escaped double-quotes.
+ * RFC 4180 compliant CSV parser. Handles:
+ *   - quoted fields containing commas
+ *   - quoted fields containing newlines (\n, \r\n, \r)
+ *   - escaped double-quotes ("") within quoted fields
+ *   - trailing newlines
+ *
+ * Skips completely blank records so a file with a trailing newline
+ * doesn't produce an extra empty row. Throws with a useful message if
+ * an unclosed quote is detected.
+ *
+ * Exported for future test coverage of the parser edge cases.
  */
-function parseCSVLine(line: string): string[] {
-  const fields: string[] = []
-  let current = ''
+export function parseCsv(source: string): string[][] {
+  const records: string[][] = []
+  let current: string[] = []
+  let field = ''
   let inQuotes = false
+  let i = 0
+  const len = source.length
 
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i]
-
+  while (i < len) {
+    const ch = source[i]!
     if (inQuotes) {
-      if (char === '"') {
-        // Check for escaped quote (doubled)
-        if (i + 1 < line.length && line[i + 1] === '"') {
-          current += '"'
-          i++ // Skip next quote
-        } else {
-          inQuotes = false
+      if (ch === '"') {
+        if (i + 1 < len && source[i + 1] === '"') {
+          field += '"'
+          i += 2
+          continue
         }
-      } else {
-        current += char
+        inQuotes = false
+        i += 1
+        continue
       }
-    } else {
-      if (char === '"') {
-        inQuotes = true
-      } else if (char === ',') {
-        fields.push(current.trim())
-        current = ''
-      } else {
-        current += char
-      }
+      field += ch
+      i += 1
+      continue
     }
+    if (ch === '"') {
+      inQuotes = true
+      i += 1
+      continue
+    }
+    if (ch === ',') {
+      current.push(field)
+      field = ''
+      i += 1
+      continue
+    }
+    if (ch === '\r' || ch === '\n') {
+      current.push(field)
+      field = ''
+      // Only push a record if it has any content — avoids blank trailing
+      // record when the file ends with a newline.
+      if (current.some((f) => f.length > 0)) {
+        records.push(current.map((f) => f.trim()))
+      }
+      current = []
+      // Consume a paired \r\n as a single line ending.
+      if (ch === '\r' && i + 1 < len && source[i + 1] === '\n') {
+        i += 2
+      } else {
+        i += 1
+      }
+      continue
+    }
+    field += ch
+    i += 1
   }
 
-  fields.push(current.trim())
-  return fields
+  if (inQuotes) {
+    throw new Error(
+      'CSV parse error: unterminated quoted field. Check for a missing closing quote.',
+    )
+  }
+
+  // Flush the final record.
+  current.push(field)
+  if (current.some((f) => f.length > 0)) {
+    records.push(current.map((f) => f.trim()))
+  }
+
+  return records
 }

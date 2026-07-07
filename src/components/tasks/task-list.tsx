@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { AlertTriangle, Check, Loader2, UserCog } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -65,15 +64,16 @@ export function TaskList({
   const query = useTasksQuery(filters, initialTasks)
   const completeMutation = useCompleteTaskMutation()
   const [reassignTask, setReassignTask] = useState<TaskItem | null>(null)
-  const router = useRouter()
 
   const allowReassign = canReassign ?? canComplete
 
-  const tasks = query.data ?? initialTasks ?? []
-
   // Memoize client-side rendering details so we don't recompute per row
   // when sibling state (like the mutation `isPending` flag) changes.
-  const grouped = useMemo(() => groupTasks(tasks), [tasks])
+  const grouped = useMemo(
+    () => groupTasks(query.data ?? initialTasks ?? []),
+    [query.data, initialTasks],
+  )
+  const tasks = grouped
 
   if (query.isLoading && tasks.length === 0) {
     return (
@@ -132,7 +132,6 @@ export function TaskList({
                 ? completeMutation.error
                 : null
             }
-            onOpen={() => router.push(`/tasks/${task.id}`)}
           />
         </li>
       ))}
@@ -157,7 +156,6 @@ function TaskRow({
   isCompleting,
   onComplete,
   completeError,
-  onOpen,
 }: {
   task: TaskItem
   canComplete: boolean
@@ -166,7 +164,6 @@ function TaskRow({
   isCompleting: boolean
   onComplete: () => void
   completeError: unknown
-  onOpen: () => void
 }): React.JSX.Element {
   const overdue = task.isOverdue
   const priorityClass = priorityAccent(task.priority)
@@ -178,18 +175,8 @@ function TaskRow({
     <article
       data-overdue={overdue ? 'true' : 'false'}
       data-complete={task.isComplete ? 'true' : 'false'}
-      onClick={() => onOpen()}
-      onKeyDown={(e) => {
-        if ((e.key === 'Enter' || e.key === ' ') && e.currentTarget === e.target) {
-          e.preventDefault()
-          onOpen()
-        }
-      }}
-      tabIndex={0}
-      role="link"
-      aria-label={`Open task ${task.title}`}
       className={cn(
-        'flex cursor-pointer flex-col gap-2 rounded-md border bg-card p-3 transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+        'relative flex cursor-pointer flex-col gap-2 rounded-md border bg-card p-3 transition-colors hover:bg-muted/30 focus-within:bg-muted/30',
         overdue && 'border-destructive/40 bg-destructive/5',
         task.isComplete && 'opacity-70',
       )}
@@ -202,7 +189,12 @@ function TaskRow({
               task.isComplete && 'line-through',
             )}
           >
-            {task.title}
+            <Link
+              href={`/tasks/${task.id}`}
+              className="text-foreground before:absolute before:inset-0 before:content-[''] focus-visible:underline focus-visible:outline-none"
+            >
+              {task.title}
+            </Link>
           </h3>
           <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span
@@ -229,16 +221,13 @@ function TaskRow({
         </div>
 
         {!task.isComplete && canComplete ? (
-          <div className="flex items-center gap-1">
+          <div className="relative z-10 flex items-center gap-1">
             {canReassign ? (
               <Button
                 type="button"
                 size="xs"
                 variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onReassign()
-                }}
+                onClick={() => onReassign()}
                 aria-label={`Reassign "${task.title}"`}
                 title="Reassign"
               >
@@ -250,10 +239,7 @@ function TaskRow({
               type="button"
               size="xs"
               variant="outline"
-              onClick={(e) => {
-                e.stopPropagation()
-                onComplete()
-              }}
+              onClick={() => onComplete()}
               disabled={isCompleting}
               aria-label={`Mark "${task.title}" complete`}
             >
@@ -287,8 +273,7 @@ function TaskRow({
         {leadName && task.lead ? (
           <Link
             href={`/leads/${task.lead.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 text-foreground transition-colors hover:underline focus-visible:underline"
+            className="relative z-10 inline-flex items-center gap-1 text-foreground transition-colors hover:underline focus-visible:underline"
           >
             <span aria-hidden="true">·</span>
             <span>{leadName || 'Lead'}</span>

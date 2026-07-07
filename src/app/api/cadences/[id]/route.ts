@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
-import { archiveCadence } from '@/server/services/cadences'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { errorResponse, AppError } from '@/lib/errors'
 import { z } from 'zod'

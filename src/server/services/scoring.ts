@@ -5,14 +5,11 @@ import { AppError } from '@/lib/errors'
 /**
  * Valid scoring rule types that can be configured per organization.
  */
-const VALID_RULE_TYPES = [
-  'activity_count',
-  'deal_value',
-  'stage_progression',
-  'email_engagement',
-] as const
-
-export type ScoringRuleType = (typeof VALID_RULE_TYPES)[number]
+export type ScoringRuleType =
+  | 'activity_count'
+  | 'deal_value'
+  | 'stage_progression'
+  | 'email_engagement'
 
 /**
  * Clamps a score to the valid range [0, 100].

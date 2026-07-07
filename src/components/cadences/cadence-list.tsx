@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { createCadence } from '@/server/actions/cadences'
 import type {
@@ -111,8 +112,6 @@ export function CadenceList({
     })
   }, [enriched, search, sortField, sortDir])
 
-  const router = useRouter()
-
   function toggleSort(field: SortField): void {
     if (sortField === field) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -163,16 +162,16 @@ export function CadenceList({
         </label>
         <div className="relative max-w-sm flex-1">
           <Search
-            className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
           />
-          <input
+          <Input
             id="cadence-search"
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search cadences…"
-            className="h-9 w-full rounded-lg border bg-background pl-9 pr-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="pl-9"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -280,27 +279,12 @@ export function CadenceList({
               {filtered.map((cadence) => (
                 <tr
                   key={cadence.id}
-                  onClick={() => router.push(`/cadences/${cadence.id}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      // Only intercept when the row itself is the event target
-                      // so taps on inner controls keep their own behavior.
-                      if (e.currentTarget === e.target) {
-                        e.preventDefault()
-                        router.push(`/cadences/${cadence.id}`)
-                      }
-                    }
-                  }}
-                  tabIndex={0}
-                  role="link"
-                  aria-label={`Open cadence ${cadence.name}`}
-                  className="cursor-pointer transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="relative cursor-pointer transition-colors hover:bg-muted/40 focus-within:bg-muted/40"
                 >
                   <td className="px-4 py-3">
                     <Link
                       href={`/cadences/${cadence.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="font-medium text-foreground hover:underline"
+                      className="font-medium text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
                     >
                       {cadence.name}
                     </Link>
@@ -440,9 +424,15 @@ function SortHeader({
   align = 'left',
 }: SortHeaderProps): React.JSX.Element {
   const isActive = current === field
+  const ariaSort: 'ascending' | 'descending' | 'none' = isActive
+    ? dir === 'asc'
+      ? 'ascending'
+      : 'descending'
+    : 'none'
   return (
     <th
       scope="col"
+      aria-sort={ariaSort}
       className={cn(
         'px-4 py-2.5 text-xs font-medium',
         align === 'right' ? 'text-right' : 'text-left',
@@ -452,13 +442,10 @@ function SortHeader({
         type="button"
         onClick={() => onSort(field)}
         className={cn(
-          'inline-flex items-center gap-1 hover:text-foreground',
+          'relative z-10 inline-flex items-center gap-1 hover:text-foreground',
           align === 'right' && 'ml-auto',
           isActive ? 'text-foreground' : 'text-muted-foreground',
         )}
-        aria-sort={
-          isActive ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'
-        }
       >
         {label}
         <ArrowUpDown className="size-3" aria-hidden="true" />
@@ -570,13 +557,12 @@ function CreateCadenceForm({
         >
           Cadence name
         </label>
-        <input
+        <Input
           id="cadence-name"
           name="name"
           type="text"
           required
           placeholder="e.g. SMB Outbound"
-          className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
       <div>

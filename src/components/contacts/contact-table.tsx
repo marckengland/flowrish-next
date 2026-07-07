@@ -2,11 +2,11 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Loader2, Trash2 } from 'lucide-react'
 
 import { useContactsQuery, useDeleteContactMutation, type ContactListItem } from '@/hooks/use-contacts'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 export interface ContactTableProps {
   /** Initial data rendered server-side for instant paint. */
@@ -46,7 +46,6 @@ export function ContactTable({
   pageSize = 20,
 }: ContactTableProps): React.JSX.Element {
   const [currentSearch, setCurrentSearch] = useState(search ?? '')
-  const router = useRouter()
 
   const query = useContactsQuery({ search: currentSearch || undefined, companyId, page, pageSize })
   const contactsPage = query.data ?? initialData
@@ -64,13 +63,13 @@ export function ContactTable({
     <div className="flex flex-col gap-3">
       {/* Search input */}
       <div className="flex items-center gap-3">
-        <input
+        <Input
           type="search"
           value={currentSearch}
           onChange={(e) => setCurrentSearch(e.target.value)}
           placeholder="Search contacts…"
           aria-label="Search contacts"
-          className="h-9 w-full max-w-sm rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="max-w-sm"
         />
         {query.isFetching && (
           <div role="status" aria-live="polite" className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -112,23 +111,12 @@ export function ContactTable({
               rows.map((contact) => (
                 <tr
                   key={contact.id}
-                  onClick={() => router.push(`/contacts/${contact.id}`)}
-                  onKeyDown={(e) => {
-                    if ((e.key === 'Enter' || e.key === ' ') && e.currentTarget === e.target) {
-                      e.preventDefault()
-                      router.push(`/contacts/${contact.id}`)
-                    }
-                  }}
-                  tabIndex={0}
-                  role="link"
-                  aria-label={`Open ${contact.firstName} ${contact.lastName}`}
-                  className="cursor-pointer border-t transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="relative cursor-pointer border-t transition-colors hover:bg-muted/30 focus-within:bg-muted/30"
                 >
                   <td className="px-3 py-2 font-medium">
                     <Link
                       href={`/contacts/${contact.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-foreground hover:underline focus-visible:underline"
+                      className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
                     >
                       {contact.firstName} {contact.lastName}
                     </Link>
@@ -145,14 +133,16 @@ export function ContactTable({
                   <td className="px-3 py-2 text-muted-foreground">
                     {contact.company?.name ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="relative z-10 px-3 py-2 text-right">
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDelete(contact.id, `${contact.firstName} ${contact.lastName}`)
-                      }}
+                      onClick={() =>
+                        handleDelete(
+                          contact.id,
+                          `${contact.firstName} ${contact.lastName}`,
+                        )
+                      }
                       disabled={deleteMutation.isPending}
                       aria-label={`Delete ${contact.firstName} ${contact.lastName}`}
                     >

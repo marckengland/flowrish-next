@@ -260,10 +260,7 @@ export default async function CadenceDetailPage({
               counts.total > 0 ? ` (${counts.total})` : ''
             }`,
             content: (
-              <EnrollmentList
-                cadenceId={cadence.id}
-                initialEnrollments={serializedEnrollments}
-              />
+              <EnrollmentList initialEnrollments={serializedEnrollments} />
             ),
           },
           {

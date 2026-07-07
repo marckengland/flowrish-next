@@ -10,12 +10,13 @@ import {
   Paperclip,
   Phone,
   Trash2,
-  X,
   type LucideIcon,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
 import { HelpTooltip } from '@/components/ui/help-tooltip'
+import { inputBaseClass } from '@/components/ui/input'
 import { RichTextEditor } from '@/components/email/rich-text-editor'
 import { addStep, deleteStep, updateStep } from '@/server/actions/cadences'
 import { cn } from '@/lib/utils'
@@ -416,48 +417,58 @@ export function StepEditor({
     })
   }
 
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="step-editor-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border bg-background shadow-lg">
-        <header className="flex shrink-0 items-center justify-between border-b px-5 py-3">
-          <h3 id="step-editor-title" className="text-base font-semibold">
-            {isNew ? 'Add step' : `Edit step ${step!.stepOrder}`}
-          </h3>
-          <div className="flex items-center gap-2">
-            {!isNew && canDelete && (
-              <Button
-                type="button"
-                variant="destructive"
-                size="icon-sm"
-                onClick={() => setConfirmDelete(true)}
-                disabled={pending}
-                title="Remove step"
-              >
-                <Trash2 className="size-3.5" aria-hidden="true" />
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={onClose}
-              disabled={pending}
-              aria-label="Close"
-            >
-              <X className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
-        </header>
+  const dialogTitle = (
+    <div className="flex items-center gap-2">
+      <span>{isNew ? 'Add step' : `Edit step ${step!.stepOrder}`}</span>
+      {!isNew && canDelete && (
+        <Button
+          type="button"
+          variant="destructive"
+          size="icon-sm"
+          onClick={() => setConfirmDelete(true)}
+          disabled={pending}
+          title="Remove step"
+        >
+          <Trash2 className="size-3.5" aria-hidden="true" />
+        </Button>
+      )}
+    </div>
+  )
 
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+  const dialogFooter = canEdit ? (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onClose}
+        disabled={pending}
+      >
+        Cancel
+      </Button>
+      <Button type="button" size="sm" onClick={save} disabled={pending}>
+        {pending ? (
+          <>
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            <span>Saving…</span>
+          </>
+        ) : (
+          <span>{isNew ? 'Add step' : 'Update step'}</span>
+        )}
+      </Button>
+    </>
+  ) : undefined
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={dialogTitle}
+      size="lg"
+      footer={dialogFooter}
+      closeOnBackdrop={!pending}
+    >
+      <div className="space-y-5">
           {/* Action type grid */}
           <div>
             <span className="mb-2 block text-sm font-medium">Action type</span>
@@ -761,33 +772,8 @@ export function StepEditor({
               </Button>
             </div>
           ) : null}
-        </div>
-
-        {canEdit && (
-          <footer className="flex shrink-0 items-center justify-end gap-2 border-t px-5 py-3">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onClose}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button type="button" size="sm" onClick={save} disabled={pending}>
-              {pending ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                  <span>Saving…</span>
-                </>
-              ) : (
-                <span>{isNew ? 'Add step' : 'Update step'}</span>
-              )}
-            </Button>
-          </footer>
-        )}
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -804,8 +790,7 @@ function taskTitlePlaceholder(action: StepActionType): string {
   }
 }
 
-const inputClasses =
-  'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50'
+const inputClasses = inputBaseClass
 
 /**
  * Coerces a server-action payload (Date columns serialize as strings or

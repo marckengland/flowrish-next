@@ -10,6 +10,14 @@ import { KanbanCard, formatCurrency, type KanbanCardLead } from './kanban-card'
 import { leadsKeys, type LeadListItem, type LeadsPage } from '@/hooks/use-leads'
 
 /**
+ * Maximum leads pulled into the Kanban view in a single request. Kept
+ * high enough to comfortably render every lead for typical mid-market
+ * pipelines; when an org exceeds this we surface a "showing X of Y"
+ * hint instead of silently truncating.
+ */
+const KANBAN_PAGE_SIZE = 200
+
+/**
  * Stage shape needed to render a Kanban column. Each stage becomes one
  * column in the same order as it exists on the pipeline.
  */
@@ -66,7 +74,7 @@ export function KanbanBoard({
   // in the same cache as the leads list. We fetch a large page because
   // the Kanban board needs to see every lead at once.
   const queryInput = useMemo(
-    () => ({ filters: {}, page: 1, pageSize: 200 }),
+    () => ({ filters: {}, page: 1, pageSize: KANBAN_PAGE_SIZE }),
     [],
   )
 
@@ -75,9 +83,9 @@ export function KanbanBoard({
       data: [...initialLeads],
       pagination: {
         page: 1,
-        pageSize: 200,
+        pageSize: KANBAN_PAGE_SIZE,
         total: totalLeads,
-        totalPages: Math.max(1, Math.ceil(totalLeads / 200)),
+        totalPages: Math.max(1, Math.ceil(totalLeads / KANBAN_PAGE_SIZE)),
       },
     }),
     [initialLeads, totalLeads],
@@ -87,7 +95,7 @@ export function KanbanBoard({
     queryKey: leadsKeys.list(queryInput),
     queryFn: async (): Promise<LeadsPage> => {
       const res = await fetch(
-        `/api/leads?page=1&pageSize=200`,
+        `/api/leads?page=1&pageSize=${KANBAN_PAGE_SIZE}`,
         {
           method: 'GET',
           headers: { Accept: 'application/json' },
@@ -134,7 +142,11 @@ export function KanbanBoard({
     },
   })
 
-  const leads = leadsQuery.data?.data ?? []
+  const pagination = leadsQuery.data?.pagination
+  const leads = useMemo(
+    () => leadsQuery.data?.data ?? [],
+    [leadsQuery.data],
+  )
 
   const leadsByStage = useMemo(
     () => groupLeadsByStage(stages, leads),
@@ -142,6 +154,8 @@ export function KanbanBoard({
   )
 
   const isBusy = leadsQuery.isFetching || moveMutation.isPending
+  const truncated =
+    pagination !== undefined && pagination.total > pagination.pageSize
 
   return (
     <div className="flex flex-col gap-3">
@@ -165,6 +179,16 @@ export function KanbanBoard({
             'Something went wrong moving that lead.'}
         </p>
       )}
+
+      {truncated && pagination ? (
+        <p
+          role="status"
+          className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-200"
+        >
+          Showing {pagination.pageSize} of {pagination.total} leads.
+          Use filters or the leads list to see the rest.
+        </p>
+      ) : null}
 
       <div
         className="flex gap-4 overflow-x-auto pb-4"
@@ -247,15 +271,8 @@ function StageColumn({
     }
   }
 
-  const totalValue = leads.reduce((sum, lead) => {
-    const n =
-      lead.dealValue === null || lead.dealValue === undefined
-        ? 0
-        : Number(lead.dealValue)
-    return sum + (Number.isFinite(n) ? n : 0)
-  }, 0)
-
-  const headerCurrency = leads[0]?.currency ?? 'USD'
+  const totalsByCurrency = sumByCurrency(leads)
+  const totalLabel = formatTotalsByCurrency(totalsByCurrency)
 
   return (
     <div
@@ -274,9 +291,13 @@ function StageColumn({
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <h3 className="truncate text-sm font-semibold">{stage.name}</h3>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {totalValue > 0 && (
-            <span className="tabular-nums" aria-label="Stage total value">
-              {formatCurrency(totalValue, headerCurrency)}
+          {totalLabel && (
+            <span
+              className="max-w-[10rem] truncate tabular-nums"
+              aria-label="Stage total value"
+              title={totalLabel}
+            >
+              {totalLabel}
             </span>
           )}
           <span
@@ -300,6 +321,49 @@ function StageColumn({
       </div>
     </div>
   )
+}
+
+/**
+ * Sums lead deal values grouped by currency. Returned as a Map keyed by
+ * ISO currency code so the header can render each currency separately —
+ * summing €500k and $500k as one number would be nonsense.
+ *
+ * Exported for test coverage.
+ */
+export function sumByCurrency(
+  leads: readonly Pick<KanbanCardLead, 'dealValue' | 'currency'>[],
+): Map<string, number> {
+  const totals = new Map<string, number>()
+  for (const lead of leads) {
+    if (lead.dealValue === null || lead.dealValue === undefined) continue
+    const n =
+      typeof lead.dealValue === 'number'
+        ? lead.dealValue
+        : Number(lead.dealValue)
+    if (!Number.isFinite(n) || n === 0) continue
+    const currency = lead.currency || 'USD'
+    totals.set(currency, (totals.get(currency) ?? 0) + n)
+  }
+  return totals
+}
+
+/**
+ * Renders a compact multi-currency total. When every lead shares one
+ * currency the output is the plain formatted number; when currencies
+ * differ we render up to two of them separated by " · " with a "+N"
+ * suffix if more currencies are present, so the column header stays
+ * readable at 288px wide.
+ */
+function formatTotalsByCurrency(totals: Map<string, number>): string {
+  const entries = Array.from(totals.entries()).sort((a, b) => b[1] - a[1])
+  if (entries.length === 0) return ''
+  if (entries.length === 1) {
+    const [currency, amount] = entries[0]!
+    return formatCurrency(amount, currency)
+  }
+  const visible = entries.slice(0, 2).map(([c, v]) => formatCurrency(v, c))
+  const extra = entries.length - visible.length
+  return visible.join(' · ') + (extra > 0 ? ` · +${extra}` : '')
 }
 
 /**

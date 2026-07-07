@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation'
 import { Loader2, UserPlus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { inputBaseClass } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import {
   useBulkEnrollMutation,
@@ -173,58 +176,87 @@ function EnrollModal({
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="enroll-dialog-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
-    >
-      <div className="flex w-full max-w-lg flex-col gap-4 rounded-lg border bg-card p-5 shadow-lg">
-        <header className="flex items-start justify-between gap-3">
-          <div>
-            <h2 id="enroll-dialog-title" className="text-lg font-semibold">
-              Enroll leads
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Leads already actively enrolled in this cadence are skipped
-              automatically.
-            </p>
-          </div>
-          <div
-            role="tablist"
-            aria-label="Enrollment mode"
-            className="flex gap-1 rounded-md border p-0.5"
+    <Dialog
+      open
+      onClose={onClose}
+      title="Enroll leads"
+      description="Leads already actively enrolled in this cadence are skipped automatically."
+      size="lg"
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            disabled={isPending}
           >
-            <button
+            {result ? 'Close' : 'Cancel'}
+          </Button>
+          {!result ? (
+            <Button
               type="button"
-              role="tab"
-              aria-selected={mode === 'single'}
-              onClick={() => onModeChange('single')}
-              className={cn(
-                'rounded-sm px-2 py-1 text-xs font-medium transition-colors',
-                mode === 'single'
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
+              size="sm"
+              onClick={handleSubmit}
+              disabled={
+                isPending
+                || leads.length === 0
+                || (mode === 'single' && !selectedSingle)
+                || (mode === 'bulk' && selectedBulk.length === 0)
+              }
             >
-              Single
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === 'bulk'}
-              onClick={() => onModeChange('bulk')}
-              className={cn(
-                'rounded-sm px-2 py-1 text-xs font-medium transition-colors',
-                mode === 'bulk'
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:text-foreground',
+              {isPending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  <span>Enrolling…</span>
+                </>
+              ) : (
+                <span>
+                  {mode === 'bulk' && selectedBulk.length > 0
+                    ? `Enroll ${selectedBulk.length} lead${selectedBulk.length === 1 ? '' : 's'}`
+                    : 'Enroll lead'}
+                </span>
               )}
-            >
-              Bulk
-            </button>
-          </div>
-        </header>
+            </Button>
+          ) : null}
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <div
+          role="tablist"
+          aria-label="Enrollment mode"
+          className="flex gap-1 self-start rounded-md border p-0.5"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'single'}
+            onClick={() => onModeChange('single')}
+            className={cn(
+              'rounded-sm px-2 py-1 text-xs font-medium transition-colors',
+              mode === 'single'
+                ? 'bg-muted text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            Single
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'bulk'}
+            onClick={() => onModeChange('bulk')}
+            className={cn(
+              'rounded-sm px-2 py-1 text-xs font-medium transition-colors',
+              mode === 'bulk'
+                ? 'bg-muted text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            Bulk
+          </button>
+        </div>
 
         {leads.length === 0 ? (
           <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
@@ -267,46 +299,8 @@ function EnrollModal({
                 }`}
           </div>
         ) : null}
-
-        <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onClose}
-            disabled={isPending}
-          >
-            {result ? 'Close' : 'Cancel'}
-          </Button>
-          {!result ? (
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleSubmit}
-              disabled={
-                isPending
-                || leads.length === 0
-                || (mode === 'single' && !selectedSingle)
-                || (mode === 'bulk' && selectedBulk.length === 0)
-              }
-            >
-              {isPending ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                  <span>Enrolling…</span>
-                </>
-              ) : (
-                <span>
-                  {mode === 'bulk' && selectedBulk.length > 0
-                    ? `Enroll ${selectedBulk.length} lead${selectedBulk.length === 1 ? '' : 's'}`
-                    : 'Enroll lead'}
-                </span>
-              )}
-            </Button>
-          ) : null}
-        </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -325,7 +319,7 @@ function SingleSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={inputBaseClass}
       >
         <option value="">Select a lead…</option>
         {leads.map((lead) => (
@@ -360,12 +354,11 @@ function BulkSelect({
         <span className="text-xs font-medium text-foreground">
           Filter leads
         </span>
-        <input
+        <Input
           type="search"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search name, email, or company…"
-          className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </label>
       <div className="text-xs text-muted-foreground">

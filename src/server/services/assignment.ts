@@ -1,6 +1,5 @@
 import { createTenantPrisma } from '@/server/db/middleware'
 import { redis } from '@/lib/upstash/redis'
-import { AppError } from '@/lib/errors'
 
 /**
  * Shape of a lead passed to the assignment rule engine.

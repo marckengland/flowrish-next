@@ -21,7 +21,27 @@ const eslintConfig = [
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
-    // Tests rely on partial mocks where `any` is the pragmatic shape.
+    // Global rule tuning: unused variables prefixed with `_` are
+    // intentional — commonly a signature-required arg like Next.js
+    // route handler `request` params, or destructured fields we
+    // keep for readability. Treat them as opted-out of the warning.
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
+  {
+    // Tests rely on partial mocks where `any` is the pragmatic shape,
+    // and property-based tests often declare arbitraries that only
+    // become used in later assertions — so the strictness of the
+    // unused-var rule is more noise than signal here.
     files: [
       "**/*.test.ts",
       "**/*.test.tsx",
@@ -31,6 +51,7 @@ const eslintConfig = [
     ],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
     },
   },
 ];

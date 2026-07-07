@@ -861,7 +861,6 @@ function base64UrlEncode(message: string): string {
  * through untouched.
  */
 function encodeMimeHeaderValue(value: string): string {
-  // eslint-disable-next-line no-control-regex
   if (!/[^\x00-\x7F]/.test(value)) return value
   const encoded = Buffer.from(value, 'utf8').toString('base64')
   return `=?UTF-8?B?${encoded}?=`

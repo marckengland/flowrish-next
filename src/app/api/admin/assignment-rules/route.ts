@@ -8,7 +8,7 @@ import { errorResponse } from '@/lib/errors'
 /**
  * GET /api/admin/assignment-rules — List assignment rules ordered by priority.
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'admin:users')

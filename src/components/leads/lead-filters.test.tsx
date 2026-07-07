@@ -1,6 +1,6 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LeadFilters } from './lead-filters'
 import { useFiltersStore } from '@/stores/filters'
@@ -35,6 +35,11 @@ function fire(el: Element, type: string): void {
 describe('LeadFilters', () => {
   beforeEach(() => {
     useFiltersStore.setState({ leads: {} })
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('renders search, stage, status, tier, assignee, and clear controls', () => {
@@ -87,6 +92,12 @@ describe('LeadFilters', () => {
       setNativeValue?.call(search, 'acme')
     })
     fire(search!, 'input')
+
+    // The search input is debounced (300ms) so the write to the store
+    // only lands after the timer fires. Advance fake timers to flush it.
+    act(() => {
+      vi.advanceTimersByTime(400)
+    })
 
     expect(useFiltersStore.getState().leads.search).toBe('acme')
     expect(useFiltersStore.getState().leads.stageId).toBe('stage-2')

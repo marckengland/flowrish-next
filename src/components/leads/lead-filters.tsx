@@ -1,10 +1,12 @@
 'use client'
 
-import { useId } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Input, inputBaseClass } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { useFiltersStore, type LeadFilterKey } from '@/stores/filters'
 
 /**
@@ -49,6 +51,10 @@ const TIER_OPTIONS: readonly FilterOption[] = [
  * assignees are provided by the parent (resolved server-side) — this
  * component does not fetch them itself.
  *
+ * Search input is debounced locally so keystrokes don't fire a network
+ * request on every character; the debounced value is what actually gets
+ * written into the shared filter store.
+ *
  * Validates: Requirements 4.4, 4.6, 26.4
  */
 export function LeadFilters({
@@ -66,6 +72,25 @@ export function LeadFilters({
   const tierId = useId()
   const assigneeId = useId()
 
+  // Local input state keeps the field responsive while the query key is
+  // debounced. Seeded from the store so external "clear" actions still
+  // reset the visible input.
+  const [searchInput, setSearchInput] = useState(leads.search ?? '')
+  const debouncedSearch = useDebouncedValue(searchInput, 300)
+
+  useEffect(() => {
+    setLeadFilter('search', debouncedSearch)
+  }, [debouncedSearch, setLeadFilter])
+
+  useEffect(() => {
+    // Reflect external resets in the local input (e.g. Clear button).
+    if ((leads.search ?? '') !== searchInput) {
+      setSearchInput(leads.search ?? '')
+    }
+    // Intentionally only react to store changes, not local edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads.search])
+
   const hasActiveFilters = Object.keys(leads).length > 0
 
   return (
@@ -77,13 +102,13 @@ export function LeadFilters({
       )}
     >
       <Field id={searchId} label="Search">
-        <input
+        <Input
           id={searchId}
           type="search"
-          value={leads.search ?? ''}
-          onChange={(e) => setLeadFilter('search', e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           placeholder="Name, email, or company…"
-          className={inputClasses}
+          className="h-8"
         />
       </Field>
 
@@ -133,7 +158,10 @@ export function LeadFilters({
           variant="ghost"
           size="sm"
           disabled={!hasActiveFilters}
-          onClick={resetLeadFilters}
+          onClick={() => {
+            resetLeadFilters()
+            setSearchInput('')
+          }}
           aria-label="Clear all filters"
         >
           <X className="size-4" aria-hidden="true" />
@@ -172,9 +200,9 @@ function Field({
 }
 
 /**
- * Uncontrolled-style wrapper around a native `<select>` that always renders
- * an empty-label "All X" option at the top. Kept local to avoid pulling in
- * a full Shadcn select primitive for this initial implementation.
+ * Wrapper around a native `<select>` that always renders an empty-label
+ * "All X" option at the top. Uses the shared input classes so the
+ * visual treatment matches the surrounding text inputs.
  */
 function SelectInput({
   id,
@@ -194,7 +222,7 @@ function SelectInput({
       id={id}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={inputClasses}
+      className={cn(inputBaseClass, 'h-8')}
     >
       <option value="">{placeholder}</option>
       {options.map((opt) => (
@@ -205,9 +233,6 @@ function SelectInput({
     </select>
   )
 }
-
-const inputClasses =
-  'h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50'
 
 // Re-export for parents that want to type-guard filter keys.
 export type { LeadFilterKey }

@@ -7,7 +7,7 @@ import { errorResponse } from '@/lib/errors'
 /**
  * GET /api/admin/teams/hierarchy — Get the full team hierarchy tree.
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'admin:users')

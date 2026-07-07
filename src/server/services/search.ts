@@ -108,13 +108,10 @@ export async function search(
   const searchContacts = !filters?.entityType || filters.entityType === 'Contact'
   const searchCompanies = !filters?.entityType || filters.entityType === 'Company'
 
-  // Build date range conditions
-  const dateFromCondition = filters?.dateRange?.from
-    ? `AND "createdAt" >= $dateFrom`
-    : ''
-  const dateToCondition = filters?.dateRange?.to
-    ? `AND "createdAt" <= $dateTo`
-    : ''
+  // Note: date-range filtering is applied inside each entity search
+  // function (`searchLeadsEntity` etc.), not as raw SQL here — the
+  // filters object is passed through and each helper builds its own
+  // parameterised where clause.
 
   // Execute searches in parallel
   const searchPromises: Promise<void>[] = []

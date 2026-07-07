@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Users, UserPlus, Mail, Trash2, LogOut } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
 
 /**
  * User management component — invite users and manage roles.
@@ -38,8 +39,6 @@ interface InviteFormData {
   roleId: string
   teamId: string
 }
-
-const DEFAULT_ROLES = ['OWNER', 'ADMIN', 'MANAGER', 'MEMBER'] as const
 
 export function UserManagement(): React.JSX.Element {
   const queryClient = useQueryClient()
@@ -335,63 +334,78 @@ export function UserManagement(): React.JSX.Element {
         </div>
       )}
 
-      {/* Confirmation Modal */}
-      {confirmAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setConfirmAction(null)}>
-          <div
-            className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold text-foreground">
-              {confirmAction.type === 'remove' ? 'Remove Member' : 'Leave Organization'}
-            </h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {confirmAction.type === 'remove' ? (
-                <>
-                  Are you sure you want to remove <strong>{confirmAction.member.user.name}</strong> from the organization?
-                  They will lose access to all data and features. This action cannot be undone.
-                </>
-              ) : (
-                <>
-                  Are you sure you want to leave this organization?
-                  You will lose access to all data and features. You&apos;ll need a new invite to rejoin.
-                </>
-              )}
-            </p>
-            {confirmAction.type === 'remove' && removeMutation.error && (
-              <p className="mt-2 text-sm text-destructive">{removeMutation.error.message}</p>
-            )}
-            {confirmAction.type === 'leave' && leaveMutation.error && (
-              <p className="mt-2 text-sm text-destructive">{leaveMutation.error.message}</p>
-            )}
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setConfirmAction(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={removeMutation.isPending || leaveMutation.isPending}
-                onClick={() => {
-                  if (confirmAction.type === 'remove') {
-                    removeMutation.mutate(confirmAction.member.id, {
-                      onSuccess: () => setConfirmAction(null),
-                    })
-                  } else {
-                    leaveMutation.mutate()
-                  }
-                }}
-              >
-                {(removeMutation.isPending || leaveMutation.isPending)
-                  ? 'Processing...'
-                  : confirmAction.type === 'remove'
-                    ? 'Remove Member'
-                    : 'Leave Organization'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Confirmation Modal — routed through the shared Dialog primitive
+          so it inherits Escape-to-close, focus trap, focus restore, and
+          the reference-counted body scroll lock. */}
+      <Dialog
+        open={confirmAction !== null}
+        onClose={() => setConfirmAction(null)}
+        title={
+          confirmAction?.type === 'remove'
+            ? 'Remove Member'
+            : 'Leave Organization'
+        }
+        size="md"
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmAction(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={removeMutation.isPending || leaveMutation.isPending}
+              onClick={() => {
+                if (!confirmAction) return
+                if (confirmAction.type === 'remove') {
+                  removeMutation.mutate(confirmAction.member.id, {
+                    onSuccess: () => setConfirmAction(null),
+                  })
+                } else {
+                  leaveMutation.mutate()
+                }
+              }}
+            >
+              {(removeMutation.isPending || leaveMutation.isPending)
+                ? 'Processing...'
+                : confirmAction?.type === 'remove'
+                  ? 'Remove Member'
+                  : 'Leave Organization'}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          {confirmAction?.type === 'remove' ? (
+            <>
+              Are you sure you want to remove{' '}
+              <strong>{confirmAction.member.user.name}</strong> from the
+              organization? They will lose access to all data and features.
+              This action cannot be undone.
+            </>
+          ) : (
+            <>
+              Are you sure you want to leave this organization? You will lose
+              access to all data and features. You&apos;ll need a new invite
+              to rejoin.
+            </>
+          )}
+        </p>
+        {confirmAction?.type === 'remove' && removeMutation.error && (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {removeMutation.error.message}
+          </p>
+        )}
+        {confirmAction?.type === 'leave' && leaveMutation.error && (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {leaveMutation.error.message}
+          </p>
+        )}
+      </Dialog>
 
       {/* Leave Organization — shown at the bottom */}
       {members && members.length > 0 && (

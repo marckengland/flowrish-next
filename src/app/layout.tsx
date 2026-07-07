@@ -20,6 +20,14 @@ export const metadata: Metadata = {
   description: 'Modern CRM built with Next.js and Supabase',
 }
 
+/**
+ * Runs before hydration so the correct theme class is on `<html>` for
+ * the very first paint. Without this the page flashes light for dark-mode
+ * users on every navigation. The script is kept tiny and self-contained;
+ * anything more involved should live in the ThemeToggle component.
+ */
+const THEME_INIT_SCRIPT = `(function(){try{var k='flowrish:theme';var s=localStorage.getItem(k);var t=s||(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(t==='dark'){document.documentElement.classList.add('dark');}}catch(_e){}})();`
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -29,7 +37,11 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
       </body>
