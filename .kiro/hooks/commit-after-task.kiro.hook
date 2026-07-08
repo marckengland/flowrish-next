@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Commit after task completion",
+  "description": "Automatically commits all changes except the .kiro directory after each spec task is completed, with a descriptive commit message based on the task",
+  "version": "1",
+  "when": {
+    "type": "postTaskExecution"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A spec task was just completed. Stage all changes except the .kiro directory, then commit with a short descriptive message summarizing what was implemented. Use the task name/description for the commit message. Run these commands separately (do NOT chain with && or ||): 1) git add . 2) git reset HEAD -- .kiro 3) git commit -m '<descriptive message about the task>'. If the commit fails because there is nothing to commit, that is fine — just move on. Keep the message concise, like 'Implement SeatPreferenceManager (task 17.1)' or 'Add property test for seat selection priority fallback (task 17.2)'. Do NOT use a generic message like 'Complete task'."
+  }
+}
