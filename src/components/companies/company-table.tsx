@@ -121,6 +121,7 @@ export function CompanyTable({
                     <td className="px-4 py-3 font-semibold text-foreground">
                       <Link
                         href={`/companies/${company.id}`}
+                        aria-label={`Open ${company.name}`}
                         className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
                       >
                         {company.name}

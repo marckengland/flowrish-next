@@ -19,7 +19,7 @@ import { acceptInvite } from '@/server/services/organizations'
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/'
+  const next = searchParams.get('next') ?? '/dashboard'
 
   if (!code) {
     return NextResponse.redirect(new URL('/login?error=missing_code', origin))
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
       // Auto-accept the invite
       try {
         await acceptInvite(pendingInvite.id, dbUser.id)
-        redirectTo = '/' // Go to dashboard — they now have an org
+        redirectTo = '/dashboard' // Go to dashboard — they now have an org
       } catch {
         // If auto-accept fails, send to onboarding where they can try manually
         redirectTo = '/onboarding'

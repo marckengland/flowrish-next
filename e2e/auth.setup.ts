@@ -33,7 +33,7 @@ setup('authenticate as test user', async ({ page, request, baseURL }) => {
   // The response includes `properties.action_link` — a fully-qualified URL
   // we can navigate to directly. Docs: https://supabase.com/docs/reference/javascript/auth-admin-generatelink
   const adminUrl = `${supabaseUrl}/auth/v1/admin/generate_link`
-  const redirectTo = `${baseURL}/auth/confirm?next=/`
+  const redirectTo = `${baseURL}/auth/confirm?next=/dashboard`
   const response = await request.post(adminUrl, {
     headers: {
       apikey: serviceRoleKey,

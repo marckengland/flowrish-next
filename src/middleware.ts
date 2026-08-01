@@ -66,6 +66,10 @@ function getRateLimiters(): RateLimiterSet | null {
 
 // --- Constants ---
 
+// Routes reachable without authentication. `/` is the public marketing
+// landing page. Others are the auth entry + callback handlers. Matched
+// with startsWith, except `/` which is matched exactly (below) so it
+// doesn't shadow every route.
 const PUBLIC_ROUTES = ['/login', '/auth/callback', '/auth/confirm']
 
 // --- Middleware ---
@@ -86,6 +90,14 @@ export async function middleware(request: NextRequest) {
   // 2. Rate limiting (skip for static assets, and skip entirely when
   // Redis isn't configured — see getRateLimiters())
   const path = request.nextUrl.pathname
+
+  // Static assets served from /public (logo, images, fonts, etc.) must
+  // bypass the auth gate — otherwise an <img>/font request on a public
+  // page (login, landing) would 302 to /login and fail to load. Any path
+  // whose final segment has a file extension is treated as a static file.
+  if (/\.[a-zA-Z0-9]+$/.test(path) && !path.startsWith('/api/')) {
+    return response
+  }
 
   if (!path.startsWith('/_next') && !path.startsWith('/favicon')) {
     const limiters = getRateLimiters()
@@ -160,7 +172,8 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const isPublicRoute = PUBLIC_ROUTES.some((route) => path.startsWith(route))
+  const isPublicRoute =
+    path === '/' || PUBLIC_ROUTES.some((route) => path.startsWith(route))
   const isApiRoute = path.startsWith('/api/')
 
   // Redirect unauthenticated page requests to login (except public routes)

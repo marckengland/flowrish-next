@@ -106,7 +106,7 @@ export function ContactTable({
               >
                 <Link
                   href={`/contacts/${contact.id}`}
-                  aria-label={`View ${fullName}`}
+                  aria-label={`Open ${fullName}`}
                   className="absolute inset-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
 

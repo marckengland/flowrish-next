@@ -81,7 +81,7 @@ export async function createOrg(formData: FormData) {
     return { error: 'Failed to create organization. Please try again.' }
   }
 
-  redirect('/')
+  redirect('/dashboard')
 }
 
 /**
@@ -112,5 +112,5 @@ export async function joinOrg(formData: FormData) {
     return { error: 'Failed to accept invite. Please check the code and try again.' }
   }
 
-  redirect('/')
+  redirect('/dashboard')
 }

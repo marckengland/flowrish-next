@@ -78,7 +78,7 @@ export default async function DashboardLayout({
         })
       }
       // Reload the page to pick up the new permissions
-      redirect('/')
+      redirect('/dashboard')
     }
   }
 

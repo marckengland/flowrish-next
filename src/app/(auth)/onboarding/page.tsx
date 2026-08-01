@@ -35,7 +35,7 @@ export default async function OnboardingPage() {
 
   // If user already has an org, they don't need onboarding
   if (dbUser.organizationMemberships.length > 0) {
-    redirect('/')
+    redirect('/dashboard')
   }
 
   return (

@@ -25,6 +25,7 @@ export interface HeaderProps {
 
 /** Maps a pathname to the breadcrumb page label shown in the topbar. */
 const PAGE_TITLES: Array<{ prefix: string; label: string }> = [
+  { prefix: '/dashboard', label: 'Dashboard' },
   { prefix: '/pipeline', label: 'Pipeline' },
   { prefix: '/leads', label: 'Leads' },
   { prefix: '/contacts', label: 'Contacts' },
@@ -40,7 +41,6 @@ const PAGE_TITLES: Array<{ prefix: string; label: string }> = [
 ]
 
 function pageTitle(pathname: string): string {
-  if (pathname === '/') return 'Dashboard'
   const match = PAGE_TITLES.find((p) => pathname.startsWith(p.prefix))
   return match?.label ?? 'Dashboard'
 }

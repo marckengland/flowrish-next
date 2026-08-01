@@ -175,6 +175,7 @@ export function LeadTable({
                   <td className="px-4 py-3 font-semibold">
                     <Link
                       href={`/leads/${lead.id}`}
+                      aria-label={`Open ${fullName(lead)}`}
                       className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
                     >
                       {fullName(lead)}

@@ -54,7 +54,7 @@ interface NavGroup {
 const NAV_GROUPS: readonly NavGroup[] = [
   {
     items: [
-      { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       {
         href: '/pipeline',
         label: 'Pipeline',
@@ -171,7 +171,6 @@ export function Sidebar({
   }
 
   const isActive = (href: string): boolean => {
-    if (href === '/') return pathname === '/'
     return pathname === href || pathname.startsWith(`${href}/`)
   }
 

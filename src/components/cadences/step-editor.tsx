@@ -41,32 +41,28 @@ const ACTION_TYPES: ReadonlyArray<{
     label: 'Email',
     description: 'Send an automated email',
     icon: Mail,
-    activeClass:
-      'border-purple-300 bg-purple-100 text-purple-700 dark:border-purple-700 dark:bg-purple-900/40 dark:text-purple-200',
+    activeClass: 'border-brand bg-brand-subtle text-brand-emphasis',
   },
   {
     value: 'CALL',
     label: 'Phone',
     description: 'Schedule a call task',
     icon: Phone,
-    activeClass:
-      'border-blue-300 bg-blue-100 text-blue-700 dark:border-blue-700 dark:bg-blue-900/40 dark:text-blue-200',
+    activeClass: 'border-brand bg-brand-subtle text-brand-emphasis',
   },
   {
     value: 'LINKEDIN',
     label: 'LinkedIn',
     description: 'Send a connection request',
     icon: Handshake,
-    activeClass:
-      'border-sky-300 bg-sky-100 text-sky-700 dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-200',
+    activeClass: 'border-brand bg-brand-subtle text-brand-emphasis',
   },
   {
     value: 'MANUAL_TASK',
     label: 'Other',
     description: 'Create a manual task',
     icon: ClipboardList,
-    activeClass:
-      'border-orange-300 bg-orange-100 text-orange-700 dark:border-orange-700 dark:bg-orange-900/40 dark:text-orange-200',
+    activeClass: 'border-brand bg-brand-subtle text-brand-emphasis',
   },
 ]
 

@@ -303,7 +303,7 @@ export function GmailConnect({
                 </span>
               </li>
               <li className="flex gap-2">
-                <span aria-hidden className="text-emerald-600 dark:text-emerald-400">
+                <span aria-hidden className="text-brand-emphasis">
                   ✓
                 </span>
                 <span>
@@ -312,7 +312,7 @@ export function GmailConnect({
                 </span>
               </li>
               <li className="flex gap-2">
-                <span aria-hidden className="text-emerald-600 dark:text-emerald-400">
+                <span aria-hidden className="text-brand-emphasis">
                   ✓
                 </span>
                 <span>
@@ -321,7 +321,7 @@ export function GmailConnect({
                 </span>
               </li>
               <li className="flex gap-2">
-                <span aria-hidden className="text-emerald-600 dark:text-emerald-400">
+                <span aria-hidden className="text-brand-emphasis">
                   ✓
                 </span>
                 <span>

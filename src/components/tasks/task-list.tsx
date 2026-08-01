@@ -206,6 +206,7 @@ function TaskRow({
           >
             <Link
               href={`/tasks/${task.id}`}
+              aria-label={`Open task ${task.title}`}
               className="text-foreground before:absolute before:inset-0 before:content-[''] focus-visible:underline focus-visible:outline-none"
             >
               {task.title}

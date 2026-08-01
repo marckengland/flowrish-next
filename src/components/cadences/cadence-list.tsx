@@ -286,6 +286,7 @@ export function CadenceList({
                   <td className="px-4 py-3">
                     <Link
                       href={`/cadences/${cadence.id}`}
+                      aria-label={`Open cadence ${cadence.name}`}
                       className="font-medium text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
                     >
                       {cadence.name}

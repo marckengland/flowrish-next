@@ -22,7 +22,7 @@ interface RouteCheck {
 }
 
 const ROUTES: readonly RouteCheck[] = [
-  { path: '/', heading: /Dashboard|Home|Pipeline/i },
+  { path: '/dashboard', heading: /Dashboard|Home|Pipeline/i },
   { path: '/leads', heading: 'Leads' },
   { path: '/leads/new', heading: 'New lead' },
   { path: '/contacts', heading: 'Contacts' },
