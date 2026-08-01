@@ -11,6 +11,7 @@ import { getOrCreateDefaultPipeline } from '@/server/services/pipeline'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { AppError } from '@/lib/errors'
 
+import { ClickToCall } from '@/components/leads/click-to-call'
 import { LeadConvert } from '@/components/leads/lead-convert'
 import { LeadDetail } from '@/components/leads/lead-detail'
 import { LeadStageTransition } from '@/components/leads/lead-stage-transition'
@@ -232,6 +233,19 @@ export default async function LeadDetailPage({
         </div>
 
         <aside className="flex flex-col gap-[18px]">
+          <section
+            aria-label="Call lead"
+            className="flex flex-col gap-3 rounded-lg border bg-card p-[18px]"
+          >
+            <h2 className="text-sm font-semibold">Call</h2>
+            <ClickToCall
+              leadId={lead.id}
+              phone={lead.phone}
+              leadName={`${lead.firstName} ${lead.lastName}`.trim()}
+              canLog={canWrite}
+            />
+          </section>
+
           <section
             aria-label="Convert lead"
             className="flex flex-col gap-3 rounded-lg border bg-card p-[18px]"

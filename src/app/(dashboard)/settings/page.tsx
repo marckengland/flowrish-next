@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState } from 'react'
-import { Zap, Target, Brain, Timer, Mail } from 'lucide-react'
+import { Zap, Target, Brain, Timer, Mail, PhoneCall } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/layout/page-header'
@@ -13,6 +13,7 @@ import { AssignmentRules } from '@/components/admin/assignment-rules'
 import { AiPromptConfig } from '@/components/ai/ai-prompt-config'
 import { GmailConnect } from '@/components/email/gmail-connect'
 import { EmailSyncStatus } from '@/components/email/email-sync-status'
+import { CallingProviders } from '@/components/settings/calling-providers'
 
 /**
  * Organization settings page.
@@ -28,7 +29,13 @@ import { EmailSyncStatus } from '@/components/email/email-sync-status'
  * Validates: Requirements 2.11, 16.1, 16.4, 33.6
  */
 
-type SettingsTab = 'scoring' | 'decay' | 'assignment' | 'ai' | 'email'
+type SettingsTab =
+  | 'scoring'
+  | 'decay'
+  | 'assignment'
+  | 'ai'
+  | 'email'
+  | 'calling'
 
 const TABS: Array<{ id: SettingsTab; label: string; icon: typeof Target }> = [
   { id: 'scoring', label: 'Scoring rules', icon: Target },
@@ -36,6 +43,7 @@ const TABS: Array<{ id: SettingsTab; label: string; icon: typeof Target }> = [
   { id: 'assignment', label: 'Assignment rules', icon: Zap },
   { id: 'ai', label: 'AI prompts', icon: Brain },
   { id: 'email', label: 'Email (Gmail)', icon: Mail },
+  { id: 'calling', label: 'Calling & voice', icon: PhoneCall },
 ]
 
 export default function SettingsPage(): React.JSX.Element {
@@ -45,7 +53,7 @@ export default function SettingsPage(): React.JSX.Element {
     <div className="mx-auto flex w-full max-w-[1000px] flex-col gap-5">
       <PageHeader
         title="Settings"
-        description="Configure scoring, assignment rules, AI prompts and email for your organization."
+        description="Configure scoring, assignment rules, AI prompts, email and calling for your organization."
       />
 
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[212px_1fr] lg:items-start lg:gap-6">
@@ -117,6 +125,7 @@ export default function SettingsPage(): React.JSX.Element {
               </Card>
             </div>
           )}
+          {activeTab === 'calling' && <CallingProviders />}
         </section>
       </div>
     </div>
