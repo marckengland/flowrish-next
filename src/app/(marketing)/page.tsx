@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import {
   ArrowRight,
   Calendar,
@@ -10,14 +11,49 @@ import {
   Check,
 } from 'lucide-react'
 
+import type { Metadata } from 'next'
+
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { siteConfig } from '@/lib/site'
 import { DashboardMockup } from '@/components/marketing/dashboard-mockup'
 import { PricingSection } from '@/components/marketing/pricing-section'
 
-export const metadata = {
-  title: 'Flowrish — The CRM that does the busywork',
-  description:
-    'Flowrish automates logging, follow-ups, lead scoring and forecasting, then hands every rep the single highest-value action to take next.',
+export const metadata: Metadata = {
+  title: siteConfig.title,
+  description: siteConfig.description,
+  alternates: { canonical: '/' },
+}
+
+/**
+ * JSON-LD for the entity graph + product understanding by search / AI
+ * engines. Rendered server-side in the initial HTML.
+ */
+const JSON_LD = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      '@id': `${siteConfig.url}/#website`,
+      url: `${siteConfig.url}/`,
+      name: siteConfig.name,
+      description: siteConfig.description,
+    },
+    {
+      '@type': 'Organization',
+      '@id': `${siteConfig.url}/#organization`,
+      name: siteConfig.name,
+      url: `${siteConfig.url}/`,
+      ...(siteConfig.sameAs.length ? { sameAs: siteConfig.sameAs } : {}),
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: `${siteConfig.name} CRM`,
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      description: siteConfig.description,
+      url: `${siteConfig.url}/`,
+    },
+  ],
 }
 
 /**
@@ -45,6 +81,10 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
 
   return (
     <div className="min-h-screen bg-card text-foreground">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
+      />
       <div className="mx-auto max-w-[1280px]">
         {/* NAV */}
         <nav className="sticky top-0 z-10 flex h-[68px] items-center justify-between border-b bg-card/85 px-6 backdrop-blur sm:px-10">

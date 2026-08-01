@@ -1,7 +1,16 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
 
 import { Shell } from '@/components/layout/shell'
+
+/**
+ * The authenticated app must never be indexed. Routes are auth-gated, but
+ * this is an explicit noindex signal for the whole `(dashboard)` group.
+ */
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+}
 import { getSession } from '@/server/auth/session'
 import { prisma } from '@/server/db/client'
 import type { Permission } from '@/types/permissions'
