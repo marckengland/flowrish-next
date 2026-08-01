@@ -59,9 +59,9 @@ const JSON_LD = {
 /**
  * Public marketing landing page ("/").
  *
- * Server Component: performs a lightweight auth check so the nav + hero
- * CTAs point signed-in visitors straight to the app, and everyone else
- * into the sign-up / sign-in funnel.
+ * Server Component: signed-in visitors are sent straight to the app, so the
+ * landing page only ever renders for logged-out visitors. Everyone here is
+ * funneled into the sign-up / sign-in flow.
  */
 export default async function LandingPage(): Promise<React.JSX.Element> {
   let isAuthed = false
@@ -72,12 +72,18 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
     } = await supabase.auth.getUser()
     isAuthed = Boolean(user)
   } catch {
-    // Supabase not configured (local/dev) — treat as logged out.
+    // Supabase not configured (local/dev) — treat as logged out and render
+    // the public landing page.
     isAuthed = false
   }
 
-  const getStartedHref = isAuthed ? '/dashboard' : '/onboarding'
-  const primaryLabel = isAuthed ? 'Open app' : 'Get started'
+  // Signed-in visitors go straight to the app. Called outside the try/catch
+  // above because redirect() signals via a thrown NEXT_REDIRECT error that
+  // must not be swallowed.
+  if (isAuthed) redirect('/dashboard')
+
+  const getStartedHref = '/onboarding'
+  const primaryLabel = 'Get started'
 
   return (
     <div className="min-h-screen bg-card text-foreground">
@@ -117,31 +123,19 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
             </div>
           </div>
           <div className="flex items-center gap-3.5">
-            {isAuthed ? (
-              <Link
-                href="/dashboard"
-                className="inline-flex h-[38px] items-center gap-1.5 rounded-[10px] bg-brand px-[18px] text-[14px] font-semibold text-brand-foreground transition-colors hover:bg-brand-hover"
-              >
-                Open app
-                <ArrowRight className="size-[15px]" aria-hidden="true" />
-              </Link>
-            ) : (
-              <>
-                <Link
-                  href="/login"
-                  className="text-[14px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  Sign in
-                </Link>
-                <Link
-                  href={getStartedHref}
-                  className="inline-flex h-[38px] items-center gap-1.5 rounded-[10px] bg-brand px-[18px] text-[14px] font-semibold text-brand-foreground transition-colors hover:bg-brand-hover"
-                >
-                  Get started
-                  <ArrowRight className="size-[15px]" aria-hidden="true" />
-                </Link>
-              </>
-            )}
+            <Link
+              href="/login"
+              className="text-[14px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Sign in
+            </Link>
+            <Link
+              href={getStartedHref}
+              className="inline-flex h-[38px] items-center gap-1.5 rounded-[10px] bg-brand px-[18px] text-[14px] font-semibold text-brand-foreground transition-colors hover:bg-brand-hover"
+            >
+              Get started
+              <ArrowRight className="size-[15px]" aria-hidden="true" />
+            </Link>
           </div>
         </nav>
 
