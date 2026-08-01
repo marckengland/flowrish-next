@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
+import { requireEntitlement } from '@/server/auth/entitlements'
 import {
   calculatePipelineMetrics,
   assessForecastRisk,
@@ -30,6 +31,7 @@ export async function GET() {
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'forecast:read')
+    await requireEntitlement(session.organizationId, 'forecasting')
 
     const db = createTenantPrisma(session.organizationId)
 

@@ -348,3 +348,27 @@ The original 852-test suite passes with the additions. New routes
 and components are covered indirectly through type-check; adding
 focused tests for the API routes added in this port is the most
 useful next step for production deploy confidence.
+
+
+## Session — 2026-08-01
+
+### Private-beta waitlist (email capture)
+- New `Waitlist` Prisma model (`email` unique, `name?`, `status` pending|invited|joined, `source`); migration `prisma/migrations/20260801074601_add_waitlist_and_plan_default` **applied to the live Supabase DB**.
+- New optional system email sender `src/server/services/transactional-email.ts` (Resend; no-op when `RESEND_API_KEY` unset — never fails the request). Added `resend@6.12.0` (pinned).
+- Public `POST /api/waitlist` (`src/app/api/waitlist/route.ts`) — zod-validated, duplicate-safe (same success shape, no existence leak), best-effort confirmation email.
+- Client form `src/components/marketing/waitlist-form.tsx` (light/dark tones). Wired into `(marketing)/page.tsx`: hero/nav/pricing CTAs now funnel to `#waitlist`; `/onboarding` + `/login` still reachable for invited testers.
+
+### Subscription pricing tiers + per-tier feature access
+- Single source of truth `src/lib/plans.ts`: slugs `starter | growth | enterprise`, `PLAN_RANK`, feature→min-plan map (`cadences`/`forecasting`/`ai` → Growth), `PLAN_TIERS` (now rendered by `pricing-section.tsx`). Prices left at current values — change in `PLAN_TIERS` only.
+- Server guard `src/server/auth/entitlements.ts`: `requireEntitlement(orgId, feature)` → 403 `UPGRADE_REQUIRED`; reads `Organization.plan`, normalizes legacy `free`/`pro`.
+- Gated routes: AI (`chat`, `generate-email`, `research`), cadences (`route`, `[id]/enroll`, `[id]/bulk-enroll`), forecast (`route`, `submit`, `compare`).
+- `Organization.plan` default `free` → `starter`.
+- **Behavior change:** gating is live — orgs below Growth now get 403 on those features. Set an org to Growth+ to unlock: `UPDATE "Organization" SET plan='growth' WHERE slug='…';`
+
+### Verified
+- `npx tsc --noEmit` green project-wide; `eslint` clean on changed files. Full `next build` not run here (sandbox `.env` lacks Supabase/Upstash/AI keys — unrelated to these changes).
+
+### Follow-ups / backlog
+- Set real tier prices in `PLAN_TIERS` (kept current pending numbers).
+- Extend entitlement gating to remaining cadence sub-routes (activate, pause/resume, steps, analytics) for defense-in-depth.
+- Set `RESEND_API_KEY` (+ `RESEND_FROM`) in Flowrish env for waitlist confirmation delivery.

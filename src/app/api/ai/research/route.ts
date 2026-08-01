@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
+import { requireEntitlement } from '@/server/auth/entitlements'
 import { researchAccount } from '@/server/services/ai'
 import { errorResponse } from '@/lib/errors'
 
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'leads:read')
+    await requireEntitlement(session.organizationId, 'ai')
 
     const body = await request.json()
     const { companyId } = researchBodySchema.parse(body)

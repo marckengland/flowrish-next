@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
+import { requireEntitlement } from '@/server/auth/entitlements'
 import { bulkEnroll } from '@/server/services/cadences'
 import { errorResponse } from '@/lib/errors'
 import { z } from 'zod'
@@ -30,6 +31,7 @@ export async function POST(
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'cadences:manage')
+    await requireEntitlement(session.organizationId, 'cadences')
 
     const { id } = paramsSchema.parse(await params)
     const body = await request.json()

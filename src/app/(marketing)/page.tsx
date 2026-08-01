@@ -17,6 +17,7 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import { siteConfig } from '@/lib/site'
 import { DashboardMockup } from '@/components/marketing/dashboard-mockup'
 import { PricingSection } from '@/components/marketing/pricing-section'
+import { WaitlistForm } from '@/components/marketing/waitlist-form'
 
 export const metadata: Metadata = {
   title: siteConfig.title,
@@ -82,8 +83,10 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
   // must not be swallowed.
   if (isAuthed) redirect('/dashboard')
 
-  const getStartedHref = '/onboarding'
-  const primaryLabel = 'Get started'
+  // Private beta: CTAs funnel to the waitlist anchor rather than open signup.
+  // /onboarding stays reachable so invited testers can still create their org.
+  const getStartedHref = '#waitlist'
+  const primaryLabel = 'Join the waitlist'
 
   return (
     <div className="min-h-screen bg-card text-foreground">
@@ -174,7 +177,7 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
               </a>
             </div>
             <p className="font-mono text-[13px] text-muted-foreground">
-              No credit card required · 14-day trial · SOC 2 Type II
+              Private beta · No credit card · We&apos;ll email you when a spot opens
             </p>
           </div>
           <DashboardMockup />
@@ -295,29 +298,36 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
 
         {/* FINAL CTA */}
         <section className="px-6 py-10 sm:px-10">
-          <div className="relative overflow-hidden rounded-3xl bg-[oklch(0.17_0_0)] px-8 py-[72px] text-center text-white sm:px-14">
+          <div
+            id="waitlist"
+            className="relative scroll-mt-24 overflow-hidden rounded-3xl bg-[oklch(0.17_0_0)] px-8 py-[72px] text-center text-white sm:px-14"
+          >
             <h2 className="mx-auto mb-4 max-w-[640px] text-[40px] font-bold leading-[1.03] tracking-[-0.03em] text-balance sm:text-[48px]">
               Give your reps their time back.
             </h2>
             <p className="mx-auto mb-8 max-w-[520px] text-[18px] leading-[1.5] text-white/70">
-              Set up Flowrish in an afternoon and let it run the admin so your
-              team can run the deals.
+              Flowrish is in private beta. Join the waitlist and we&apos;ll email
+              you the moment a spot opens — then set up in an afternoon and let it
+              run the admin so your team can run the deals.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-3.5">
-              <Link
-                href={getStartedHref}
-                className="inline-flex h-[50px] items-center gap-2 rounded-xl bg-white px-7 text-[16px] font-semibold text-[oklch(0.17_0_0)] transition-opacity hover:opacity-90"
-              >
-                {primaryLabel}
-                <ArrowRight className="size-[17px]" aria-hidden="true" />
-              </Link>
+            <WaitlistForm tone="dark" />
+            <p className="mt-6 text-[14px] text-white/60">
+              Prefer a walkthrough?{' '}
               <a
                 href="mailto:sales@flowrish.com"
-                className="inline-flex h-[50px] items-center rounded-xl border border-white/25 px-6 text-[16px] font-semibold text-white transition-colors hover:bg-white/10"
+                className="font-semibold text-white underline-offset-4 hover:underline"
               >
                 Book a demo
               </a>
-            </div>
+              {' · '}
+              Already a tester?{' '}
+              <Link
+                href="/login"
+                className="font-semibold text-white underline-offset-4 hover:underline"
+              >
+                Sign in
+              </Link>
+            </p>
           </div>
         </section>
 

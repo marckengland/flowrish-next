@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
+import { requireEntitlement } from '@/server/auth/entitlements'
 import { submitForecast } from '@/server/services/forecast'
 import { errorResponse } from '@/lib/errors'
 
@@ -25,6 +26,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'forecast:submit')
+    await requireEntitlement(session.organizationId, 'forecasting')
 
     const body = await request.json()
     const { period, commitAmount, notes } = forecastSubmitSchema.parse(body)

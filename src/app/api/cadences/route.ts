@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
+import { requireEntitlement } from '@/server/auth/entitlements'
 import { createCadence } from '@/server/services/cadences'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { paginationSchema } from '@/lib/validators/common'
@@ -17,6 +18,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'cadences:read')
+    await requireEntitlement(session.organizationId, 'cadences')
 
     const { searchParams } = request.nextUrl
 
@@ -73,6 +75,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'cadences:manage')
+    await requireEntitlement(session.organizationId, 'cadences')
 
     const body = await request.json()
     const cadence = await createCadence(body, session.dbUser.id, session.organizationId)

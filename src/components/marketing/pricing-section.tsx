@@ -5,18 +5,7 @@ import Link from 'next/link'
 import { Check } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-
-interface Tier {
-  name: string
-  blurb: string
-  /** Monthly + annual per-seat prices, or null for "Custom". */
-  price: { monthly: string; annual: string } | null
-  customPrice?: string
-  subLabelCustom?: string
-  cta: { label: string; href: string; solid?: boolean }
-  features: string[]
-  featured?: boolean
-}
+import { PLAN_TIERS } from '@/lib/plans'
 
 export interface PricingSectionProps {
   /** Where the plan CTAs point (e.g. /onboarding, or /dashboard when signed in). */
@@ -35,45 +24,9 @@ export function PricingSection({
 }: PricingSectionProps): React.JSX.Element {
   const [annual, setAnnual] = useState(true)
 
-  const tiers: Tier[] = [
-    {
-      name: 'Starter',
-      blurb: 'For small teams getting organized.',
-      price: { monthly: '$24', annual: '$19' },
-      cta: { label: 'Get started', href: getStartedHref },
-      features: [
-        'Lead & contact management',
-        'Kanban pipeline',
-        'CSV import / export',
-      ],
-    },
-    {
-      name: 'Growth',
-      blurb: 'Automation and forecasting for scaling teams.',
-      price: { monthly: '$59', annual: '$49' },
-      cta: { label: 'Get started', href: getStartedHref, solid: true },
-      features: [
-        'Everything in Starter',
-        'Cadences & Rhythm engine',
-        'Revenue forecasting',
-        'AI email & research',
-      ],
-      featured: true,
-    },
-    {
-      name: 'Enterprise',
-      blurb: 'Governance and control for large orgs.',
-      price: null,
-      customPrice: 'Custom',
-      subLabelCustom: 'Volume & annual terms',
-      cta: { label: 'Talk to sales', href: talkToSalesHref },
-      features: [
-        'Everything in Growth',
-        'Custom roles & SSO',
-        'Audit log & SLAs',
-      ],
-    },
-  ]
+  // Tiers + feature lists come from the shared plan source of truth
+  // (src/lib/plans.ts), which the server-side entitlement guard reads too.
+  const tiers = PLAN_TIERS
 
   const billLabel = annual ? 'Billed annually' : 'Billed monthly'
 
@@ -152,15 +105,15 @@ export function PricingSection({
             </div>
 
             <Link
-              href={tier.cta.href}
+              href={tier.slug === 'enterprise' ? talkToSalesHref : getStartedHref}
               className={cn(
                 'mb-[22px] flex h-[42px] items-center justify-center rounded-[10px] text-[14px] font-semibold transition-colors',
-                tier.cta.solid
+                tier.featured
                   ? 'bg-brand text-brand-foreground hover:bg-brand-hover'
                   : 'border border-border hover:bg-muted',
               )}
             >
-              {tier.cta.label}
+              {tier.slug === 'enterprise' ? 'Talk to sales' : 'Get started'}
             </Link>
 
             <ul className="flex flex-col gap-2.5 text-[14px] text-foreground/80">
