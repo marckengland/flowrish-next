@@ -248,3 +248,49 @@ The user has an account but no organization. Complete the onboarding form to cre
 
 ### Email threading not working in cadences
 Run the migration: `npx prisma migrate dev --name add_email_thread_id`. This adds the `emailThreadId` column to `CadenceEnrollment`.
+
+
+---
+
+## Integrations & recent additions
+
+See the **[Integrations Guide](INTEGRATIONS.md)** for full, step-by-step setup
+of calling and email providers. Quick notes for deployment:
+
+### Routing change
+
+The public **marketing landing page is now `/`**; the authenticated app lives
+under **`/dashboard`**. Auth redirects (`/auth/confirm`, `/auth/callback`,
+onboarding) send users to `/dashboard`. Middleware treats `/` and static assets
+as public.
+
+### New environment variables
+
+Microsoft 365 / Outlook email (optional — one Azure app per deployment):
+
+```
+MICROSOFT_CLIENT_ID=…
+MICROSOFT_CLIENT_SECRET=…
+NEXT_PUBLIC_MICROSOFT_CLIENT_ID=…    # same client id, for the browser authorize URL
+```
+
+Redirect URI to register in Azure: `https://<your-domain>/api/email/microsoft/callback`
+· Delegated Graph scopes: `offline_access User.Read Mail.Read Mail.Send`.
+
+**Calling has no env vars** — it's bring-your-own **per organization**, entered
+in-app (Settings → Calling & voice) and encrypted at rest with
+`EMAIL_ENCRYPTION_KEY`.
+
+### Database migrations to apply
+
+```bash
+npx prisma migrate deploy
+```
+
+New migrations: `add_voice_provider`, `add_voice_config`, `add_twilio_auth_token`.
+
+### Favicon / branding
+
+The favicon is the emerald Flowrish lily (`src/app/icon.png` + `apple-icon.png`).
+Default theme is **light** (dark mode is opt-in via the toggle; the OS
+`prefers-color-scheme` is intentionally not followed).

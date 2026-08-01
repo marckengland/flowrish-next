@@ -42,6 +42,8 @@ export async function PUT(request: NextRequest) {
           : undefined,
       twilioTwimlAppSid: String(body.twilioTwimlAppSid ?? ''),
       twilioCallerId: String(body.twilioCallerId ?? ''),
+      twilioAuthToken:
+        typeof body.twilioAuthToken === 'string' ? body.twilioAuthToken : undefined,
     })
 
     return NextResponse.json({ config })

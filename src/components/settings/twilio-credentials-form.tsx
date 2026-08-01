@@ -16,6 +16,7 @@ interface VoiceConfigView {
   twilioTwimlAppSid: string | null
   twilioCallerId: string | null
   hasApiKeySecret: boolean
+  hasAuthToken: boolean
 }
 
 /**
@@ -39,6 +40,8 @@ export function TwilioCredentialsForm(): React.JSX.Element {
   const [apiKeySecret, setApiKeySecret] = useState('')
   const [twimlAppSid, setTwimlAppSid] = useState('')
   const [callerId, setCallerId] = useState('')
+  const [authToken, setAuthToken] = useState('')
+  const [hasAuthToken, setHasAuthToken] = useState(false)
 
   const [webhookUrl, setWebhookUrl] = useState('/api/voice/twiml')
   const [copied, setCopied] = useState(false)
@@ -58,6 +61,7 @@ export function TwilioCredentialsForm(): React.JSX.Element {
         const c = body.config as VoiceConfigView
         setConfigured(c.configured)
         setHasSecret(c.hasApiKeySecret)
+        setHasAuthToken(c.hasAuthToken)
         setAccountSid(c.twilioAccountSid ?? '')
         setApiKeySid(c.twilioApiKeySid ?? '')
         setTwimlAppSid(c.twilioTwimlAppSid ?? '')
@@ -85,10 +89,11 @@ export function TwilioCredentialsForm(): React.JSX.Element {
         body: JSON.stringify({
           twilioAccountSid: accountSid,
           twilioApiKeySid: apiKeySid,
-          // Only send the secret when the user typed one.
+          // Only send secrets when the user typed one.
           twilioApiKeySecret: apiKeySecret || undefined,
           twilioTwimlAppSid: twimlAppSid,
           twilioCallerId: callerId,
+          twilioAuthToken: authToken || undefined,
         }),
       })
       const body = (await res.json().catch(() => ({}))) as {
@@ -101,7 +106,9 @@ export function TwilioCredentialsForm(): React.JSX.Element {
       }
       setConfigured(body.config.configured)
       setHasSecret(body.config.hasApiKeySecret)
+      setHasAuthToken(body.config.hasAuthToken)
       setApiKeySecret('')
+      setAuthToken('')
       setSaved(true)
     } catch {
       setError('Could not save credentials.')
@@ -120,11 +127,13 @@ export function TwilioCredentialsForm(): React.JSX.Element {
       })
       setConfigured(false)
       setHasSecret(false)
+      setHasAuthToken(false)
       setAccountSid('')
       setApiKeySid('')
       setApiKeySecret('')
       setTwimlAppSid('')
       setCallerId('')
+      setAuthToken('')
       setSaved(false)
     } catch {
       setError('Could not disconnect.')
@@ -237,6 +246,25 @@ export function TwilioCredentialsForm(): React.JSX.Element {
               value={callerId}
               onChange={setCallerId}
             />
+            <div>
+              <Field
+                id="tw-auth-token"
+                label={
+                  hasAuthToken
+                    ? 'Auth Token (recommended · leave blank to keep saved token)'
+                    : 'Auth Token (recommended)'
+                }
+                placeholder={hasAuthToken ? '•••••••• saved' : 'Verifies inbound call webhooks'}
+                value={authToken}
+                onChange={setAuthToken}
+                type="password"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Found on the Twilio Console dashboard. When set, Flowrish
+                verifies each call webhook&apos;s signature so only Twilio can
+                trigger calls on your account.
+              </p>
+            </div>
 
             {error && <p className="text-[13px] text-destructive">{error}</p>}
             {saved && (

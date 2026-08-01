@@ -20,6 +20,8 @@ export interface VoiceConfigView {
   twilioCallerId: string | null
   /** Whether an API secret is stored (so the UI can show "saved" without revealing it). */
   hasApiKeySecret: boolean
+  /** Whether an Auth Token is stored (enables TwiML webhook signature checks). */
+  hasAuthToken: boolean
 }
 
 /** Fully-decrypted Twilio credentials for server-side token minting. */
@@ -38,6 +40,8 @@ export interface SaveTwilioConfigInput {
   twilioApiKeySecret?: string
   twilioTwimlAppSid: string
   twilioCallerId: string
+  /** Optional Auth Token for webhook signature verification (blank = keep existing). */
+  twilioAuthToken?: string
 }
 
 /**
@@ -58,6 +62,7 @@ export async function getVoiceConfigView(orgId: string): Promise<VoiceConfigView
       twilioTwimlAppSid: null,
       twilioCallerId: null,
       hasApiKeySecret: false,
+      hasAuthToken: false,
     }
   }
 
@@ -77,6 +82,7 @@ export async function getVoiceConfigView(orgId: string): Promise<VoiceConfigView
     twilioTwimlAppSid: config.twilioTwimlAppSid,
     twilioCallerId: config.twilioCallerId,
     hasApiKeySecret: Boolean(config.twilioApiKeySecret),
+    hasAuthToken: Boolean(config.twilioAuthToken),
   }
 }
 
@@ -110,6 +116,8 @@ export async function saveTwilioConfig(
     )
   }
 
+  const newAuthToken = input.twilioAuthToken?.trim() ?? ''
+
   const existing = await prisma.voiceConfig.findUnique({
     where: { organizationId: orgId },
   })
@@ -127,6 +135,12 @@ export async function saveTwilioConfig(
     )
   }
 
+  // Auth Token is optional (webhook verification only): encrypt a new one,
+  // otherwise keep whatever's already stored.
+  const encryptedAuthToken = newAuthToken
+    ? encrypt(newAuthToken)
+    : (existing?.twilioAuthToken ?? null)
+
   await prisma.voiceConfig.upsert({
     where: { organizationId: orgId },
     create: {
@@ -137,6 +151,7 @@ export async function saveTwilioConfig(
       twilioApiKeySecret: encryptedSecret,
       twilioTwimlAppSid: twimlAppSid,
       twilioCallerId: callerId,
+      twilioAuthToken: encryptedAuthToken,
     },
     update: {
       provider: 'twilio',
@@ -145,10 +160,35 @@ export async function saveTwilioConfig(
       twilioApiKeySecret: encryptedSecret,
       twilioTwimlAppSid: twimlAppSid,
       twilioCallerId: callerId,
+      twilioAuthToken: encryptedAuthToken,
     },
   })
 
   return getVoiceConfigView(orgId)
+}
+
+/**
+ * Returns the data the TwiML webhook needs: the org's caller ID and, when
+ * provided, the decrypted Auth Token used to verify Twilio's request
+ * signature. `authToken` is null when the org hasn't supplied one.
+ */
+export async function getTwilioWebhookContext(
+  orgId: string,
+): Promise<{ callerId: string | null; authToken: string | null }> {
+  const config = await prisma.voiceConfig.findUnique({
+    where: { organizationId: orgId },
+    select: { twilioCallerId: true, twilioAuthToken: true },
+  })
+  if (!config) return { callerId: null, authToken: null }
+  let authToken: string | null = null
+  if (config.twilioAuthToken) {
+    try {
+      authToken = decrypt(config.twilioAuthToken)
+    } catch {
+      authToken = null
+    }
+  }
+  return { callerId: config.twilioCallerId ?? null, authToken }
 }
 
 /** Removes the org's stored voice credentials. */

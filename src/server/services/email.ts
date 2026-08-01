@@ -496,6 +496,9 @@ export async function sendEmail(
       subject: personalizedSubject,
       htmlBody,
       attachments,
+      // Thread the reply into the existing Outlook conversation when the
+      // caller (e.g. a cadence follow-up) supplies one.
+      replyToConversationId: threadId,
     })
     externalId = delivered.externalId
     resultThreadId = delivered.threadId

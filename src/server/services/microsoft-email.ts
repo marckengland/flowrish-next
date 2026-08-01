@@ -190,27 +190,44 @@ export async function deliverMicrosoftEmail(params: {
   subject: string
   htmlBody: string
   attachments: readonly OutgoingAttachment[]
+  /** When set, reply into this conversation so the message threads in Outlook. */
+  replyToConversationId?: string
 }): Promise<{ externalId: string; threadId: string }> {
-  const { accessToken, to, subject, htmlBody, attachments } = params
+  const { accessToken, to, subject, htmlBody, attachments, replyToConversationId } = params
   const authHeaders = {
     Authorization: `Bearer ${accessToken}`,
     'Content-Type': 'application/json',
   }
 
-  const draftRes = await fetch(`${MS_GRAPH}/me/messages`, {
-    method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify({
-      subject,
-      body: { contentType: 'HTML', content: htmlBody },
-      toRecipients: [{ emailAddress: { address: to } }],
-    }),
-  })
-  if (!draftRes.ok) {
-    const text = await draftRes.text()
-    throw new AppError('EMAIL_SEND_FAILED', `Failed to create message: ${text}`, 500)
+  // Threaded reply: locate the latest message in the conversation and
+  // create a reply draft off it so Outlook nests the message. Falls back
+  // to a fresh message if the conversation can't be found.
+  let draft: { id: string; conversationId?: string } | null = null
+  if (replyToConversationId) {
+    draft = await createMicrosoftReplyDraft(
+      accessToken,
+      authHeaders,
+      replyToConversationId,
+      htmlBody,
+    )
   }
-  const draft = (await draftRes.json()) as { id: string; conversationId?: string }
+
+  if (!draft) {
+    const draftRes = await fetch(`${MS_GRAPH}/me/messages`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        subject,
+        body: { contentType: 'HTML', content: htmlBody },
+        toRecipients: [{ emailAddress: { address: to } }],
+      }),
+    })
+    if (!draftRes.ok) {
+      const text = await draftRes.text()
+      throw new AppError('EMAIL_SEND_FAILED', `Failed to create message: ${text}`, 500)
+    }
+    draft = (await draftRes.json()) as { id: string; conversationId?: string }
+  }
 
   for (const att of attachments) {
     const bytes = Buffer.from(att.data as ArrayBuffer)
@@ -240,6 +257,55 @@ export async function deliverMicrosoftEmail(params: {
   }
 
   return { externalId: draft.id, threadId: draft.conversationId ?? draft.id }
+}
+
+/**
+ * Creates a reply draft threaded into an existing conversation. Finds the
+ * latest message in the conversation, calls Graph `createReply`, and sets
+ * our HTML content on the resulting draft. Returns null (so the caller
+ * falls back to a fresh message) if the conversation can't be located.
+ */
+async function createMicrosoftReplyDraft(
+  accessToken: string,
+  authHeaders: Record<string, string>,
+  conversationId: string,
+  htmlBody: string,
+): Promise<{ id: string; conversationId?: string } | null> {
+  try {
+    const filter = `conversationId eq '${conversationId.replace(/'/g, "''")}'`
+    const params = new URLSearchParams({
+      $filter: filter,
+      $top: '1',
+      $orderby: 'receivedDateTime desc',
+      $select: 'id,conversationId',
+    })
+    const listRes = await fetch(`${MS_GRAPH}/me/messages?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!listRes.ok) return null
+    const list = (await listRes.json()) as { value?: Array<{ id: string }> }
+    const latestId = list.value?.[0]?.id
+    if (!latestId) return null
+
+    const replyRes = await fetch(`${MS_GRAPH}/me/messages/${latestId}/createReply`, {
+      method: 'POST',
+      headers: authHeaders,
+    })
+    if (!replyRes.ok) return null
+    const draft = (await replyRes.json()) as { id: string; conversationId?: string }
+
+    // Replace the reply draft's body with our composed HTML.
+    const patchRes = await fetch(`${MS_GRAPH}/me/messages/${draft.id}`, {
+      method: 'PATCH',
+      headers: authHeaders,
+      body: JSON.stringify({ body: { contentType: 'HTML', content: htmlBody } }),
+    })
+    if (!patchRes.ok) return null
+
+    return draft
+  } catch {
+    return null
+  }
 }
 
 /**

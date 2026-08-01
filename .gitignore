@@ -20,6 +20,8 @@
 
 # misc
 .DS_Store
+Thumbs.db
+ehthumbs.db
 *.pem
 
 # debug
@@ -28,12 +30,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (keep .env.example committed)
+# env files — ignore every variant, keep .env.example committed.
+# (Previously only .env and *.local were ignored, so a stray
+# .env.production / .env.development would have been committed.)
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 
 # vercel
 .vercel

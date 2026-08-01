@@ -407,3 +407,48 @@ generator client {
 ### Type Safety
 
 The `tenantData()` helper (`src/server/db/types.ts`) provides type-safe Prisma create operations without `as any` casts. It bridges the gap between Prisma's types (which require organizationId) and the tenant middleware (which injects it automatically).
+
+
+---
+
+## Telephony & email providers (bring-your-own)
+
+### Routing
+
+The `(marketing)` route group serves the public landing at `/`; the
+authenticated app lives in `(dashboard)` under `/dashboard`. Middleware allows
+`/`, the `/auth/*` handlers, static assets, and the Twilio TwiML webhook to be
+reached without a session; everything else redirects to `/login`.
+
+### Calling (per-org, encrypted)
+
+- `Organization.voiceProvider` stores the org's selected provider.
+- `VoiceConfig` (one row per org) stores Twilio credentials — the **API Key
+  Secret** and **Auth Token** are AES-256-CBC encrypted (same
+  `EMAIL_ENCRYPTION_KEY` used for email tokens). Non-secret fields (Account SID,
+  API Key SID, TwiML App SID, Caller ID) are stored plain.
+- `/api/voice/token` mints a Twilio access token from the requesting org's own
+  credentials (never shared across tenants). `/api/voice/twiml` is the public
+  webhook Twilio calls; it verifies `X-Twilio-Signature` with the org's Auth
+  Token when present and dials from the org's caller ID (resolved via the
+  `OrgId` the browser dialer tags on the call).
+- Click-to-call and logged calls write CALL activities, so Rhythm, deal health,
+  and conversation intelligence pick them up like any other activity.
+
+### Email (provider-agnostic)
+
+- `EmailAccount.provider` distinguishes `gmail` vs `microsoft`; access/refresh
+  tokens are encrypted at rest for both.
+- The send pipeline (`sendEmail` / `sendTestEmail`) resolves the user's
+  connected mailbox and branches by provider — Gmail builds a raw MIME message;
+  Microsoft uses Microsoft Graph (draft → attach → send, threading via
+  `createReply`). `refreshTokenIfNeeded` refreshes against the correct provider.
+- The Inngest `email-sync` worker branches by provider (Gmail messages.list vs
+  Graph `/me/messages`); both dedupe by external id and link messages to leads.
+- Because cadence email steps call the same `sendEmail`, they work with either
+  provider with no cadence-specific code.
+
+### Secret encryption summary
+
+All provider secrets (Twilio API Key Secret + Auth Token; Gmail + Microsoft
+OAuth tokens) are encrypted with `EMAIL_ENCRYPTION_KEY` via `src/lib/encryption.ts`.

@@ -97,13 +97,15 @@ prisma/
 - **Multi-tenancy** — Complete data isolation between organizations via tenant middleware
 - **Custom Role Management** — Create, edit, and delete custom roles with granular permission toggles; 4 system roles (Owner, Admin, Manager, Member) with editable permissions
 - **Rich Text Email Editor** — Tiptap-powered editor with bold, italic, underline, font families, text colors, links, and file attachments
-- **Email Threading** — Cadence follow-up emails are sent as replies in the same Gmail thread (via `emailThreadId` on enrollments)
+- **Email Threading** — Cadence follow-up emails are sent as replies in the same conversation (Gmail thread, or Outlook conversation via Graph `createReply`), tracked by `emailThreadId` on enrollments
 - **Lead Management** — Full lifecycle with pipeline stages, soft-delete, and conversion to contacts
 - **Duplicate Detection & Merge** — Detect potential duplicates by email/company and merge leads (activities + contacts transferred)
 - **Cadence Engine** — Multi-step sales sequences with automated task/email creation and email threading
 - **Rhythm Engine** — Priority-scored daily actions based on deal value, urgency, and engagement
 - **Revenue Forecasting** — Pipeline metrics, AI predictions, and commit vs. actual tracking
-- **Email Integration** — Gmail OAuth with personalization tags, inbox sync, and rich HTML emails
+- **Email Integration** — Gmail **and Microsoft 365 / Outlook** (Microsoft Graph) with OAuth, personalization tags, inbox sync, threaded replies, and rich HTML emails. Encrypted tokens; cadence email steps work with either provider automatically
+- **Calling** — Bring-your-own **click-to-call**: free `tel:` dialer + call logging out of the box, and optional **in-browser calling via Twilio** (per-org credentials, encrypted at rest; TwiML webhook signature verification). A provider comparison (Twilio/Telnyx/SignalWire/Plivo/Bandwidth) with self-serve setup guides lives in Settings
+- **Marketing landing page** — public `/` landing (auth-aware CTAs); the authenticated app lives under `/dashboard`
 - **AI Features** — Email generation, account research, and chatbot (Gemini/OpenAI)
 - **CSV Import/Export** — Bulk lead import with duplicate detection and field mapping
 - **Full-text Search** — PostgreSQL tsvector across leads, contacts, and companies
@@ -137,12 +139,26 @@ All routes under `/api/admin/` require `admin:users` or `admin:settings` permiss
 | `/api/admin/score-decay/[id]` | PATCH, DELETE | Update/delete score decay config |
 | `/api/admin/ai-prompts` | GET, POST | List/create AI prompt templates |
 | `/api/admin/ai-prompts/[id]` | PATCH, DELETE | Update/delete AI prompt |
+| `/api/admin/voice-provider` | GET, PATCH | Get/set the org's preferred calling provider |
+| `/api/admin/voice-config` | GET, PUT, DELETE | Get (masked) / save / clear the org's encrypted Twilio credentials |
+
+### Other integration routes
+
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/voice/token` | GET | Mint a Twilio Voice access token from the org's own credentials (or `{ configured:false }`) |
+| `/api/voice/twiml` | POST | TwiML webhook Twilio calls to bridge browser→PSTN (signature-verified) |
+| `/api/email/callback` | GET | Gmail OAuth popup callback |
+| `/api/email/microsoft/callback` | GET | Microsoft/Outlook OAuth popup callback |
+| `/api/email/account` | GET, DELETE | Connected mailbox (`?provider=gmail\|microsoft`) |
+| `/api/email/sync` | POST | Trigger inbox sync for the connected mailbox |
 
 ## Documentation
 
 - [Setup Guide](docs/SETUP_GUIDE.md) — Full environment setup and deployment
 - [Architecture](docs/ARCHITECTURE.md) — System design, multi-tenancy, RBAC, data flow
 - [User Manual](docs/USER_MANUAL.md) — Feature walkthrough and user flows
+- [Integrations Guide](docs/INTEGRATIONS.md) — Calling (Twilio), email (Gmail + Microsoft/Outlook), and CRM migration setup + how they work
 
 ## Deployment
 

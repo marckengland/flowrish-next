@@ -480,3 +480,41 @@ You cannot leave if you're the last OWNER — transfer ownership first.
 > **Note:** Custom roles can have any combination of these permissions. The table above shows the defaults for system roles.
 
 > **Migration note:** The permissions `users:manage` and `settings:manage` have been renamed to `admin:users` and `admin:settings` respectively. If you see the old names in your database, run the migration SQL (see Setup Guide).
+
+
+---
+
+## Calling a lead
+
+Open any lead → the **Call** card (right rail). If the number is present, click
+**Call**:
+
+- **Default (free):** launches your device dialer / softphone via `tel:`.
+- **In-browser (if your org connected Twilio):** the call is placed inside
+  Flowrish with an **End call** button.
+
+Either way a timer runs; pick an **Outcome** (Connected, Left voicemail, No
+answer, …), adjust the auto-filled **Duration**, add **Notes**, and **End & log
+call** — it's saved to the lead's activity timeline.
+
+Admins connect a calling provider in **Settings → Calling & voice** (see the
+[Integrations Guide](INTEGRATIONS.md)).
+
+## Connecting email (Gmail or Outlook)
+
+**Settings → Email**:
+
+- **Gmail** — click *Connect Gmail* and authorize.
+- **Microsoft 365 / Outlook** — click *Connect Outlook* (once your admin has
+  registered the Azure app; otherwise setup instructions are shown).
+
+Once connected you can send from lead pages and cadences, and your inbox
+replies sync into the timeline. Sending, threading, and cadence steps work the
+same regardless of provider.
+
+## Migrating from another CRM
+
+Sidebar → **Import / Export** → the **Migrating from another CRM?** card. Choose
+Salesforce, HubSpot, Pipedrive, or Other for step-by-step export instructions
+and a column-mapping cheat sheet, then upload your CSV through the importer.
+Companies are auto-created, contacts linked, and duplicates skipped.
