@@ -39,12 +39,16 @@ export function RankedLeadList(): React.JSX.Element {
   })
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading ranked leads…</p>
+    return (
+      <p className="px-4 py-3 text-sm text-muted-foreground">
+        Loading ranked leads…
+      </p>
+    )
   }
 
   if (isError) {
     return (
-      <p role="alert" className="text-sm text-destructive">
+      <p role="alert" className="px-4 py-3 text-sm text-destructive">
         {error instanceof Error
           ? error.message
           : 'Failed to load ranked leads.'}
@@ -54,55 +58,49 @@ export function RankedLeadList(): React.JSX.Element {
 
   if (!leads || leads.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="px-4 py-3 text-sm text-muted-foreground">
         No open leads to rank yet.
       </p>
     )
   }
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-base font-semibold">Leads by score</h3>
-      <ul className="divide-y rounded-md border">
-        {leads.map((lead, index) => (
-          <li key={lead.id}>
-            <Link
-              href={`/leads/${lead.id}`}
-              className="flex items-center gap-3 p-3 transition-colors hover:bg-muted/40"
-            >
-              <span className="w-6 shrink-0 text-center text-xs font-medium text-muted-foreground tabular-nums">
-                {index + 1}
-              </span>
-              <ScoreBadge score={lead.score} size="md" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">
-                  {lead.firstName} {lead.lastName}
-                </p>
-                <div className="mt-0.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  {lead.stage ? <span>{lead.stage.name}</span> : null}
-                  {lead.dealValue !== null ? (
-                    <span className="flex items-center gap-1">
-                      <DollarSign className="size-3" aria-hidden="true" />
-                      {lead.dealValue.toLocaleString()}
-                      {lead.currency ? (
-                        <span className="text-[10px] uppercase">
-                          {lead.currency}
-                        </span>
-                      ) : null}
-                    </span>
-                  ) : null}
-                  {lead.assignedUser ? (
-                    <span className="flex items-center gap-1">
-                      <User className="size-3" aria-hidden="true" />
-                      {lead.assignedUser.name}
-                    </span>
-                  ) : null}
-                </div>
+    <ul className="divide-y divide-row-divider">
+      {leads.map((lead) => (
+        <li key={lead.id}>
+          <Link
+            href={`/leads/${lead.id}`}
+            className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/40"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium text-foreground">
+                {lead.firstName} {lead.lastName}
+              </p>
+              <div className="mt-0.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                {lead.stage ? <span>{lead.stage.name}</span> : null}
+                {lead.dealValue !== null ? (
+                  <span className="flex items-center gap-1">
+                    <DollarSign className="size-3" aria-hidden="true" />
+                    {lead.dealValue.toLocaleString()}
+                    {lead.currency ? (
+                      <span className="text-[10px] uppercase">
+                        {lead.currency}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
+                {lead.assignedUser ? (
+                  <span className="flex items-center gap-1">
+                    <User className="size-3" aria-hidden="true" />
+                    {lead.assignedUser.name}
+                  </span>
+                ) : null}
               </div>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </div>
+            </div>
+            <ScoreBadge score={lead.score} size="md" className="shrink-0" />
+          </Link>
+        </li>
+      ))}
+    </ul>
   )
 }

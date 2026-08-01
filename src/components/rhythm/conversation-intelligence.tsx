@@ -150,7 +150,7 @@ export function ConversationIntelligence({
 
   if (query.isError) {
     return (
-      <p role="alert" className="text-sm text-destructive">
+      <p role="alert" className="text-sm text-danger-foreground">
         {query.error instanceof Error
           ? query.error.message
           : 'Couldn’t load conversations.'}
@@ -211,7 +211,7 @@ function ConversationCard({
   const when = conversation.meetingDate ?? conversation.createdAt
 
   return (
-    <article className="flex flex-col gap-3 rounded-md border bg-card p-4">
+    <article className="flex flex-col gap-3 rounded-lg border bg-card p-4">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">
@@ -233,8 +233,8 @@ function ConversationCard({
       </header>
 
       {conversation.aiSummary ? (
-        <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
-          <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-primary">
+        <div className="rounded-lg border border-brand/20 bg-brand-subtle p-3">
+          <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-brand-emphasis">
             <Sparkles className="size-3" aria-hidden="true" />
             AI summary
           </p>
@@ -269,7 +269,7 @@ function ConversationCard({
                     className="flex items-start gap-1.5 text-xs"
                   >
                     <CheckSquare
-                      className="mt-0.5 size-3 text-primary"
+                      className="mt-0.5 size-3 text-brand-emphasis"
                       aria-hidden="true"
                     />
                     <span>{item}</span>
@@ -332,7 +332,7 @@ function ConversationCard({
             )}
           </Button>
           {error ? (
-            <p role="alert" className="text-xs text-destructive">
+            <p role="alert" className="text-xs text-danger-foreground">
               {error}
             </p>
           ) : null}

@@ -105,22 +105,20 @@ export function ScoreDecayConfig(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Timer className="size-5 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-lg font-semibold">Score Decay</h2>
-        </div>
+        <h2 className="text-sm font-semibold text-foreground">Score decay</h2>
         <Button
           variant="default"
           size="sm"
           onClick={() => setShowCreateForm(!showCreateForm)}
         >
           <Plus className="size-4" aria-hidden="true" />
-          <span>Add Config</span>
+          <span>Add config</span>
         </Button>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Configure how lead scores decrease when leads become inactive. The decay job runs daily at midnight UTC.
+        Automatically reduce a lead&apos;s score when it goes inactive, so stale
+        deals fall down the Rhythm queue. The decay job runs daily at midnight UTC.
       </p>
 
       {/* Create form */}
@@ -207,7 +205,7 @@ export function ScoreDecayConfig(): React.JSX.Element {
           <p className="text-sm text-muted-foreground">Loading decay configs...</p>
         </div>
       ) : !configs || configs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-md border bg-card py-12">
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border bg-card py-12">
           <Timer className="size-8 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm font-medium text-muted-foreground">No decay configurations</p>
           <p className="text-xs text-muted-foreground">
@@ -215,44 +213,51 @@ export function ScoreDecayConfig(): React.JSX.Element {
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {configs.map((config) => (
             <div
               key={config.id}
-              className={`flex items-center gap-3 rounded-md border p-3 ${
-                config.isActive ? 'bg-card' : 'bg-muted/30 opacity-60'
+              className={`flex max-w-[560px] flex-col gap-3 rounded-xl border bg-card p-5 ${
+                config.isActive ? '' : 'opacity-60'
               }`}
             >
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm">
-                    <span className="font-medium">{config.inactivityDays}</span>{' '}
-                    <span className="text-muted-foreground">days inactive</span>
-                  </span>
-                  <span className="text-muted-foreground">→</span>
-                  <span className="text-sm">
-                    <span className="font-medium">-{config.pointReduction}</span>{' '}
-                    <span className="text-muted-foreground">pts/cycle</span>
-                  </span>
-                  {!config.isActive && (
-                    <span className="text-xs text-muted-foreground">(disabled)</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex shrink-0 gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-foreground">
+                  Score decay
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={config.isActive}
                   onClick={() =>
                     toggleMutation.mutate({ configId: config.id, isActive: !config.isActive })
                   }
                   aria-label={config.isActive ? 'Disable config' : 'Enable config'}
+                  className={`relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors ${
+                    config.isActive ? 'bg-brand' : 'bg-muted-foreground/40'
+                  }`}
                 >
-                  <span className="text-xs">{config.isActive ? 'On' : 'Off'}</span>
-                </Button>
+                  <span
+                    className={`absolute top-0.5 size-[18px] rounded-full bg-white transition-all ${
+                      config.isActive ? 'right-0.5' : 'left-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5 text-[13.5px] text-foreground">
+                <span>Reduce score by</span>
+                <span className="tnum inline-flex h-8 items-center rounded-[10px] border bg-card px-2.5 font-mono text-[13px] font-semibold">
+                  {config.pointReduction}
+                </span>
+                <span>points per day after</span>
+                <span className="tnum inline-flex h-8 items-center rounded-[10px] border bg-card px-2.5 font-mono text-[13px] font-semibold">
+                  {config.inactivityDays}
+                </span>
+                <span>days of inactivity.</span>
                 <Button
                   variant="ghost"
                   size="icon-xs"
+                  className="ml-auto"
                   onClick={() => deleteMutation.mutate(config.id)}
                   aria-label="Delete config"
                 >

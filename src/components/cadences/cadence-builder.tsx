@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { reorderSteps } from '@/server/actions/cadences'
 import { StepEditor } from '@/components/cadences/step-editor'
@@ -65,29 +66,27 @@ const STEP_ICON_MAP: Record<StepActionType, {
   label: string
   badgeClass: string
 }> = {
+  // Per-step-type icon colors per the design handoff: Email = violet
+  // (AI accent), LinkedIn = blue, Call = indigo, Manual task = amber.
   EMAIL: {
     icon: Mail,
     label: 'Email',
-    badgeClass:
-      'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+    badgeClass: 'bg-ai-subtle text-ai',
   },
   CALL: {
     icon: Phone,
     label: 'Call',
-    badgeClass:
-      'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    badgeClass: 'bg-indigo-600/10 text-indigo-600 dark:text-indigo-400',
   },
   LINKEDIN: {
     icon: Handshake,
     label: 'LinkedIn',
-    badgeClass:
-      'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+    badgeClass: 'bg-blue-600/10 text-blue-600 dark:text-blue-400',
   },
   MANUAL_TASK: {
     icon: ClipboardList,
     label: 'Manual task',
-    badgeClass:
-      'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+    badgeClass: 'bg-warning-subtle text-warning-foreground',
   },
 }
 
@@ -203,10 +202,8 @@ export function CadenceBuilder({
         <div className="flex flex-col gap-4">
           {dayGroups.map((group) => (
             <div key={group.day} className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Day {group.day}
-                </span>
+              <div className="flex items-center gap-2.5">
+                <span className="eyebrow font-semibold">Day {group.day}</span>
                 <div className="h-px flex-1 bg-border" aria-hidden="true" />
               </div>
               <ol className="flex flex-col gap-2">
@@ -226,6 +223,7 @@ export function CadenceBuilder({
                       }
                       reorderDisabled={readOnly || isReordering}
                       selectable={!readOnly}
+                      isEditing={editingStep?.id === step.id}
                     />
                   )
                 })}
@@ -279,6 +277,7 @@ interface StepRowProps {
   onSelect: () => void
   reorderDisabled: boolean
   selectable: boolean
+  isEditing: boolean
 }
 
 function StepRow({
@@ -290,6 +289,7 @@ function StepRow({
   onSelect,
   reorderDisabled,
   selectable,
+  isEditing,
 }: StepRowProps): React.JSX.Element {
   const meta = STEP_ICON_MAP[step.actionType]
   const Icon = meta.icon
@@ -301,44 +301,43 @@ function StepRow({
         disabled={!selectable}
         aria-label={`Edit step ${step.stepOrder}`}
         className={cn(
-          'group flex flex-1 items-start gap-3 rounded-md border bg-card p-3 text-left transition-colors',
+          'group flex flex-1 flex-col gap-2 rounded-lg border bg-card p-3.5 text-left transition-colors',
+          isEditing
+            ? 'border-brand shadow-[0_6px_18px_-10px_var(--brand)]'
+            : 'border-border',
           selectable
-            ? 'cursor-pointer hover:border-foreground/30 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+            ? 'cursor-pointer hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand'
             : 'cursor-default',
         )}
       >
-        <span
-          aria-hidden="true"
-          className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground"
-        >
-          {step.stepOrder}
-        </span>
-        <span className="flex-1 min-w-0">
-          <span className="flex items-center gap-2">
-            <span
-              className={cn(
-                'inline-flex size-7 shrink-0 items-center justify-center rounded-md',
-                meta.badgeClass,
-              )}
-            >
-              <Icon className="size-3.5" aria-hidden="true" />
-            </span>
-            <span className="text-sm font-medium">{meta.label}</span>
-            <span className="text-xs font-normal text-muted-foreground">
-              · {describeDelay(step.delayHours)}
-            </span>
-          </span>
-          {renderStepDetails(step)}
-        </span>
-        {selectable ? (
+        <span className="flex items-center gap-2.5">
           <span
-            className="ml-2 inline-flex shrink-0 items-center gap-1 self-start rounded-md border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors group-hover:border-foreground/30 group-hover:text-foreground"
-            aria-hidden="true"
+            className={cn(
+              'inline-flex size-7 shrink-0 items-center justify-center rounded-md',
+              meta.badgeClass,
+            )}
           >
-            <Pencil className="size-3" />
-            Edit
+            <Icon className="size-3.5" aria-hidden="true" />
           </span>
-        ) : null}
+          <span className="text-sm font-semibold">{meta.label}</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            · {describeDelay(step.delayHours)}
+          </span>
+          {isEditing ? (
+            <Badge variant="brand" size="sm" className="ml-auto">
+              Editing
+            </Badge>
+          ) : selectable ? (
+            <span
+              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors group-hover:border-foreground/30 group-hover:text-foreground"
+              aria-hidden="true"
+            >
+              <Pencil className="size-3" />
+              Edit
+            </span>
+          ) : null}
+        </span>
+        {renderStepDetails(step)}
       </button>
       <div className="flex shrink-0 flex-col gap-1">
         <Button
@@ -369,7 +368,7 @@ function StepRow({
 function renderStepDetails(step: CadenceStep): React.JSX.Element | null {
   if (step.actionType === 'EMAIL') {
     return (
-      <span className="mt-1 block text-sm">
+      <span className="ml-[38px] block text-sm">
         {step.emailSubject ? (
           <span className="block font-medium text-foreground">
             {step.emailSubject}
@@ -377,7 +376,7 @@ function renderStepDetails(step: CadenceStep): React.JSX.Element | null {
         ) : null}
         {step.emailBody ? (
           <span
-            className="line-clamp-2 block text-muted-foreground"
+            className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground"
             // Strip tags for the preview to avoid `<p>`s collapsing height.
             dangerouslySetInnerHTML={{ __html: bodyPreview(step.emailBody) }}
           />
@@ -387,19 +386,21 @@ function renderStepDetails(step: CadenceStep): React.JSX.Element | null {
           </span>
         )}
         {step.startNewThread ? (
-          <span
-            className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+          <Badge
+            variant="warning"
+            size="sm"
+            className="mt-1.5 font-mono uppercase tracking-wide"
             title="This step starts a new Gmail thread instead of replying on the cadence's existing conversation."
           >
             New thread
-          </span>
+          </Badge>
         ) : null}
       </span>
     )
   }
   if (step.taskTitle) {
     return (
-      <span className="mt-1 block text-sm text-muted-foreground">
+      <span className="ml-[38px] block text-sm text-muted-foreground">
         {step.taskTitle}
       </span>
     )

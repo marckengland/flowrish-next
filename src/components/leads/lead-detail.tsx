@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { Pencil, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { ScoreBadge } from '@/components/scoring/score-badge'
 import { LeadForm, type LeadFormStage, type LeadFormValues } from '@/components/leads/lead-form'
 
 export interface LeadDetailProps {
@@ -52,7 +54,7 @@ export function LeadDetail({
     return (
       <section
         aria-label="Edit lead"
-        className="flex flex-col gap-3 rounded-md border bg-card p-4"
+        className="flex flex-col gap-4 rounded-lg border bg-card p-[18px]"
       >
         <header className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Edit lead</h2>
@@ -79,17 +81,35 @@ export function LeadDetail({
   return (
     <section
       aria-label="Lead details"
-      className="flex flex-col gap-3 rounded-md border bg-card p-4"
+      className="flex flex-col gap-4 rounded-lg border bg-card p-[18px]"
     >
-      <header className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold leading-tight">
-            {fullName(lead)}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {lead.title ? `${lead.title} · ` : ''}
-            {lead.companyName ?? 'No company'}
-          </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <span
+            aria-hidden="true"
+            className="flex size-13 shrink-0 items-center justify-center rounded-[14px] bg-foreground text-lg font-semibold text-background"
+          >
+            {initials(lead)}
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em]">
+                {fullName(lead)}
+              </h2>
+              {lead.score != null ? (
+                <ScoreBadge score={lead.score} size="md" />
+              ) : null}
+              {lead.stage?.name ? (
+                <Badge variant="neutral" size="md">
+                  {lead.stage.name}
+                </Badge>
+              ) : null}
+            </div>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {lead.title ? `${lead.title} · ` : ''}
+              {lead.companyName ?? 'No company'}
+            </p>
+          </div>
         </div>
         {canEdit ? (
           <Button
@@ -104,7 +124,7 @@ export function LeadDetail({
         ) : null}
       </header>
 
-      <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+      <dl className="grid grid-cols-1 gap-x-[18px] gap-y-4 text-sm sm:grid-cols-2">
         <Field label="Email" value={lead.email} />
         <Field label="Phone" value={lead.phone} />
         <Field label="Stage" value={lead.stage?.name} />
@@ -113,6 +133,7 @@ export function LeadDetail({
         <Field
           label="Deal value"
           value={formatCurrency(lead.dealValue, lead.currency ?? 'USD')}
+          numeric
         />
         <Field label="Lead score" value={lead.score != null ? String(lead.score) : null} />
         <Field
@@ -133,7 +154,7 @@ export function LeadDetail({
                 href={lead.linkedinUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-primary underline underline-offset-2"
+                className="text-brand-emphasis underline underline-offset-2"
               >
                 {lead.linkedinUrl}
               </a>
@@ -143,11 +164,9 @@ export function LeadDetail({
       </dl>
 
       {lead.description ? (
-        <div>
-          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Description
-          </h3>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+        <div className="border-t pt-3.5">
+          <h3 className="eyebrow mb-1.5">Description</h3>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/80">
             {lead.description}
           </p>
         </div>
@@ -159,16 +178,22 @@ export function LeadDetail({
 function Field({
   label,
   value,
+  numeric = false,
 }: {
   label: string
   value: React.ReactNode | string | null | undefined
+  numeric?: boolean
 }): React.JSX.Element {
   return (
-    <div className="flex flex-col">
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="text-sm text-foreground">
+    <div className="flex flex-col gap-1">
+      <dt className="eyebrow">{label}</dt>
+      <dd
+        className={
+          numeric
+            ? 'tnum text-sm font-semibold text-foreground'
+            : 'text-sm text-foreground'
+        }
+      >
         {value === null || value === undefined || value === '' ? (
           <span className="text-muted-foreground">—</span>
         ) : (
@@ -177,6 +202,16 @@ function Field({
       </dd>
     </div>
   )
+}
+
+function initials(lead: {
+  firstName?: string | null
+  lastName?: string | null
+}): string {
+  const first = lead.firstName?.trim()?.[0] ?? ''
+  const last = lead.lastName?.trim()?.[0] ?? ''
+  const combined = `${first}${last}`.toUpperCase()
+  return combined || '—'
 }
 
 function fullName(lead: { firstName?: string | null; lastName?: string | null }): string {

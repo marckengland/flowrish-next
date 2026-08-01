@@ -22,7 +22,7 @@ export function ChatbotToggle(): React.JSX.Element | null {
       onClick={() => setOpen(true)}
       title="Open Flowrish Assistant"
       aria-label="Open Flowrish Assistant"
-      className="fixed bottom-6 right-6 z-40 flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:scale-105 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="fixed bottom-6 right-6 z-40 flex size-12 items-center justify-center rounded-full bg-brand text-brand-foreground shadow-lg transition-all hover:scale-105 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <MessagesSquare className="size-5" aria-hidden="true" />
     </button>

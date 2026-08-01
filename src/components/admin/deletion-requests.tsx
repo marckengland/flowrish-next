@@ -86,10 +86,9 @@ export function DeletionRequests(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Trash2 className="size-5 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-lg font-semibold">Deletion Requests</h2>
-        </div>
+        <h2 className="text-sm font-semibold text-foreground">
+          Deletion requests
+        </h2>
         <div className="flex gap-1">
           {(['pending', 'approved', 'rejected', 'all'] as const).map((status) => (
             <Button
@@ -110,7 +109,7 @@ export function DeletionRequests(): React.JSX.Element {
           <p className="text-sm text-muted-foreground">Loading requests...</p>
         </div>
       ) : !requests || requests.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-md border bg-card py-12">
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border bg-card py-12">
           <Trash2 className="size-8 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm font-medium text-muted-foreground">
             No {statusFilter === 'all' ? '' : statusFilter} deletion requests
@@ -122,24 +121,52 @@ export function DeletionRequests(): React.JSX.Element {
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {requests.map((request) => (
-            <div
-              key={request.id}
-              className="flex flex-col gap-2 rounded-md border bg-card p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-2.5">
+          {requests.map((request) => {
+            const isPending = request.status === 'pending'
+            return (
+              <div
+                key={request.id}
+                className={`flex items-center gap-3.5 rounded-[11px] border p-4 ${
+                  isPending
+                    ? 'border-warning/50 bg-warning-subtle'
+                    : 'border-border bg-card'
+                }`}
+              >
+                <Trash2
+                  className={`size-[17px] shrink-0 ${
+                    isPending ? 'text-warning-foreground' : 'text-muted-foreground'
+                  }`}
+                  aria-hidden="true"
+                />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+                    <span className="text-[13.5px] font-semibold text-foreground">
+                      {request.entityName}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
                       {request.entityType}
                     </span>
-                    <span className="text-sm font-medium">{request.entityName}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Requested by {request.requestedBy.name} ({request.requestedBy.email})
+                    Requested by {request.requestedBy.name}
                     {' · '}
                     {new Date(request.createdAt).toLocaleString()}
+                    {request.status !== 'pending' && (
+                      <>
+                        {' · '}
+                        <span
+                          className={
+                            request.status === 'approved'
+                              ? 'text-brand-emphasis'
+                              : 'text-danger-foreground'
+                          }
+                        >
+                          {request.status.charAt(0).toUpperCase() +
+                            request.status.slice(1)}
+                        </span>
+                      </>
+                    )}
                   </p>
                   {request.reason && (
                     <p className="text-xs text-muted-foreground">
@@ -148,11 +175,11 @@ export function DeletionRequests(): React.JSX.Element {
                   )}
                 </div>
 
-                {request.status === 'pending' && (
-                  <div className="flex shrink-0 gap-1">
+                {isPending && (
+                  <div className="flex shrink-0 gap-2">
                     <Button
-                      variant="default"
-                      size="xs"
+                      variant="destructive"
+                      size="sm"
                       onClick={() => approveMutation.mutate(request.id)}
                       disabled={approveMutation.isPending}
                       aria-label={`Approve deletion of ${request.entityName}`}
@@ -161,32 +188,20 @@ export function DeletionRequests(): React.JSX.Element {
                       <span>Approve</span>
                     </Button>
                     <Button
-                      variant="destructive"
-                      size="xs"
+                      variant="outline"
+                      size="sm"
                       onClick={() => rejectMutation.mutate(request.id)}
                       disabled={rejectMutation.isPending}
-                      aria-label={`Reject deletion of ${request.entityName}`}
+                      aria-label={`Deny deletion of ${request.entityName}`}
                     >
                       <X className="size-3.5" aria-hidden="true" />
-                      <span>Reject</span>
+                      <span>Deny</span>
                     </Button>
                   </div>
                 )}
-
-                {request.status !== 'pending' && (
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                      request.status === 'approved'
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                        : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                    }`}
-                  >
-                    {request.status}
-                  </span>
-                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

@@ -1,8 +1,9 @@
 import Link from 'next/link'
-import { AlertTriangle, Clock } from 'lucide-react'
 
-import { EmptyState, MetricCard } from '@/components/dashboard/metric-card'
-import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmptyState } from '@/components/dashboard/metric-card'
+import { ScoreCircle } from '@/components/scoring/score-badge'
 
 /**
  * Row shape for a pending action shown in the priority list.
@@ -33,154 +34,118 @@ export interface PriorityListProps {
   actions: readonly PriorityActionRow[]
 }
 
+// Deal value at or above this threshold earns a "HIGH VALUE" signal chip.
+const HIGH_VALUE_THRESHOLD = 100_000
+
 /**
- * Rhythm priority list — the primary surface of the rhythm dashboard.
+ * Rhythm priority queue — the primary surface of the rhythm dashboard.
  *
- * Shows every pending action assigned to the current user, ranked by
- * priority score with headline counts at the top. Each row exposes the
- * score, the due context, a deep link to the parent lead, and any
- * additional signal data (deal value, lead score) used to compute the
- * priority.
+ * A single card of divided rows ranked by priority score. Each row shows
+ * a band-colored score circle, the action title, a muted
+ * "lead · value" subline, and signal chips (overdue, due today, high
+ * priority, high value) that explain why the action is ranked where it
+ * is. Each row deep-links to the parent lead.
  *
  * Validates: Requirements 9.1, 9.2
  */
 export function PriorityList({ actions }: PriorityListProps): React.JSX.Element {
-  const now = new Date()
-  const overdueCount = actions.filter((a) => a.isOverdue).length
-  const dueTodayCount = actions.filter((a) => isSameDay(a.dueDate, now)).length
-  const highPriorityCount = actions.filter((a) => a.priorityScore >= 70).length
-
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <MetricCard
-          label="Open actions"
-          value={actions.length}
-          hint="Everything pending for you"
+    <Card className="overflow-hidden">
+      <CardHeader>
+        <CardTitle>Priority queue</CardTitle>
+        <span className="eyebrow tnum">{actions.length} open</span>
+      </CardHeader>
+      {actions.length === 0 ? (
+        <EmptyState
+          title="Nothing to do right now"
+          description="New actions will be ranked and surfaced here automatically."
+          className="m-[18px] border-0"
         />
-        <MetricCard
-          label="Due today"
-          value={dueTodayCount}
-          icon={<Clock className="size-4" aria-hidden="true" />}
-        />
-        <MetricCard
-          label="Overdue"
-          value={overdueCount}
-          icon={<AlertTriangle className="size-4" aria-hidden="true" />}
-          hint={
-            overdueCount > 0
-              ? `${highPriorityCount} high-priority`
-              : 'You are caught up'
-          }
-        />
-      </div>
-
-      <section
-        aria-labelledby="priority-list-heading"
-        className="rounded-md border bg-card"
-      >
-        <header className="flex items-center justify-between gap-2 border-b px-4 py-3">
-          <h2
-            id="priority-list-heading"
-            className="text-sm font-semibold text-foreground"
-          >
-            Prioritized actions
-          </h2>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {actions.length} total
-          </span>
-        </header>
-        {actions.length === 0 ? (
-          <EmptyState
-            title="Nothing to do right now"
-            description="New actions will be ranked and surfaced here automatically."
-            className="m-4"
-          />
-        ) : (
-          <ul className="divide-y">
-            {actions.map((action) => (
-              <li
-                key={action.id}
-                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4"
-              >
-                <PriorityBadge score={action.priorityScore} />
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-medium text-foreground">
-                    {action.title}
-                  </span>
-                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+      ) : (
+        <ul aria-label="Prioritized actions" className="divide-y divide-row-divider">
+          {actions.map((action) => (
+            <li key={action.id} className="relative transition-colors hover:bg-background">
+              <div className="flex items-start gap-[13px] px-[18px] py-3.5">
+                <ScoreCircle score={action.priorityScore} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13.5px] font-semibold text-foreground">
                     <Link
                       href={`/leads/${action.leadId}`}
-                      className="truncate hover:underline"
+                      className="before:absolute before:inset-0 before:content-[''] focus-visible:underline focus-visible:outline-none"
                     >
-                      {action.leadName}
+                      {action.title}
                     </Link>
-                    <span aria-hidden="true">·</span>
-                    <span className={action.isOverdue ? 'text-destructive' : ''}>
-                      {action.isOverdue ? 'Overdue' : 'Due'}{' '}
-                      {formatDueDate(action.dueDate)}
-                    </span>
-                    {action.priority === 'HIGH' ? (
+                  </div>
+                  <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                    <span className="truncate">{action.leadName}</span>
+                    {action.dealValue != null ? (
                       <>
                         <span aria-hidden="true">·</span>
-                        <span className="font-medium text-destructive">
-                          High priority
+                        <span className="tnum">
+                          {formatCurrency(action.dealValue, action.currency)}
                         </span>
                       </>
                     ) : null}
-                  </span>
+                  </p>
+                  <GapChips action={action} />
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground tabular-nums">
-                  {action.dealValue != null ? (
-                    <span
-                      className="rounded-full bg-muted px-2 py-0.5"
-                      title="Deal value"
-                    >
-                      {formatCurrency(action.dealValue, action.currency)}
-                    </span>
-                  ) : null}
-                  {action.leadScore != null ? (
-                    <span
-                      className="rounded-full bg-muted px-2 py-0.5"
-                      title="Lead score"
-                    >
-                      Score {action.leadScore}
-                    </span>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
-  )
-}
-
-function PriorityBadge({ score }: { score: number }): React.JSX.Element {
-  return (
-    <span
-      aria-label={`Priority score ${score}`}
-      className={cn(
-        'inline-flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums',
-        score >= 70
-          ? 'bg-destructive/10 text-destructive'
-          : score >= 40
-            ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
-            : 'bg-muted text-muted-foreground',
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
-    >
-      {score}
-    </span>
+    </Card>
   )
 }
 
-function formatDueDate(input: Date | string): string {
+/**
+ * Signal chips that surface why an action sits where it does in the
+ * queue. Rectangular mono badges matching the redesign's gap-chip style.
+ */
+function GapChips({ action }: { action: PriorityActionRow }): React.JSX.Element | null {
+  const chips: React.ReactNode[] = []
+
+  if (action.isOverdue) {
+    const days = daysOverdue(action.dueDate)
+    chips.push(
+      <Badge key="overdue" variant="danger" size="sm" className="rounded-[5px] font-mono">
+        {days > 0 ? `OVERDUE ${days}D` : 'OVERDUE'}
+      </Badge>,
+    )
+  } else if (isSameDay(action.dueDate, new Date())) {
+    chips.push(
+      <Badge key="due-today" variant="warning" size="sm" className="rounded-[5px] font-mono">
+        DUE TODAY
+      </Badge>,
+    )
+  }
+
+  if (action.priority === 'HIGH') {
+    chips.push(
+      <Badge key="high-priority" variant="neutral" size="sm" className="rounded-[5px] font-mono">
+        HIGH PRIORITY
+      </Badge>,
+    )
+  }
+
+  if (action.dealValue != null && action.dealValue >= HIGH_VALUE_THRESHOLD) {
+    chips.push(
+      <Badge key="high-value" variant="neutral" size="sm" className="rounded-[5px] font-mono">
+        HIGH VALUE
+      </Badge>,
+    )
+  }
+
+  if (chips.length === 0) return null
+
+  return <div className="mt-2 flex flex-wrap gap-1.5">{chips}</div>
+}
+
+function daysOverdue(input: Date | string): number {
   const d = input instanceof Date ? input : new Date(input)
-  return d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  })
+  if (Number.isNaN(d.getTime())) return 0
+  const diffMs = Date.now() - d.getTime()
+  return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
 }
 
 function formatCurrency(value: number, currency: string): string {
@@ -198,6 +163,7 @@ function formatCurrency(value: number, currency: string): string {
 
 function isSameDay(input: Date | string, reference: Date): boolean {
   const d = input instanceof Date ? input : new Date(input)
+  if (Number.isNaN(d.getTime())) return false
   return (
     d.getFullYear() === reference.getFullYear() &&
     d.getMonth() === reference.getMonth() &&

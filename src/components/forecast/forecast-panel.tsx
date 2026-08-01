@@ -56,6 +56,7 @@ export function ForecastPanel({
         label="AI predicted"
         value={formatCurrency(aiPredicted)}
         hint="70% weighted + 30% monthly run rate"
+        tone="brand"
       />
       {showWinRate ? (
         <MetricCard

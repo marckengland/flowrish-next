@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
 import { TaskForm } from '@/components/tasks/task-form'
 import type {
   TaskFormAssigneeOption,
@@ -38,7 +39,7 @@ export default async function TasksPage(): Promise<React.JSX.Element> {
 
   if (!hasPermission(session.dbUser, 'leads:read')) {
     return (
-      <div className="flex flex-col items-start gap-2 rounded-md border bg-card p-6">
+      <div className="flex flex-col items-start gap-2 rounded-lg border bg-card p-6">
         <h1 className="text-lg font-semibold">Tasks</h1>
         <p className="text-sm text-muted-foreground">
           You don&apos;t have permission to view tasks in this organization.
@@ -111,15 +112,10 @@ export default async function TasksPage(): Promise<React.JSX.Element> {
 
   return (
     <div className="flex flex-col gap-5">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
-          <p className="text-sm text-muted-foreground">
-            Track follow-ups and outreach. Tasks are sorted by due date with
-            overdue items surfaced at the top.
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        title="Tasks"
+        description="Your action queue, ranked by the Rhythm engine"
+      />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <section aria-label="Task list" className="flex flex-col gap-3">
@@ -133,10 +129,10 @@ export default async function TasksPage(): Promise<React.JSX.Element> {
         {canWrite ? (
           <aside
             aria-label="Create task"
-            className="flex h-fit flex-col gap-3 rounded-md border bg-card p-4"
+            className="flex h-fit flex-col gap-4 rounded-lg border bg-card p-[18px]"
           >
             <header className="flex items-center gap-2">
-              <Plus className="size-4" aria-hidden="true" />
+              <Plus className="size-4 text-brand-emphasis" aria-hidden="true" />
               <h2 className="text-sm font-semibold">New task</h2>
             </header>
             {leadOptions.length === 0 ? (
@@ -154,7 +150,7 @@ export default async function TasksPage(): Promise<React.JSX.Element> {
         ) : (
           <aside
             aria-label="Create task"
-            className="flex h-fit flex-col gap-3 rounded-md border bg-card p-4"
+            className="flex h-fit flex-col gap-4 rounded-lg border bg-card p-[18px]"
           >
             <header className="flex items-center gap-2">
               <h2 className="text-sm font-semibold">New task</h2>

@@ -93,7 +93,7 @@ export function LeadTabs({
   const [active, setActive] = useState<TabKey>('activities')
 
   return (
-    <div className="rounded-md border bg-card">
+    <div className="rounded-lg border bg-card">
       <div role="tablist" aria-label="Lead detail" className="flex border-b">
         {TABS.map((tab) => {
           const Icon = tab.icon
@@ -416,9 +416,9 @@ interface LeadTask {
 }
 
 const PRIORITY_TONE: Record<LeadTask['priority'], string> = {
-  HIGH: 'text-red-600 dark:text-red-400',
-  MEDIUM: 'text-amber-600 dark:text-amber-400',
-  LOW: 'text-emerald-600 dark:text-emerald-400',
+  HIGH: 'text-danger-foreground',
+  MEDIUM: 'text-warning-foreground',
+  LOW: 'text-brand-emphasis',
 }
 
 function TasksTab({
@@ -501,8 +501,8 @@ function TasksTab({
                 className={cn(
                   'flex size-5 shrink-0 items-center justify-center rounded border transition-colors',
                   task.isComplete
-                    ? 'border-emerald-500 bg-emerald-500 text-white'
-                    : 'border-muted-foreground/30 hover:border-primary disabled:opacity-50',
+                    ? 'border-brand bg-brand text-brand-foreground'
+                    : 'border-muted-foreground/30 hover:border-brand disabled:opacity-50',
                 )}
                 title={
                   task.isComplete
@@ -529,9 +529,7 @@ function TasksTab({
                   </span>
                   <span
                     className={cn(
-                      isOverdue
-                        ? 'font-medium text-red-600 dark:text-red-400'
-                        : null,
+                      isOverdue ? 'font-medium text-danger-foreground' : null,
                     )}
                   >
                     Due {new Date(task.dueDate).toLocaleDateString()}

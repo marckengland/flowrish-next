@@ -3,6 +3,7 @@ import { hasPermission } from '@/server/auth/permissions'
 import { getFieldMappings } from '@/server/services/csv-import'
 import { ImportWizard } from '@/components/csv/import-wizard'
 import { ExportButton } from '@/components/csv/export-button'
+import { PageHeader } from '@/components/layout/page-header'
 
 /**
  * CSV Import/Export page — Server Component.
@@ -48,26 +49,16 @@ export default async function CSVPage(): Promise<React.JSX.Element> {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            CSV Import &amp; Export
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Bulk import leads from CSV files or export your current pipeline
-            data.
-          </p>
-        </div>
-        {canRead && <ExportButton />}
-      </header>
+    <div className="flex max-w-[820px] flex-col gap-[22px]">
+      <PageHeader
+        title="Import / Export"
+        description="Bulk-import leads from CSV with column mapping & duplicate detection"
+        actions={canRead ? <ExportButton /> : undefined}
+      />
 
       {canWrite && (
         <section aria-labelledby="import-heading">
-          <h2
-            id="import-heading"
-            className="mb-3 text-lg font-medium tracking-tight"
-          >
+          <h2 id="import-heading" className="sr-only">
             Import leads
           </h2>
           <ImportWizard savedMappings={savedMappings} />
@@ -75,7 +66,7 @@ export default async function CSVPage(): Promise<React.JSX.Element> {
       )}
 
       {!canWrite && canRead && (
-        <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
+        <div className="rounded-lg border bg-brand-subtle/40 p-4 text-sm text-muted-foreground">
           You have read-only access. Contact an admin to get import permissions.
         </div>
       )}

@@ -184,10 +184,10 @@ export function SearchResults({
       aria-label={`Search results for "${query}"`}
       className={cn('flex flex-col gap-1', className)}
     >
-      <p className="mb-2 text-sm text-muted-foreground">
-        {results.length} {results.length === 1 ? 'result' : 'results'} found
+      <p className="eyebrow tnum mb-3 text-muted-foreground">
+        {results.length} {results.length === 1 ? 'result' : 'results'}
       </p>
-      <ul className="flex flex-col gap-1.5" role="list">
+      <ul className="flex flex-col gap-[9px]" role="list">
         {results.map((result) => (
           <li key={`${result.entityType}-${result.id}`}>
             <SearchResultCard result={result} />
@@ -214,13 +214,13 @@ function SearchResultCard({
     <Link
       href={href}
       className={cn(
-        'flex items-center gap-3 rounded-md border bg-card px-4 py-3 transition-colors',
-        'hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none',
+        'flex items-center gap-3.5 rounded-[11px] border bg-card px-4 py-[13px] transition-colors',
+        'hover:bg-muted/50 focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15 focus-visible:outline-none',
       )}
     >
       <span
         className={cn(
-          'flex size-8 shrink-0 items-center justify-center rounded-md',
+          'flex size-[34px] shrink-0 items-center justify-center rounded-[9px]',
           getEntityBgColor(result.entityType),
         )}
         aria-hidden="true"
@@ -228,13 +228,14 @@ function SearchResultCard({
         <Icon className="size-4" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">
+        <p className="truncate text-[13.5px] font-semibold text-foreground">
           {result.name}
         </p>
-        <p className="text-xs text-muted-foreground">{typeLabel}</p>
+        <p className="text-[11.5px] text-muted-foreground">{typeLabel}</p>
       </div>
       <span
-        className="shrink-0 text-xs text-muted-foreground"
+        className="shrink-0 text-[11px] tnum text-muted-foreground"
+        style={{ fontFamily: 'var(--font-mono)' }}
         title={`Relevance score: ${result.matchScore.toFixed(2)}`}
       >
         {formatScore(result.matchScore)}
@@ -291,11 +292,11 @@ function getEntityLabel(entityType: SearchEntityType): string {
 function getEntityBgColor(entityType: SearchEntityType): string {
   switch (entityType) {
     case 'Lead':
-      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+      return 'bg-blue-500/12 text-blue-600 dark:text-blue-400'
     case 'Contact':
-      return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+      return 'bg-brand-subtle text-brand-emphasis'
     case 'Company':
-      return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+      return 'bg-ai-subtle text-ai'
   }
 }
 

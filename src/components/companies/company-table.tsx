@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Trash2 } from 'lucide-react'
+import { Loader2, Search, Trash2 } from 'lucide-react'
 
 import { useCompaniesQuery, useDeleteCompanyMutation, type CompanyListItem } from '@/hooks/use-companies'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 
 export interface CompanyTableProps {
@@ -57,17 +58,23 @@ export function CompanyTable({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {/* Search input */}
       <div className="flex items-center gap-3">
-        <Input
-          type="search"
-          value={currentSearch}
-          onChange={(e) => setCurrentSearch(e.target.value)}
-          placeholder="Search companies…"
-          aria-label="Search companies"
-          className="max-w-sm"
-        />
+        <div className="relative w-full max-w-[320px]">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-[15px] -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            value={currentSearch}
+            onChange={(e) => setCurrentSearch(e.target.value)}
+            placeholder="Search companies…"
+            aria-label="Search companies"
+            className="pl-9"
+          />
+        </div>
         {query.isFetching && (
           <div role="status" aria-live="polite" className="flex items-center gap-1 text-xs text-muted-foreground">
             <Loader2 className="size-3 animate-spin" aria-hidden="true" />
@@ -76,88 +83,90 @@ export function CompanyTable({
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-md border bg-card">
-        <table className="w-full min-w-[600px] text-sm">
-          <thead className="bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th scope="col" className="px-3 py-2 font-medium">Name</th>
-              <th scope="col" className="px-3 py-2 font-medium">Industry</th>
-              <th scope="col" className="px-3 py-2 font-medium">Website</th>
-              <th scope="col" className="px-3 py-2 text-right font-medium">Contacts</th>
-              <th scope="col" className="px-3 py-2 text-right font-medium">Leads</th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {query.isError ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-sm text-destructive" role="alert">
-                  Couldn&apos;t load companies.{' '}
-                  {query.error instanceof Error ? query.error.message : ''}
-                </td>
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px] text-[13.5px]">
+            <thead>
+              <tr className="border-b bg-background text-left">
+                <th scope="col" className="eyebrow px-4 py-[11px]">Name</th>
+                <th scope="col" className="eyebrow px-4 py-[11px]">Industry</th>
+                <th scope="col" className="eyebrow px-4 py-[11px]">Website</th>
+                <th scope="col" className="eyebrow px-4 py-[11px] text-right">Contacts</th>
+                <th scope="col" className="eyebrow px-4 py-[11px] text-right">Leads</th>
+                <th scope="col" className="px-4 py-[11px]">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-sm text-muted-foreground">
-                  {currentSearch ? 'No companies match your search.' : 'No companies yet.'}
-                </td>
-              </tr>
-            ) : (
-              rows.map((company) => (
-                <tr
-                  key={company.id}
-                  className="relative cursor-pointer border-t transition-colors hover:bg-muted/30 focus-within:bg-muted/30"
-                >
-                  <td className="px-3 py-2 font-medium text-foreground">
-                    <Link
-                      href={`/companies/${company.id}`}
-                      className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
-                    >
-                      {company.name}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {company.industry ?? '—'}
-                  </td>
-                  <td className="relative z-10 px-3 py-2 text-muted-foreground">
-                    {company.website ? (
-                      <a
-                        href={company.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        {safeHostname(company.website)}
-                      </a>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                    {company._count.contacts}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                    {company._count.leads}
-                  </td>
-                  <td className="relative z-10 px-3 py-2 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(company.id, company.name)}
-                      disabled={deleteMutation.isPending}
-                      aria-label={`Delete ${company.name}`}
-                    >
-                      <Trash2 className="size-4 text-muted-foreground" aria-hidden="true" />
-                    </Button>
+            </thead>
+            <tbody className="divide-y divide-row-divider">
+              {query.isError ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-destructive" role="alert">
+                    Couldn&apos;t load companies.{' '}
+                    {query.error instanceof Error ? query.error.message : ''}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    {currentSearch ? 'No companies match your search.' : 'No companies yet.'}
+                  </td>
+                </tr>
+              ) : (
+                rows.map((company) => (
+                  <tr
+                    key={company.id}
+                    className="relative cursor-pointer transition-colors hover:bg-background focus-within:bg-background"
+                  >
+                    <td className="px-4 py-3 font-semibold text-foreground">
+                      <Link
+                        href={`/companies/${company.id}`}
+                        className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
+                      >
+                        {company.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {company.industry ?? '—'}
+                    </td>
+                    <td className="relative z-10 px-4 py-3">
+                      {company.website ? (
+                        <a
+                          href={company.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-brand-emphasis hover:underline"
+                        >
+                          {safeHostname(company.website)}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="tnum px-4 py-3 text-right text-muted-foreground">
+                      {company._count.contacts}
+                    </td>
+                    <td className="tnum px-4 py-3 text-right text-muted-foreground">
+                      {company._count.leads}
+                    </td>
+                    <td className="relative z-10 px-4 py-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleDelete(company.id, company.name)}
+                        disabled={deleteMutation.isPending}
+                        aria-label={`Delete ${company.name}`}
+                      >
+                        <Trash2 className="size-4 text-muted-foreground" aria-hidden="true" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {companiesPage?.pagination && (
         <p className="text-xs text-muted-foreground" aria-live="polite">

@@ -74,7 +74,7 @@ export function TeamRhythm({ reps }: TeamRhythmProps): React.JSX.Element {
 
       <section
         aria-labelledby="team-rhythm-heading"
-        className="rounded-md border bg-card"
+        className="rounded-lg border bg-card"
       >
         <header className="border-b px-4 py-3">
           <h2

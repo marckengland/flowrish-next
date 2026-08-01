@@ -79,17 +79,14 @@ export function TeamManagement(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Layers className="size-5 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-lg font-semibold">Team Hierarchy</h2>
-        </div>
+        <h2 className="text-sm font-semibold text-foreground">Teams</h2>
         <Button
           variant="default"
           size="sm"
           onClick={() => setShowCreateForm(!showCreateForm)}
         >
           <Plus className="size-4" aria-hidden="true" />
-          <span>Create Team</span>
+          <span>Create team</span>
         </Button>
       </div>
 
@@ -170,7 +167,7 @@ export function TeamManagement(): React.JSX.Element {
           <p className="text-sm text-muted-foreground">Loading teams...</p>
         </div>
       ) : !teams || teams.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-md border bg-card py-12">
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border bg-card py-12">
           <Layers className="size-8 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm font-medium text-muted-foreground">No teams yet</p>
           <p className="text-xs text-muted-foreground">
@@ -178,7 +175,7 @@ export function TeamManagement(): React.JSX.Element {
           </p>
         </div>
       ) : (
-        <div className="rounded-md border bg-card p-4">
+        <div className="rounded-lg border bg-card p-[18px]">
           <ul role="tree" aria-label="Team hierarchy" className="flex flex-col gap-1">
             {teams.map((team) => (
               <TeamNode key={team.id} team={team} depth={0} />
@@ -201,8 +198,10 @@ function TeamNode({ team, depth }: { team: Team; depth: number }): React.JSX.Ele
       aria-expanded={hasChildren ? expanded : undefined}
     >
       <div
-        className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50"
-        style={{ paddingLeft: `${depth * 20 + 8}px` }}
+        className={`flex items-center gap-2.5 rounded-[10px] px-3 py-2.5 transition-colors hover:bg-muted/60 ${
+          depth === 0 ? 'bg-muted/40' : ''
+        }`}
+        style={{ paddingLeft: `${depth * 20 + 12}px` }}
       >
         {hasChildren ? (
           <button
@@ -219,12 +218,19 @@ function TeamNode({ team, depth }: { team: Team; depth: number }): React.JSX.Ele
         ) : (
           <span className="size-5" />
         )}
-        <Layers className="size-4 text-muted-foreground" aria-hidden="true" />
-        <span className="text-sm font-medium">{team.name}</span>
+        <Layers
+          className={`size-4 ${depth === 0 ? 'text-brand-emphasis' : 'text-muted-foreground'}`}
+          aria-hidden="true"
+        />
+        <span
+          className={`${depth === 0 ? 'text-sm font-semibold' : 'text-[13.5px] font-medium'} text-foreground`}
+        >
+          {team.name}
+        </span>
         {team.memberCount !== undefined && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
             <Users className="size-3" aria-hidden="true" />
-            {team.memberCount}
+            {team.memberCount} member{team.memberCount === 1 ? '' : 's'}
           </span>
         )}
       </div>

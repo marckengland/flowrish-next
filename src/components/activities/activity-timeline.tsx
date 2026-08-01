@@ -50,7 +50,7 @@ export function ActivityTimeline({
       <div
         role="status"
         aria-live="polite"
-        className="flex items-center gap-2 rounded-md border bg-card p-4 text-sm text-muted-foreground"
+        className="flex items-center gap-2 rounded-lg border bg-card p-4 text-sm text-muted-foreground"
       >
         <Loader2 className="size-3 animate-spin" aria-hidden="true" />
         <span>Loading activities…</span>
@@ -60,7 +60,7 @@ export function ActivityTimeline({
 
   if (query.isError) {
     return (
-      <div role="alert" className="rounded-md border bg-card p-4 text-sm text-destructive">
+      <div role="alert" className="rounded-lg border bg-card p-4 text-sm text-destructive">
         Couldn&apos;t load activities.{' '}
         {query.error instanceof Error ? query.error.message : ''}
       </div>
@@ -69,7 +69,7 @@ export function ActivityTimeline({
 
   if (activities.length === 0) {
     return (
-      <div className="rounded-md border bg-card p-6 text-sm text-muted-foreground">
+      <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
         No activities yet. Log a note, call, meeting, or email to start
         building this lead&apos;s history.
       </div>
@@ -98,15 +98,15 @@ function ActivityRow({
   const { Icon, label, accent } = typeMeta(activity.type)
 
   return (
-    <article className="flex gap-3 rounded-md border bg-card p-3">
+    <article className="flex gap-3 rounded-lg border bg-card p-3.5">
       <span
         aria-hidden="true"
         className={cn(
-          'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border',
+          'mt-0.5 flex size-[30px] shrink-0 items-center justify-center rounded-full',
           accent,
         )}
       >
-        <Icon className="size-4" />
+        <Icon className="size-3.5" />
       </span>
       <div className="min-w-0 flex-1">
         <header className="flex flex-wrap items-baseline justify-between gap-2">
@@ -172,32 +172,32 @@ function typeMeta(type: ActivityItem['type']): {
       return {
         Icon: Phone,
         label: 'Call',
-        accent: 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-900/30 dark:text-sky-300',
+        accent: 'bg-muted text-foreground/70',
       }
     case 'MEETING':
       return {
         Icon: Users,
         label: 'Meeting',
-        accent: 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-900 dark:bg-indigo-900/30 dark:text-indigo-300',
+        accent: 'bg-ai-subtle text-ai',
       }
     case 'EMAIL':
       return {
         Icon: Mail,
         label: 'Email',
-        accent: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-900/30 dark:text-amber-300',
+        accent: 'bg-brand-subtle text-brand-emphasis',
       }
     case 'FILE_ATTACHMENT':
       return {
         Icon: Paperclip,
         label: 'File attachment',
-        accent: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-900 dark:bg-slate-900/30 dark:text-slate-300',
+        accent: 'bg-muted text-foreground/70',
       }
     case 'NOTE':
     default:
       return {
         Icon: FileText,
         label: 'Note',
-        accent: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-300',
+        accent: 'bg-brand-subtle text-brand-emphasis',
       }
   }
 }

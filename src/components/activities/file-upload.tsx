@@ -102,7 +102,7 @@ export function FileUpload({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border bg-muted/20 p-3">
+    <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3.5">
       <input
         ref={fileInputRef}
         type="file"

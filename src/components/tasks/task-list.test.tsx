@@ -126,7 +126,7 @@ describe('TaskList', () => {
     unmount()
   })
 
-  it('renders task titles, priority badges, and due dates', () => {
+  it('renders task titles and the lead / assignee subline', () => {
     const tasks = [
       makeTask({
         id: 't1',
@@ -139,9 +139,10 @@ describe('TaskList', () => {
       <TaskList filters={{}} initialTasks={tasks} />,
     )
     expect(container.textContent).toContain('Call with Ada')
-    expect(container.textContent).toContain('HIGH')
-    // Some wording near "Due …" should be present.
-    expect(container.textContent).toMatch(/Due/)
+    // Muted subline shows the linked lead name.
+    expect(container.textContent).toContain('Ada Lovelace')
+    // A lead link is rendered from the subline.
+    expect(container.querySelector('a[href="/leads/lead-1"]')).not.toBeNull()
     unmount()
   })
 
@@ -189,11 +190,13 @@ describe('TaskList', () => {
     const { container, unmount } = mount(
       <TaskList filters={{}} initialTasks={tasks} />,
     )
+    // Completed rows expose no complete affordance (the checkbox becomes a
+    // static filled marker), and surface a mono "Done" status instead.
     const completeButton = Array.from(
       container.querySelectorAll('button'),
-    ).find((b) => b.textContent?.includes('Complete'))
+    ).find((b) => b.getAttribute('aria-label')?.toLowerCase().includes('complete'))
     expect(completeButton).toBeUndefined()
-    expect(container.textContent).toMatch(/Completed/)
+    expect(container.textContent).toMatch(/Done/)
     unmount()
   })
 
@@ -232,7 +235,7 @@ describe('TaskList', () => {
     )
 
     const btn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Complete'),
+      b.getAttribute('aria-label')?.toLowerCase().includes('complete'),
     )
     expect(btn).toBeDefined()
 
@@ -263,7 +266,7 @@ describe('TaskList', () => {
       <TaskList filters={{}} initialTasks={tasks} canComplete={false} />,
     )
     const btn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Complete'),
+      b.getAttribute('aria-label')?.toLowerCase().includes('complete'),
     )
     expect(btn).toBeUndefined()
     unmount()

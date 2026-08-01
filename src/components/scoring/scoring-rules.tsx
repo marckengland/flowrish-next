@@ -125,17 +125,16 @@ export function ScoringRules(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Target className="size-5 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-lg font-semibold">Scoring Rules</h2>
-        </div>
+        <h2 className="text-sm font-semibold text-foreground">
+          Lead scoring rules
+        </h2>
         <Button
           variant="default"
           size="sm"
           onClick={() => setShowCreateForm(!showCreateForm)}
         >
           <Plus className="size-4" aria-hidden="true" />
-          <span>Add Rule</span>
+          <span>Add rule</span>
         </Button>
       </div>
 
@@ -224,7 +223,7 @@ export function ScoringRules(): React.JSX.Element {
           <p className="text-sm text-muted-foreground">Loading scoring rules...</p>
         </div>
       ) : !rules || rules.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-md border bg-card py-12">
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border bg-card py-12">
           <Target className="size-8 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm font-medium text-muted-foreground">No scoring rules</p>
           <p className="text-xs text-muted-foreground">
@@ -232,26 +231,26 @@ export function ScoringRules(): React.JSX.Element {
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {rules.map((rule) => (
             <div
               key={rule.id}
-              className={`flex items-center gap-3 rounded-md border p-3 ${
-                rule.isActive ? 'bg-card' : 'bg-muted/30 opacity-60'
+              className={`flex items-center justify-between gap-3 rounded-[11px] border bg-card px-4 py-3.5 ${
+                rule.isActive ? '' : 'opacity-60'
               }`}
             >
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-                    {RULE_TYPE_LABELS[rule.type as ScoringRuleType] ?? rule.type}
-                  </span>
-                  <span className="text-sm font-medium">{rule.points} pts</span>
-                  {!rule.isActive && (
-                    <span className="text-xs text-muted-foreground">(disabled)</span>
-                  )}
-                </div>
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="text-[13.5px] text-foreground">
+                  {RULE_TYPE_LABELS[rule.type as ScoringRuleType] ?? rule.type}
+                </span>
+                {!rule.isActive && (
+                  <span className="text-xs text-muted-foreground">(disabled)</span>
+                )}
               </div>
-              <div className="flex shrink-0 gap-1">
+              <div className="flex shrink-0 items-center gap-1">
+                <span className="tnum font-mono text-[13px] font-semibold text-brand-emphasis">
+                  +{rule.points}
+                </span>
                 <Button
                   variant="ghost"
                   size="icon-xs"

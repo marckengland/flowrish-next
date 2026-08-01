@@ -160,7 +160,7 @@ export function TaskReassign({
             setError(null)
           }}
           disabled={isLoading || pending}
-          className="h-9 w-full rounded-lg border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-10 w-full rounded-[10px] border border-input bg-card px-3 text-sm text-foreground transition-[color,box-shadow,border-color] focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <option value="">
             {isLoading ? 'Loading users…' : 'Select assignee…'}

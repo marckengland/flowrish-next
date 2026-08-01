@@ -112,7 +112,7 @@ export function CadenceAnalyticsPanel({
           aria-label="Completion rate"
         >
           <div
-            className="h-full rounded-full bg-emerald-500 transition-[width]"
+            className="h-full rounded-full bg-brand transition-[width]"
             style={{ width: `${Math.min(100, Math.max(0, analytics.completionRate))}%` }}
           />
         </div>
@@ -192,9 +192,9 @@ function MetricTile({
         <Icon
           className={cn(
             'size-4',
-            tone === 'emerald' && 'text-emerald-500',
-            tone === 'amber' && 'text-amber-500',
-            tone === 'blue' && 'text-blue-500',
+            tone === 'emerald' && 'text-brand',
+            tone === 'amber' && 'text-warning-foreground',
+            tone === 'blue' && 'text-ai',
           )}
           aria-hidden="true"
         />

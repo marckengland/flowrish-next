@@ -34,29 +34,29 @@ export function OnboardingForm() {
 
   return (
     <div className="space-y-4">
-      {/* Tab Switcher */}
-      <div className="flex rounded-lg border border-border bg-muted p-1">
+      {/* Segmented toggle */}
+      <div className="mb-[22px] flex rounded-[11px] border border-border bg-muted p-1">
         <button
           type="button"
           onClick={() => setActiveTab('create')}
-          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+          className={`flex-1 rounded-[8px] px-3 py-2 text-[13px] font-medium transition-colors ${
             activeTab === 'create'
-              ? 'bg-background text-foreground shadow-sm'
+              ? 'bg-card text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          Create Organization
+          Create organization
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('join')}
-          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+          className={`flex-1 rounded-[8px] px-3 py-2 text-[13px] font-medium transition-colors ${
             activeTab === 'join'
-              ? 'bg-background text-foreground shadow-sm'
+              ? 'bg-card text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          Join with Invite
+          Join with invite
         </button>
       </div>
 
@@ -66,16 +66,16 @@ export function OnboardingForm() {
           <div>
             <label
               htmlFor="org-name"
-              className="block text-sm font-medium text-foreground mb-1.5"
+              className="mb-1.5 block text-[13px] font-medium text-foreground"
             >
-              Organization Name
+              Organization name
             </label>
             <Input
               id="org-name"
               name="name"
               type="text"
               required
-              placeholder="Acme Corp"
+              placeholder="Northwind Co."
               autoComplete="organization"
             />
           </div>
@@ -83,20 +83,26 @@ export function OnboardingForm() {
           <div>
             <label
               htmlFor="org-slug"
-              className="block text-sm font-medium text-foreground mb-1.5"
+              className="mb-1.5 block text-[13px] font-medium text-foreground"
             >
-              URL Slug
+              URL slug
             </label>
-            <Input
-              id="org-slug"
-              name="slug"
-              type="text"
-              required
-              placeholder="acme-corp"
-              pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
-              aria-describedby="org-slug-hint"
-            />
-            <p id="org-slug-hint" className="mt-1 text-xs text-muted-foreground">
+            <div className="flex items-center overflow-hidden rounded-[10px] border border-input bg-card focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand/15">
+              <span className="flex h-10 items-center border-r border-border bg-muted px-3 font-mono text-[13px] text-muted-foreground">
+                flowrish.com/
+              </span>
+              <input
+                id="org-slug"
+                name="slug"
+                type="text"
+                required
+                placeholder="northwind"
+                pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                aria-describedby="org-slug-hint"
+                className="h-10 flex-1 bg-transparent px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+            <p id="org-slug-hint" className="mt-1.5 text-xs text-muted-foreground">
               Lowercase letters, numbers, and hyphens only.
             </p>
           </div>
@@ -107,11 +113,10 @@ export function OnboardingForm() {
 
           <Button
             type="submit"
-            size="lg"
-            className="w-full"
+            className="h-[46px] w-full rounded-[11px] text-[14.5px] font-semibold"
             disabled={createPending}
           >
-            {createPending ? 'Creating...' : 'Create Organization'}
+            {createPending ? 'Creating…' : 'Create organization'}
           </Button>
         </form>
       )}
@@ -122,9 +127,9 @@ export function OnboardingForm() {
           <div>
             <label
               htmlFor="invite-code"
-              className="block text-sm font-medium text-foreground mb-1.5"
+              className="mb-1.5 block text-[13px] font-medium text-foreground"
             >
-              Invite Code
+              Invite code
             </label>
             <Input
               id="invite-code"
@@ -134,8 +139,8 @@ export function OnboardingForm() {
               placeholder="Enter your invite code"
               aria-describedby="invite-code-hint"
             />
-            <p id="invite-code-hint" className="mt-1 text-xs text-muted-foreground">
-              Ask your team admin for an invite code to join their organization.
+            <p id="invite-code-hint" className="mt-1.5 text-xs text-muted-foreground">
+              Ask your team admin for an invite code.
             </p>
           </div>
 
@@ -145,11 +150,10 @@ export function OnboardingForm() {
 
           <Button
             type="submit"
-            size="lg"
-            className="w-full"
+            className="h-[46px] w-full rounded-[11px] text-[14.5px] font-semibold"
             disabled={joinPending}
           >
-            {joinPending ? 'Joining...' : 'Join Organization'}
+            {joinPending ? 'Joining…' : 'Join organization'}
           </Button>
         </form>
       )}

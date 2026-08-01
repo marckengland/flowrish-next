@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react'
 import {
   FileUp,
   Loader2,
+  Check,
   CheckCircle2,
   AlertCircle,
   ArrowRight,
@@ -11,7 +12,9 @@ import {
   ChevronRight,
 } from 'lucide-react'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 /**
  * System fields available for CSV column mapping.
@@ -43,6 +46,8 @@ const SYSTEM_FIELDS: ReadonlyArray<{
 ]
 
 type WizardStep = 'upload' | 'mapping' | 'preview' | 'result'
+
+const WIZARD_STEPS = ['upload', 'mapping', 'preview', 'result'] as const
 
 interface PreviewRow {
   rowNumber: number
@@ -324,29 +329,51 @@ export function ImportWizard({
     <div className={className}>
       {/* Step indicator */}
       <nav aria-label="Import progress" className="mb-6">
-        <ol className="flex items-center gap-2 text-sm">
-          {(['upload', 'mapping', 'preview', 'result'] as const).map(
-            (s, i) => (
-              <li key={s} className="flex items-center gap-2">
+        <ol className="flex items-center gap-3">
+          {WIZARD_STEPS.map((s, i) => {
+            const currentIndex = WIZARD_STEPS.indexOf(step)
+            const status =
+              i < currentIndex ? 'done' : i === currentIndex ? 'active' : 'pending'
+            return (
+              <li key={s} className="contents">
                 {i > 0 && (
-                  <ChevronRight
-                    className="size-3.5 text-muted-foreground rtl:rotate-180"
+                  <span
+                    className="h-px flex-1 bg-border"
                     aria-hidden="true"
                   />
                 )}
-                <span
-                  className={
-                    step === s
-                      ? 'font-medium text-foreground'
-                      : 'text-muted-foreground'
-                  }
-                  aria-current={step === s ? 'step' : undefined}
+                <div
+                  className="flex items-center gap-2"
+                  aria-current={status === 'active' ? 'step' : undefined}
                 >
-                  {i + 1}. {stepLabel(s)}
-                </span>
+                  <span
+                    className={cn(
+                      'flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tnum',
+                      status === 'done' && 'bg-brand text-brand-foreground',
+                      status === 'active' && 'bg-foreground text-background',
+                      status === 'pending' && 'bg-muted text-muted-foreground',
+                    )}
+                  >
+                    {status === 'done' ? (
+                      <Check className="size-3.5" aria-hidden="true" />
+                    ) : (
+                      i + 1
+                    )}
+                  </span>
+                  <span
+                    className={cn(
+                      'text-[13px] whitespace-nowrap',
+                      status === 'pending'
+                        ? 'text-muted-foreground'
+                        : 'font-medium text-foreground',
+                    )}
+                  >
+                    {stepLabel(s)}
+                  </span>
+                </div>
               </li>
-            ),
-          )}
+            )
+          })}
         </ol>
       </nav>
 
@@ -414,12 +441,12 @@ function UploadStep({
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
 }) {
   return (
-    <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed p-8">
-      <FileUp className="size-10 text-muted-foreground" aria-hidden="true" />
+    <div className="flex flex-col items-center gap-3.5 rounded-lg border-2 border-dashed bg-card px-6 py-14">
+      <FileUp className="size-10 text-muted-foreground" aria-hidden="true" strokeWidth={1.6} />
       <div className="text-center">
-        <p className="text-sm font-medium">Upload a CSV file</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          The file should have a header row with column names
+        <p className="text-[15px] font-semibold text-foreground">Upload a CSV file</p>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          Include a header row with column names · up to 10 MB
         </p>
       </div>
       <label className="cursor-pointer">
@@ -476,9 +503,17 @@ function MappingStep({
   return (
     <div className="flex flex-col gap-4">
       {/* File info */}
-      <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
-        <span className="text-muted-foreground">
-          {fileName} — {csvRowCount} row{csvRowCount !== 1 ? 's' : ''} detected
+      <div className="flex items-center gap-2 rounded-[9px] border bg-brand-subtle/30 px-3.5 py-2.5 text-[13px] text-muted-foreground">
+        <Check
+          className="size-3.5 shrink-0 text-brand-emphasis"
+          aria-hidden="true"
+        />
+        <span>
+          {fileName} —{' '}
+          <strong className="font-semibold text-foreground">
+            {csvRowCount} row{csvRowCount !== 1 ? 's' : ''}
+          </strong>{' '}
+          detected · required fields auto-mapped
         </span>
       </div>
 
@@ -511,20 +546,28 @@ function MappingStep({
       </div>
 
       <div
-        className="overflow-x-auto rounded-md border"
+        className="overflow-hidden rounded-lg border bg-card"
         role="table"
         aria-label="Column mapping"
       >
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-3 gap-y-0 text-sm">
+        <div className="grid grid-cols-[1fr_40px_1fr] items-center gap-x-0 gap-y-0 text-sm">
           {/* Header row */}
-          <div className="border-b bg-muted/50 px-3 py-2 font-medium" role="columnheader">
-            CSV Column
+          <div
+            className="eyebrow border-b bg-muted/40 px-3.5 py-2.5"
+            role="columnheader"
+          >
+            CSV column
           </div>
-          <div className="border-b bg-muted/50 px-3 py-2" role="columnheader" aria-hidden="true">
-            <ChevronRight className="size-3.5 text-muted-foreground rtl:rotate-180" />
-          </div>
-          <div className="border-b bg-muted/50 px-3 py-2 font-medium" role="columnheader">
-            System Field
+          <div
+            className="border-b bg-muted/40 px-2 py-2.5"
+            role="columnheader"
+            aria-hidden="true"
+          />
+          <div
+            className="eyebrow border-b bg-muted/40 px-3.5 py-2.5"
+            role="columnheader"
+          >
+            System field
           </div>
 
           {/* Mapping rows */}
@@ -581,15 +624,20 @@ function MappingRow({
 }) {
   return (
     <>
-      <div className="border-b px-3 py-2 font-mono text-xs">{csvHeader}</div>
-      <div className="border-b px-3 py-2 text-muted-foreground" aria-hidden="true">
+      <div className="border-b border-row-divider px-3.5 py-2.5 font-mono text-xs text-foreground">
+        {csvHeader}
+      </div>
+      <div
+        className="flex items-center justify-center border-b border-row-divider py-2.5 text-muted-foreground"
+        aria-hidden="true"
+      >
         <ChevronRight className="size-3.5 rtl:rotate-180" />
       </div>
-      <div className="border-b px-3 py-2">
+      <div className="border-b border-row-divider px-3.5 py-2">
         <select
           value={currentValue}
           onChange={(e) => onChange(csvHeader, e.target.value)}
-          className="w-full rounded-md border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="h-[34px] w-full rounded-[8px] border border-input bg-card px-2.5 text-[12.5px] text-foreground outline-none transition-[color,box-shadow,border-color] focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15"
           aria-label={`Map "${csvHeader}" to system field`}
         >
           <option value="">— Skip —</option>
@@ -635,65 +683,64 @@ function PreviewStep({
           are drawn from the preview sample, not the whole file. Without
           that hedge users assume any "invalid" here reflects the entire
           import, which the counts don't measure. */}
-      <div className="flex flex-wrap gap-4 rounded-md border bg-muted/30 px-4 py-3 text-sm">
+      <div className="flex flex-wrap gap-5 rounded-[9px] border bg-muted/40 px-4 py-3 text-[13px]">
         <span>
-          Total rows in file: <strong>{totalRows}</strong>
+          Total rows: <strong className="font-semibold">{totalRows}</strong>
         </span>
-        <span className="text-green-600 dark:text-green-400">
-          Valid in preview: <strong>{validCount}</strong>
+        <span className="text-brand-emphasis">
+          Valid in preview: <strong className="font-semibold">{validCount}</strong>
           <span className="ml-1 text-xs text-muted-foreground">
             (of {previewRows.length} sampled)
           </span>
         </span>
         {invalidCount > 0 && (
-          <span className="text-destructive">
-            Invalid in preview: <strong>{invalidCount}</strong>
+          <span className="text-danger-foreground">
+            Invalid in preview: <strong className="font-semibold">{invalidCount}</strong>
           </span>
         )}
       </div>
 
       {/* Preview table */}
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm" aria-label="Import preview">
+      <div className="overflow-hidden rounded-lg border bg-card">
+        <table className="w-full text-[12.5px]" aria-label="Import preview">
           <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="px-3 py-2 text-left font-medium">Row</th>
-              <th className="px-3 py-2 text-left font-medium">Status</th>
-              <th className="px-3 py-2 text-left font-medium">First Name</th>
-              <th className="px-3 py-2 text-left font-medium">Last Name</th>
-              <th className="px-3 py-2 text-left font-medium">Email</th>
-              <th className="px-3 py-2 text-left font-medium">Details</th>
+            <tr className="border-b bg-muted/40">
+              <th className="eyebrow px-3.5 py-2.5 text-left">Row</th>
+              <th className="eyebrow px-3.5 py-2.5 text-left">Status</th>
+              <th className="eyebrow px-3.5 py-2.5 text-left">First</th>
+              <th className="eyebrow px-3.5 py-2.5 text-left">Last</th>
+              <th className="eyebrow px-3.5 py-2.5 text-left">Email</th>
+              <th className="eyebrow px-3.5 py-2.5 text-left">Details</th>
             </tr>
           </thead>
           <tbody>
             {previewRows.map((row) => (
-              <tr key={row.rowNumber} className="border-b last:border-b-0">
-                <td className="px-3 py-2 text-muted-foreground">
+              <tr
+                key={row.rowNumber}
+                className="border-b border-row-divider last:border-b-0"
+              >
+                <td className="px-3.5 py-2.5 text-muted-foreground">
                   {row.rowNumber}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3.5 py-2.5">
                   {row.valid ? (
-                    <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-                      <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                    <Badge variant="brand" size="sm">
+                      <CheckCircle2 className="size-3" aria-hidden="true" />
                       Valid
-                    </span>
+                    </Badge>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-destructive">
-                      <AlertCircle className="size-3.5" aria-hidden="true" />
+                    <Badge variant="danger" size="sm">
+                      <AlertCircle className="size-3" aria-hidden="true" />
                       Invalid
-                    </span>
+                    </Badge>
                   )}
                 </td>
-                <td className="px-3 py-2">
-                  {row.mapped.firstName || '—'}
-                </td>
-                <td className="px-3 py-2">
-                  {row.mapped.lastName || '—'}
-                </td>
-                <td className="px-3 py-2">
+                <td className="px-3.5 py-2.5">{row.mapped.firstName || '—'}</td>
+                <td className="px-3.5 py-2.5">{row.mapped.lastName || '—'}</td>
+                <td className="px-3.5 py-2.5 text-muted-foreground">
                   {row.mapped.email || '—'}
                 </td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">
+                <td className="px-3.5 py-2.5 text-xs text-muted-foreground">
                   {row.error ?? ''}
                 </td>
               </tr>
@@ -744,26 +791,36 @@ function ResultStep({
   return (
     <div className="flex flex-col gap-4">
       {/* Summary card */}
-      <div className="rounded-md border bg-muted/30 p-4">
-        <div className="flex items-center gap-2">
+      <div className="rounded-xl border border-brand/40 bg-brand-subtle/40 p-5">
+        <div className="mb-4 flex items-center gap-2.5">
           <CheckCircle2
-            className="size-5 text-green-600 dark:text-green-400"
+            className="size-5 text-brand-emphasis"
             aria-hidden="true"
           />
-          <h3 className="font-medium">Import complete</h3>
+          <h3 className="text-[15px] font-semibold text-foreground">
+            Import complete
+          </h3>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-4 text-sm">
+        <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
-            <p className="text-muted-foreground">Total rows</p>
-            <p className="text-lg font-semibold">{result.totalRows}</p>
+            <p className="text-xs text-muted-foreground">Total rows</p>
+            <p className="mt-1 text-[22px] font-semibold tnum text-foreground">
+              {result.totalRows}
+            </p>
           </div>
           <div>
-            <p className="text-green-600 dark:text-green-400">Imported</p>
-            <p className="text-lg font-semibold">{result.successCount}</p>
+            <p className="text-xs text-brand-emphasis">Imported</p>
+            <p className="mt-1 text-[22px] font-semibold tnum text-brand-emphasis">
+              {result.successCount}
+            </p>
           </div>
           <div>
-            <p className="text-muted-foreground">Skipped</p>
-            <p className="text-lg font-semibold">{result.skipCount}</p>
+            <p className="text-xs text-muted-foreground">
+              Skipped (duplicates)
+            </p>
+            <p className="mt-1 text-[22px] font-semibold tnum text-foreground">
+              {result.skipCount}
+            </p>
           </div>
         </div>
       </div>

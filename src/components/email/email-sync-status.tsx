@@ -80,7 +80,7 @@ export function EmailSyncStatus({
         </Button>
 
         {result === 'success' && !pending ? (
-          <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+          <span className="flex items-center gap-1 text-xs text-brand-emphasis">
             <CheckCircle className="size-3" aria-hidden="true" />
             Sync queued
           </span>
@@ -90,7 +90,7 @@ export function EmailSyncStatus({
       {result === 'error' && error ? (
         <div
           role="alert"
-          className="mt-2 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive"
+          className="mt-2 flex items-start gap-2 rounded-[10px] border border-danger/30 bg-danger-subtle p-2.5 text-xs text-danger-foreground"
         >
           <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           <p>{error}</p>

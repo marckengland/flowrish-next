@@ -157,16 +157,16 @@ export function EmailGenerator({
   return (
     <section
       aria-labelledby="email-generator-heading"
-      className="space-y-3 rounded-lg border border-purple-200 bg-purple-50/50 p-4 dark:border-purple-800 dark:bg-purple-950/30"
+      className="space-y-3 rounded-lg border border-ai/30 bg-ai-subtle p-[18px]"
     >
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3
             id="email-generator-heading"
-            className="flex items-center gap-2 text-sm font-semibold"
+            className="flex items-center gap-2 text-sm font-semibold text-ai"
           >
             <Sparkles
-              className="size-4 text-purple-600 dark:text-purple-400"
+              className="size-4 text-ai"
               aria-hidden="true"
             />
             AI email generator
@@ -199,13 +199,13 @@ export function EmailGenerator({
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
           placeholder="e.g. Introduce our platform and highlight how it can help their sales team scale outbound…"
-          className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full rounded-[10px] border border-input bg-card px-3 py-2 text-sm shadow-sm transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15"
         />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label htmlFor="ai-email-tone" className="mb-1 block text-xs font-medium">
+          <label htmlFor="ai-email-tone" className="eyebrow mb-1.5 block">
             Tone
           </label>
           <select
@@ -222,7 +222,7 @@ export function EmailGenerator({
           </select>
         </div>
         <div>
-          <label htmlFor="ai-email-goal" className="mb-1 block text-xs font-medium">
+          <label htmlFor="ai-email-goal" className="eyebrow mb-1.5 block">
             Goal / CTA
           </label>
           <select
@@ -273,9 +273,9 @@ export function EmailGenerator({
       ) : null}
 
       {hasDraft ? (
-        <div className="space-y-2 rounded-lg border bg-background p-3">
+        <div className="space-y-2 rounded-lg border bg-card p-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <p className="text-xs font-medium text-brand-emphasis">
               Email generated — edit before using.
             </p>
             <div className="flex items-center gap-1">
@@ -330,8 +330,8 @@ export function EmailGenerator({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               className={cn(
-                'w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs',
-                'focus:outline-none focus:ring-2 focus:ring-ring',
+                'w-full rounded-[10px] border border-input bg-card px-3 py-2 font-mono text-xs shadow-sm',
+                'transition-[color,box-shadow,border-color] focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15',
               )}
             />
           </div>
@@ -342,7 +342,7 @@ export function EmailGenerator({
 }
 
 const inputClasses =
-  'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50'
+  'flex h-9 w-full rounded-[10px] border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50'
 
 /**
  * Lightweight HTML stripping for the clipboard copy path. The generated

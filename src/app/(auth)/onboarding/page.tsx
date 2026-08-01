@@ -1,6 +1,8 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { prisma } from '@/server/db/client'
+import { AuthBrandPanel } from '@/components/layout/auth-brand-panel'
 import { OnboardingForm } from './onboarding-form'
 
 /**
@@ -37,18 +39,30 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Get Started
+    <div className="grid min-h-screen bg-card lg:grid-cols-[1.05fr_1fr]">
+      <AuthBrandPanel />
+
+      <div className="flex items-center justify-center bg-card px-6 py-12">
+        <div className="w-full max-w-[380px]">
+          <h1 className="mb-1.5 text-[26px] font-bold tracking-[-0.02em] text-foreground">
+            Set up your workspace
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Create a new organization or join an existing one with an invite code.
+          <p className="mb-6 text-[14.5px] text-muted-foreground">
+            Create an organization or join with an invite.
+          </p>
+
+          <OnboardingForm />
+
+          <p className="mt-6 text-center text-[13.5px] text-muted-foreground">
+            Already have a workspace?{' '}
+            <Link
+              href="/login"
+              className="font-semibold text-brand-emphasis hover:underline"
+            >
+              Sign in
+            </Link>
           </p>
         </div>
-
-        <OnboardingForm />
       </div>
     </div>
   )

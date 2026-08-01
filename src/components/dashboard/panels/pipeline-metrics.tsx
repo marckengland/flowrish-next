@@ -6,8 +6,8 @@ import { useState, useTransition } from 'react'
 import { BarChart } from '@/components/dashboard/bar-chart'
 import { DateRangeFilter } from '@/components/dashboard/date-range-filter'
 import { EmptyState, MetricCard } from '@/components/dashboard/metric-card'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 import type { PipelineMetricsReport } from '@/server/services/dashboard'
 
 export interface PipelineMetricsPanelProps {
@@ -85,7 +85,7 @@ export function PipelineMetricsPanel({
     <div className="flex flex-col gap-4">
       <div
         aria-label="Filter pipeline metrics by date range"
-        className="flex flex-wrap items-end gap-3 rounded-md border bg-card p-3"
+        className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-3.5"
       >
         <DateRangeFilter
           startDate={from}
@@ -106,15 +106,17 @@ export function PipelineMetricsPanel({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label="Closed won"
           value={report.closedSummary.closedWon}
+          tone="brand"
           hint={formatDateRange(report.dateRange.from, report.dateRange.to)}
         />
         <MetricCard
           label="Closed lost"
           value={report.closedSummary.closedLost}
+          tone="danger"
           hint={formatDateRange(report.dateRange.from, report.dateRange.to)}
         />
         <MetricCard
@@ -131,7 +133,7 @@ export function PipelineMetricsPanel({
       </div>
 
       {openStages.length > 0 ? (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid gap-3.5 lg:grid-cols-2">
           <BarChart
             title="Pipeline value by stage"
             items={stageValueBars}
@@ -149,13 +151,13 @@ export function PipelineMetricsPanel({
       ) : (
         <section
           aria-labelledby="pipeline-metrics-table"
-          className="overflow-x-auto rounded-md border bg-card"
+          className="overflow-x-auto rounded-lg border bg-card"
         >
           <table className="w-full min-w-[720px] text-sm">
             <caption className="sr-only" id="pipeline-metrics-table">
               Pipeline metrics by stage
             </caption>
-            <thead className="bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <thead className="border-b bg-background text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th scope="col" className="px-4 py-2">
                   Pipeline
@@ -177,35 +179,39 @@ export function PipelineMetricsPanel({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-row-divider">
               {report.stages.map((s) => (
-                <tr key={s.stageId}>
-                  <td className="px-4 py-2 text-muted-foreground">
+                <tr key={s.stageId} className="transition-colors hover:bg-background">
+                  <td className="px-4 py-3 text-muted-foreground">
                     {s.pipelineName}
                   </td>
-                  <td className="px-4 py-2">
+                  <td className="px-4 py-3">
                     <span className="inline-flex items-center gap-2">
                       <span className="font-medium text-foreground">
                         {s.stageName}
                       </span>
                       {s.isClosedWon ? (
-                        <StageFlag tone="won">Won</StageFlag>
+                        <Badge variant="brand" size="sm">
+                          Won
+                        </Badge>
                       ) : null}
                       {s.isClosedLost ? (
-                        <StageFlag tone="lost">Lost</StageFlag>
+                        <Badge variant="danger" size="sm">
+                          Lost
+                        </Badge>
                       ) : null}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums">
+                  <td className="px-4 py-3 text-right tnum">
                     {s.leadCount}
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums">
+                  <td className="px-4 py-3 text-right tnum">
                     {formatCurrency(s.value)}
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums">
+                  <td className="px-4 py-3 text-right tnum">
                     {formatPercent(s.conversionRate)}
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums">
+                  <td className="px-4 py-3 text-right tnum">
                     {s.avgDurationMs == null
                       ? '—'
                       : formatDuration(s.avgDurationMs)}
@@ -217,27 +223,6 @@ export function PipelineMetricsPanel({
         </section>
       )}
     </div>
-  )
-}
-
-function StageFlag({
-  tone,
-  children,
-}: {
-  tone: 'won' | 'lost'
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <span
-      className={cn(
-        'rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-        tone === 'won'
-          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
-          : 'bg-destructive/10 text-destructive',
-      )}
-    >
-      {children}
-    </span>
   )
 }
 

@@ -101,7 +101,7 @@ export function ActivityForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-3 rounded-md border bg-card p-4"
+      className="flex flex-col gap-3 rounded-lg border bg-card p-[18px]"
       aria-busy={pending || undefined}
     >
       <div className="flex flex-wrap items-end gap-3">
@@ -116,7 +116,7 @@ export function ActivityForm({
             id="activity-type"
             value={type}
             onChange={(e) => setType(e.target.value as ActivityType)}
-            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-10 w-full rounded-[10px] border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm transition-[color,box-shadow,border-color] focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15"
           >
             {ACTIVITY_TYPE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -217,7 +217,7 @@ export function ActivityForm({
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
           placeholder={placeholderForType(type)}
-          className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="w-full rounded-[10px] border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15"
         />
       </div>
 
@@ -246,7 +246,7 @@ export function ActivityForm({
 }
 
 const inputClass = cn(
-  'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+  'flex h-10 w-full rounded-[10px] border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15',
 )
 
 function placeholderForType(type: ActivityType): string {

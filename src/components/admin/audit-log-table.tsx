@@ -46,13 +46,13 @@ export interface AuditLogTableProps {
 }
 
 const ACTION_TONE: Record<string, string> = {
-  CREATE: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-  UPDATE: 'bg-blue-500/10 text-blue-700 dark:text-blue-300',
-  DELETE: 'bg-destructive/10 text-destructive',
+  CREATE: 'bg-brand-subtle text-brand-emphasis',
+  UPDATE: 'bg-warning-subtle text-warning-foreground',
+  DELETE: 'bg-danger-subtle text-danger-foreground',
   LOGIN: 'bg-muted text-muted-foreground',
   LOGOUT: 'bg-muted text-muted-foreground',
-  EXPORT: 'bg-purple-500/10 text-purple-700 dark:text-purple-300',
-  IMPORT: 'bg-purple-500/10 text-purple-700 dark:text-purple-300',
+  EXPORT: 'bg-warning-subtle text-warning-foreground',
+  IMPORT: 'bg-brand-subtle text-brand-emphasis',
 }
 
 export function AuditLogTable({

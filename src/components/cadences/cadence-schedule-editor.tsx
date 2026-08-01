@@ -350,7 +350,7 @@ export function CadenceScheduleEditor({
                 className={cn(
                   'flex cursor-pointer select-none items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors',
                   checked
-                    ? 'border-primary bg-primary text-primary-foreground'
+                    ? 'border-brand bg-brand text-brand-foreground'
                     : 'border-input bg-background text-foreground hover:bg-muted',
                   (isReadOnly || pending) && 'cursor-not-allowed opacity-60',
                 )}
@@ -378,7 +378,7 @@ export function CadenceScheduleEditor({
       {success && (
         <p
           role="status"
-          className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300"
+          className="rounded-[10px] border border-brand/30 bg-brand-subtle px-3 py-2 text-sm text-brand-emphasis"
         >
           {success}
         </p>

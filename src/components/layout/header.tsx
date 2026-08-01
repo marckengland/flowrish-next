@@ -1,19 +1,16 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { LogOut, MessagesSquare, User as UserIcon } from 'lucide-react'
+import { useRouter, usePathname } from 'next/navigation'
+import { Bell, Bot, Search } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { createSupabaseBrowser } from '@/lib/supabase/client'
 import { useLayoutStore } from '@/stores/layout'
 import { ThemeToggle } from '@/components/layout/theme-toggle'
 
 /**
- * Minimal display view of the authenticated user shown in the header.
- * Accepts just the fields the header renders — decoupled from the full
- * `SessionUser` type so the component is easy to reuse and test.
+ * Minimal display view of the authenticated user. Kept for API
+ * compatibility with the shell even though the header no longer renders
+ * the user card (it now lives pinned in the sidebar).
  */
 export interface HeaderUser {
   name: string
@@ -26,134 +23,105 @@ export interface HeaderProps {
   organizationName?: string
 }
 
+/** Maps a pathname to the breadcrumb page label shown in the topbar. */
+const PAGE_TITLES: Array<{ prefix: string; label: string }> = [
+  { prefix: '/pipeline', label: 'Pipeline' },
+  { prefix: '/leads', label: 'Leads' },
+  { prefix: '/contacts', label: 'Contacts' },
+  { prefix: '/companies', label: 'Companies' },
+  { prefix: '/tasks', label: 'Tasks' },
+  { prefix: '/rhythm', label: 'Rhythm' },
+  { prefix: '/cadences', label: 'Cadences' },
+  { prefix: '/forecast', label: 'Forecast' },
+  { prefix: '/csv', label: 'Import / Export' },
+  { prefix: '/search', label: 'Search' },
+  { prefix: '/admin', label: 'Admin' },
+  { prefix: '/settings', label: 'Settings' },
+]
+
+function pageTitle(pathname: string): string {
+  if (pathname === '/') return 'Dashboard'
+  const match = PAGE_TITLES.find((p) => pathname.startsWith(p.prefix))
+  return match?.label ?? 'Dashboard'
+}
+
 /**
  * Top bar of the dashboard shell.
  *
- * Responsibilities:
- * - Surface the current user's identity and a sign-out action
- * - Provide a quick-toggle for the AI chatbot sidebar (Zustand layout store)
- * - Render the organization name as contextual breadcrumb when provided
- *
- * Sign-out is handled client-side via the browser Supabase client. On
- * success or failure the user is redirected to `/login`; the middleware
- * also enforces that redirect on any subsequent authenticated route
- * request. If Supabase's `signOut` throws we surface a small inline
- * error but still redirect — otherwise a network hiccup would leave the
- * button spinning forever.
+ * Design: mono breadcrumb `Org / Page`, a search field that routes to the
+ * search screen, a notification bell, an (optional) theme toggle, and a
+ * dark "Ask Flowrish" button that opens the AI assistant drawer.
  *
  * Validates: Requirements 1.5, 26.4, 26.5
  */
 export function Header({
-  user,
   organizationName,
 }: HeaderProps): React.JSX.Element {
   const router = useRouter()
+  const pathname = usePathname()
   const chatOpen = useLayoutStore((s) => s.chatOpen)
   const toggleChat = useLayoutStore((s) => s.toggleChat)
-  const [signingOut, setSigningOut] = useState(false)
-  const [avatarFailed, setAvatarFailed] = useState(false)
 
-  async function handleSignOut(): Promise<void> {
-    if (signingOut) return
-    setSigningOut(true)
-    try {
-      const supabase = createSupabaseBrowser()
-      await supabase.auth.signOut()
-    } catch {
-      // Ignore — we still redirect. Middleware will bounce the user
-      // back if the session cookie somehow survived, and we surface a
-      // proper error on the next authenticated action.
-    } finally {
-      try {
-        router.replace('/login')
-        router.refresh()
-      } finally {
-        setSigningOut(false)
-      }
-    }
-  }
-
-  const initials = getInitials(user.name || user.email)
-  const showAvatar = user.avatarUrl && !avatarFailed
+  const title = pageTitle(pathname)
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background px-4 sm:px-6">
-      <div className="min-w-0 flex-1">
-        {organizationName && (
-          <p className="truncate text-sm font-medium text-muted-foreground">
-            {organizationName}
-          </p>
-        )}
+    <header className="flex h-[60px] shrink-0 items-center gap-4 border-b bg-card px-6">
+      <div className="font-mono text-[12px] text-muted-foreground">
+        {organizationName ?? 'Flowrish'}{' '}
+        <span className="text-foreground/25">/</span>{' '}
+        <span className="text-foreground/70">{title}</span>
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-2">
+      <button
+        type="button"
+        onClick={() => router.push('/search')}
+        title="Search leads, contacts & companies"
+        className="relative ml-auto hidden h-[38px] w-full max-w-[360px] items-center rounded-[10px] border bg-background pl-9 pr-3 text-left text-[13px] text-muted-foreground transition-colors hover:bg-card focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15 sm:flex"
+      >
+        <Search
+          className="absolute left-3 size-[15px] text-muted-foreground"
+          aria-hidden="true"
+        />
+        Search leads, contacts, deals…
+      </button>
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => router.push('/search')}
+          title="Search"
+          aria-label="Search"
+          className="flex size-[38px] items-center justify-center rounded-[10px] border bg-card text-foreground/60 transition-colors hover:bg-muted sm:hidden"
+        >
+          <Search className="size-[17px]" aria-hidden="true" />
+        </button>
+
         <ThemeToggle />
-        <Button
-          variant="ghost"
-          size="icon-sm"
+
+        <button
+          type="button"
+          title="Notifications"
+          aria-label="Notifications"
+          className="flex size-[38px] items-center justify-center rounded-[10px] border bg-card text-foreground/60 transition-colors hover:bg-muted"
+        >
+          <Bell className="size-[17px]" aria-hidden="true" />
+        </button>
+
+        <button
+          type="button"
           onClick={toggleChat}
           aria-pressed={chatOpen}
           aria-label={chatOpen ? 'Hide AI assistant' : 'Open AI assistant'}
-          title={chatOpen ? 'Hide AI assistant' : 'Open AI assistant'}
-        >
-          <MessagesSquare className="size-4" aria-hidden="true" />
-        </Button>
-
-        <div className="flex items-center gap-2 rounded-md px-2 py-1">
-          {showAvatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={user.avatarUrl!}
-              alt=""
-              aria-hidden="true"
-              onError={() => setAvatarFailed(true)}
-              referrerPolicy="no-referrer"
-              className="size-7 rounded-full object-cover"
-            />
-          ) : (
-            <span
-              aria-hidden="true"
-              className={cn(
-                'flex size-7 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground',
-              )}
-            >
-              {initials || <UserIcon className="size-4" aria-hidden="true" />}
-            </span>
+          title={chatOpen ? 'Hide AI assistant' : 'Ask Flowrish'}
+          className={cn(
+            'flex h-[38px] items-center gap-[7px] rounded-[10px] px-3.5 text-[13px] font-semibold text-white transition-colors',
+            'bg-[oklch(0.16_0_0)] hover:bg-[oklch(0.24_0_0)] dark:bg-white/10 dark:hover:bg-white/15',
           )}
-          <div className="hidden min-w-0 flex-col text-left sm:flex">
-            <span className="truncate text-sm font-medium leading-tight text-foreground">
-              {user.name}
-            </span>
-            <span className="truncate text-xs leading-tight text-muted-foreground">
-              {user.email}
-            </span>
-          </div>
-        </div>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleSignOut}
-          disabled={signingOut}
-          aria-label="Sign out"
         >
-          <LogOut className="size-4" aria-hidden="true" />
-          <span className="hidden sm:inline">
-            {signingOut ? 'Signing out…' : 'Sign out'}
-          </span>
-        </Button>
+          <Bot className="size-[15px]" aria-hidden="true" />
+          <span className="hidden sm:inline">Ask Flowrish</span>
+        </button>
       </div>
     </header>
   )
-}
-
-function getInitials(source: string): string {
-  const trimmed = source.trim()
-  if (!trimmed) return ''
-  const parts = trimmed.split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return ''
-  if (parts.length === 1) {
-    return parts[0]!.slice(0, 2).toUpperCase()
-  }
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
 }

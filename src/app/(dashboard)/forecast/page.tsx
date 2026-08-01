@@ -3,7 +3,9 @@ import { redirect } from 'next/navigation'
 import { CommitForm } from '@/components/forecast/commit-form'
 import { ForecastPanel } from '@/components/forecast/forecast-panel'
 import { RiskIndicator } from '@/components/forecast/risk-indicator'
-import { MetricCard, EmptyState } from '@/components/dashboard/metric-card'
+import { EmptyState } from '@/components/dashboard/metric-card'
+import { PageHeader } from '@/components/layout/page-header'
+import { Card, CardContent } from '@/components/ui/card'
 import { requireSession } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { createTenantPrisma } from '@/server/db/middleware'
@@ -80,20 +82,14 @@ export default async function ForecastPage(): Promise<React.JSX.Element> {
       : assessForecastRisk(teamCommit, metrics.aiPredicted)
 
   return (
-    <div className="flex flex-col gap-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Forecast</h1>
-        <p className="text-sm text-muted-foreground">
-          Pipeline metrics, team commits and commit vs AI risk for the
-          current period.
-        </p>
-      </header>
+    <div className="flex max-w-[1000px] flex-col gap-[18px]">
+      <PageHeader
+        title="Forecast"
+        description={`${period} · commit with confidence`}
+      />
 
-      <section aria-labelledby="forecast-metrics-heading" className="space-y-3">
-        <h2
-          id="forecast-metrics-heading"
-          className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-        >
+      <section aria-labelledby="forecast-metrics-heading">
+        <h2 id="forecast-metrics-heading" className="sr-only">
           Pipeline metrics
         </h2>
         <ForecastPanel
@@ -106,54 +102,90 @@ export default async function ForecastPage(): Promise<React.JSX.Element> {
 
       <section
         aria-labelledby="forecast-commit-heading"
-        className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+        className="grid gap-[18px] lg:grid-cols-[1.2fr_1fr]"
       >
-        <div className="space-y-3">
-          <h2
-            id="forecast-commit-heading"
-            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-          >
-            Your commit ({period})
-          </h2>
-          <CommitForm
-            defaultPeriod={period}
-            defaultCommitAmount={teamCommit}
-            defaultNotes={latestSubmission?.notes ?? null}
-            canSubmit={canSubmit}
-          />
-        </div>
+        <h2 id="forecast-commit-heading" className="sr-only">
+          Your commit and commit vs AI
+        </h2>
 
-        <div className="space-y-3">
-          <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Commit vs AI
-          </h2>
-          {teamCommit === null || risk === null ? (
-            <EmptyState
-              title={`No commit submitted for ${period}`}
-              description={
-                canSubmit
-                  ? 'Submit a commit to see risk classification.'
-                  : 'Ask a manager to submit a commit to see risk classification.'
-              }
-            />
-          ) : (
-            <div className="flex flex-col gap-3 rounded-md border bg-card p-4 shadow-sm">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <MetricCard
-                  label={`Your commit (${period})`}
-                  value={formatCurrency(teamCommit)}
-                />
-                <MetricCard
-                  label="AI predicted"
-                  value={formatCurrency(metrics.aiPredicted)}
-                  hint={formatGap(teamCommit, metrics.aiPredicted)}
-                />
+        <CommitForm
+          defaultPeriod={period}
+          defaultCommitAmount={teamCommit}
+          defaultNotes={latestSubmission?.notes ?? null}
+          canSubmit={canSubmit}
+        />
+
+        {teamCommit === null || risk === null ? (
+          <EmptyState
+            title={`No commit submitted for ${period}`}
+            description={
+              canSubmit
+                ? 'Submit a commit to see risk classification.'
+                : 'Ask a manager to submit a commit to see risk classification.'
+            }
+          />
+        ) : (
+          <Card>
+            <CardContent className="p-5">
+              <div className="mb-4 text-sm font-semibold text-foreground">
+                Commit vs AI
               </div>
-              <RiskIndicator risk={risk} context={period} />
-            </div>
-          )}
-        </div>
+              <CommitVsAiBars
+                teamCommit={teamCommit}
+                aiPredicted={metrics.aiPredicted}
+              />
+              <div className="mt-[18px]">
+                <RiskIndicator risk={risk} context={period} />
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </section>
+    </div>
+  )
+}
+
+/**
+ * Two-bar comparison of the team commit (ink) against the AI-predicted
+ * value (emerald), each scaled against the larger of the two so the wider
+ * bar always fills the track. Purely presentational.
+ */
+function CommitVsAiBars({
+  teamCommit,
+  aiPredicted,
+}: {
+  teamCommit: number
+  aiPredicted: number
+}): React.JSX.Element {
+  const max = Math.max(teamCommit, aiPredicted, 1)
+  const commitPct = Math.round((teamCommit / max) * 100)
+  const aiPct = Math.round((aiPredicted / max) * 100)
+  return (
+    <div>
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <span className="text-[12.5px] text-muted-foreground">Team commit</span>
+        <span className="text-xl font-semibold tnum text-foreground">
+          {formatCurrency(teamCommit)}
+        </span>
+      </div>
+      <div className="mb-4 h-[9px] overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-foreground"
+          style={{ width: `${commitPct}%` }}
+        />
+      </div>
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <span className="text-[12.5px] text-muted-foreground">AI predicted</span>
+        <span className="text-xl font-semibold tnum text-brand-emphasis">
+          {formatCurrency(aiPredicted)}
+        </span>
+      </div>
+      <div className="h-[9px] overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-brand"
+          style={{ width: `${aiPct}%` }}
+        />
+      </div>
     </div>
   )
 }
@@ -169,11 +201,4 @@ function formatCurrency(value: number): string {
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value)
-}
-
-function formatGap(teamCommit: number, aiPredicted: number): string {
-  if (aiPredicted === 0) return 'AI prediction is zero'
-  const gapPct = ((teamCommit - aiPredicted) / aiPredicted) * 100
-  const sign = gapPct > 0 ? '+' : ''
-  return `Gap: ${sign}${gapPct.toFixed(1)}%`
 }

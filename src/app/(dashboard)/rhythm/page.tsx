@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation'
+import { Bot } from 'lucide-react'
 
+import { PageHeader } from '@/components/layout/page-header'
 import {
   DealHealth,
   type DealHealthRow,
@@ -254,16 +256,38 @@ export default async function RhythmPage(): Promise<React.JSX.Element> {
       gaps: e.gaps,
     }))
 
+  const coachingMessage = buildCoachingMessage({
+    stalled: gapSummary.noRecentActivity,
+    overdueActions: priorityActions.filter((a) => a.isOverdue).length,
+    topAction: priorityActions[0] ?? null,
+  })
+
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Rhythm</h1>
-        <p className="text-sm text-muted-foreground">
-          Signal-based prioritization for the actions that move deals today.
-        </p>
-      </header>
+      <PageHeader
+        title="Rhythm"
+        description="Your prioritized actions — scored by deal value, urgency and engagement."
+      />
 
-      <PriorityList actions={priorityActions} />
+      <div className="grid gap-[18px] lg:grid-cols-[1.6fr_1fr]">
+        <PriorityList actions={priorityActions} />
+
+        <aside className="flex flex-col gap-[18px]">
+          <div className="rounded-lg border border-brand/30 bg-brand-subtle p-[18px]">
+            <div className="mb-2.5 flex items-center gap-2">
+              <Bot className="size-4 text-brand-emphasis" aria-hidden="true" />
+              <h2 className="text-[13px] font-semibold text-brand-emphasis">
+                Coaching
+              </h2>
+            </div>
+            <p className="text-[13px] leading-relaxed text-foreground/80">
+              {coachingMessage}
+            </p>
+          </div>
+
+          <DealScoresPanel />
+        </aside>
+      </div>
 
       {isManagerOrAbove ? (
         <section aria-labelledby="team-rhythm-section" className="flex flex-col gap-3">
@@ -303,25 +327,6 @@ export default async function RhythmPage(): Promise<React.JSX.Element> {
       </section>
 
       <section
-        aria-labelledby="deal-scores-section"
-        className="flex flex-col gap-3"
-      >
-        <div>
-          <h2
-            id="deal-scores-section"
-            className="text-lg font-semibold tracking-tight"
-          >
-            Engagement scores
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Every open deal scored 1–100 across recency, stakeholders, volume,
-            progression, and lead score.
-          </p>
-        </div>
-        <DealScoresPanel />
-      </section>
-
-      <section
         aria-labelledby="deal-gaps-section"
         className="flex flex-col gap-3"
       >
@@ -340,6 +345,36 @@ export default async function RhythmPage(): Promise<React.JSX.Element> {
       </section>
     </div>
   )
+}
+
+/**
+ * Builds the right-rail coaching line from live rhythm signals. Purely
+ * presentational — derived from data already computed for the page, no
+ * extra fetching.
+ */
+function buildCoachingMessage({
+  stalled,
+  overdueActions,
+  topAction,
+}: {
+  stalled: number
+  overdueActions: number
+  topAction: PriorityActionRow | null
+}): string {
+  if (stalled > 0) {
+    const focus = topAction
+      ? ` Prioritize ${topAction.leadName} today — it's your highest-ranked open action.`
+      : ''
+    return `You have ${stalled} high-value ${
+      stalled === 1 ? 'deal' : 'deals'
+    } with no activity in 7+ days.${focus}`
+  }
+  if (overdueActions > 0) {
+    return `You have ${overdueActions} overdue ${
+      overdueActions === 1 ? 'action' : 'actions'
+    }. Clear the top of your priority queue first to keep deals moving.`
+  }
+  return "You're on track — no stalled deals and nothing overdue. Keep the momentum going."
 }
 
 /**

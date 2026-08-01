@@ -128,7 +128,7 @@ export function DeleteCompanyDialog({
         {leadCount > 0 ? (
           <div
             role="alert"
-            className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+            className="rounded-lg border border-warning/40 bg-warning-subtle p-3 text-sm text-warning-foreground"
           >
             <p className="flex items-center gap-2 font-medium">
               <AlertTriangle className="size-4" aria-hidden="true" />

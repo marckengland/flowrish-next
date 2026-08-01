@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Mail } from 'lucide-react'
 
 import { createSupabaseBrowser } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { AuthBrandPanel } from '@/components/layout/auth-brand-panel'
 
 /**
  * Login page with email magic link and Google OAuth sign-in options.
@@ -81,28 +83,27 @@ export default function LoginPage() {
   const busy = loading || oauthLoading
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Welcome to Flowrish
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Sign in to your account to continue
-          </p>
-        </div>
+    <div className="grid min-h-screen bg-card lg:grid-cols-[1.05fr_1fr]">
+      <AuthBrandPanel />
 
-        <div className="space-y-4">
+      <div className="flex items-center justify-center bg-card px-6 py-12">
+        <div className="w-full max-w-[380px]">
+          <h1 className="mb-1.5 text-[26px] font-bold tracking-[-0.02em] text-foreground">
+            Welcome back
+          </h1>
+          <p className="mb-7 text-[14.5px] text-muted-foreground">
+            Sign in to your Flowrish workspace.
+          </p>
+
           {/* Google OAuth */}
           <Button
             variant="outline"
-            size="lg"
-            className="w-full"
+            className="h-[46px] w-full rounded-[11px] text-[14.5px] font-semibold"
             onClick={handleGoogleOAuth}
             disabled={busy}
           >
             <svg
-              className="size-4"
+              className="size-[17px]"
               viewBox="0 0 24 24"
               aria-hidden="true"
             >
@@ -126,58 +127,63 @@ export default function LoginPage() {
             {oauthLoading ? 'Redirecting…' : 'Continue with Google'}
           </Button>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                Or continue with email
-              </span>
-            </div>
+          <div className="my-[22px] flex items-center gap-3.5">
+            <span className="h-px flex-1 bg-border" />
+            <span className="font-mono text-[11px] tracking-[0.06em] text-muted-foreground">
+              OR
+            </span>
+            <span className="h-px flex-1 bg-border" />
           </div>
 
           {/* Magic Link Form */}
-          <form onSubmit={handleMagicLink} className="space-y-3">
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-foreground mb-1.5"
-              >
-                Email address
-              </label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-                autoComplete="email"
-              />
-            </div>
+          <form onSubmit={handleMagicLink}>
+            <label
+              htmlFor="email"
+              className="mb-1.5 block text-[13px] font-medium text-foreground"
+            >
+              Email address
+            </label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.com"
+              required
+              autoComplete="email"
+              className="mb-3.5"
+            />
             <Button
               type="submit"
-              size="lg"
-              className="w-full"
+              className="h-[46px] w-full rounded-[11px] text-[14.5px] font-semibold"
               disabled={busy || !email}
             >
               <Mail className="size-4" />
-              {loading ? 'Sending…' : 'Send Magic Link'}
+              {loading ? 'Sending…' : 'Send magic link'}
             </Button>
           </form>
 
           {/* Status Messages */}
           {message && (
-            <p className="text-sm text-center text-green-600 dark:text-green-400">
+            <p className="mt-4 text-center text-sm text-brand-emphasis">
               {message}
             </p>
           )}
           {error && (
-            <p role="alert" className="text-sm text-center text-destructive">
+            <p role="alert" className="mt-4 text-center text-sm text-destructive">
               {error}
             </p>
           )}
+
+          <p className="mt-6 text-center text-[13.5px] text-muted-foreground">
+            New to Flowrish?{' '}
+            <Link
+              href="/onboarding"
+              className="font-semibold text-brand-emphasis hover:underline"
+            >
+              Create a workspace
+            </Link>
+          </p>
         </div>
       </div>
     </div>

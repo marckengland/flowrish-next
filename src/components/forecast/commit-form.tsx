@@ -59,7 +59,7 @@ export function CommitForm({
   return (
     <form
       action={formAction}
-      className="flex flex-col gap-3 rounded-md border bg-card p-4 shadow-sm"
+      className="flex flex-col gap-3 rounded-lg border bg-card p-5"
       aria-busy={pending || undefined}
     >
       <div>
@@ -151,7 +151,7 @@ export function CommitForm({
         </p>
       ) : null}
       {state && 'data' in state && state.data ? (
-        <p role="status" className="text-sm text-emerald-600 dark:text-emerald-400">
+        <p role="status" className="text-sm text-brand-emphasis">
           Forecast submitted.
         </p>
       ) : null}
@@ -171,7 +171,7 @@ export function CommitForm({
 }
 
 const inputClass =
-  'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50'
+  'flex h-9 w-full rounded-[10px] border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50'
 
 function currentPeriod(): string {
   const now = new Date()

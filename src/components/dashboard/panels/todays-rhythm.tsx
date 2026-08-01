@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { Clock, AlertTriangle } from 'lucide-react'
 
 import { EmptyState, MetricCard } from '@/components/dashboard/metric-card'
-import { cn } from '@/lib/utils'
+import { Card, CardHeader, CardTitle } from '@/components/ui/card'
+import { ScoreCircle } from '@/components/scoring/score-badge'
 
 /**
  * Row shape for a pending action shown in the Today's Rhythm panel.
@@ -46,7 +47,7 @@ export function TodaysRhythmPanel({
 }: TodaysRhythmPanelProps): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3.5 sm:grid-cols-3">
         <MetricCard
           label="Open actions"
           value={openCount}
@@ -60,52 +61,37 @@ export function TodaysRhythmPanel({
         <MetricCard
           label="Overdue"
           value={overdueCount}
+          tone={overdueCount > 0 ? 'danger' : 'default'}
           icon={<AlertTriangle className="size-4" aria-hidden="true" />}
           hint={overdueCount > 0 ? 'Needs attention' : 'You are caught up'}
         />
       </div>
 
-      <section
-        aria-labelledby="todays-rhythm-heading"
-        className="rounded-md border bg-card"
-      >
-        <header className="flex items-center justify-between gap-2 border-b px-4 py-3">
-          <h2
-            id="todays-rhythm-heading"
-            className="text-sm font-semibold text-foreground"
-          >
-            Top priorities
-          </h2>
+      <Card aria-labelledby="todays-rhythm-heading" className="overflow-hidden">
+        <CardHeader>
+          <CardTitle id="todays-rhythm-heading">Top priorities</CardTitle>
           <Link
             href="/rhythm"
-            className="text-xs font-medium text-primary hover:underline"
+            title="Open the full Rhythm queue"
+            className="eyebrow text-brand-emphasis transition-opacity hover:opacity-70"
           >
-            View all
+            View all →
           </Link>
-        </header>
+        </CardHeader>
         {actions.length === 0 ? (
           <EmptyState
             title="Nothing prioritized right now"
             description="New high-priority actions will appear here as work comes in."
-            className="m-4"
+            className="m-[18px]"
           />
         ) : (
-          <ul className="divide-y">
+          <ul className="divide-y divide-row-divider">
             {actions.map((a) => (
-              <li key={a.id} className="flex items-center gap-3 px-4 py-3">
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    'inline-flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums',
-                    a.priorityScore >= 70
-                      ? 'bg-destructive/10 text-destructive'
-                      : a.priorityScore >= 40
-                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
-                        : 'bg-muted text-muted-foreground',
-                  )}
-                >
-                  {a.priorityScore}
-                </span>
+              <li
+                key={a.id}
+                className="flex items-center gap-3.5 px-[18px] py-3 transition-colors hover:bg-background"
+              >
+                <ScoreCircle score={a.priorityScore} />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium text-foreground">
                     {a.title}
@@ -120,7 +106,9 @@ export function TodaysRhythmPanel({
                     {a.dueDate ? (
                       <>
                         <span className="mx-1">·</span>
-                        <span className={a.isOverdue ? 'text-destructive' : ''}>
+                        <span
+                          className={a.isOverdue ? 'text-danger-foreground' : ''}
+                        >
                           {a.isOverdue ? 'Overdue' : 'Due'}{' '}
                           {formatDueDate(a.dueDate)}
                         </span>
@@ -132,7 +120,7 @@ export function TodaysRhythmPanel({
             ))}
           </ul>
         )}
-      </section>
+      </Card>
     </div>
   )
 }

@@ -140,17 +140,14 @@ export function AiPromptConfig(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Brain className="size-5 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-lg font-semibold">AI Prompt Configuration</h2>
-        </div>
+        <h2 className="text-sm font-semibold text-foreground">AI prompts</h2>
         <Button
           variant="default"
           size="sm"
           onClick={() => setShowCreateForm(!showCreateForm)}
         >
           <Plus className="size-4" aria-hidden="true" />
-          <span>Add Prompt</span>
+          <span>Add prompt</span>
         </Button>
       </div>
 
@@ -244,7 +241,7 @@ export function AiPromptConfig(): React.JSX.Element {
           <p className="text-sm text-muted-foreground">Loading AI prompts...</p>
         </div>
       ) : !prompts || prompts.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-md border bg-card py-12">
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border bg-card py-12">
           <Brain className="size-8 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm font-medium text-muted-foreground">No AI prompts configured</p>
           <p className="text-xs text-muted-foreground">
@@ -256,14 +253,16 @@ export function AiPromptConfig(): React.JSX.Element {
           {prompts.map((prompt) => (
             <div
               key={prompt.id}
-              className={`flex flex-col gap-2 rounded-md border p-4 ${
-                prompt.isActive ? 'bg-card' : 'bg-muted/30 opacity-60'
+              className={`flex flex-col gap-2 rounded-lg border bg-card p-[18px] ${
+                prompt.isActive ? '' : 'opacity-60'
               }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{prompt.name}</span>
+                    <span className="text-[13.5px] font-semibold text-foreground">
+                      {prompt.name}
+                    </span>
                     <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
                       {prompt.key}
                     </span>
@@ -311,7 +310,7 @@ export function AiPromptConfig(): React.JSX.Element {
                     rows={4}
                     value={editPrompt}
                     onChange={(e) => setEditPrompt(e.target.value)}
-                    className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                    className="rounded-[10px] border bg-background px-3 py-2 text-[12.5px] leading-relaxed focus-visible:border-brand focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/15"
                     aria-label="Edit system prompt"
                   />
                   <div className="flex gap-1">
@@ -332,9 +331,9 @@ export function AiPromptConfig(): React.JSX.Element {
                   </div>
                 </div>
               ) : (
-                <p className="line-clamp-2 text-xs text-muted-foreground">
+                <div className="rounded-[10px] border bg-muted/40 px-3 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
                   {prompt.systemPrompt}
-                </p>
+                </div>
               )}
             </div>
           ))}

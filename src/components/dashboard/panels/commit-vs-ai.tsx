@@ -42,7 +42,7 @@ export function CommitVsAiPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3.5 sm:grid-cols-3">
         <MetricCard
           label={`Team commit (${period})`}
           value={formatCurrency(teamCommit)}
@@ -50,6 +50,7 @@ export function CommitVsAiPanel({
         <MetricCard
           label="AI predicted"
           value={formatCurrency(aiPredicted)}
+          tone="brand"
         />
         <MetricCard
           label="Gap"
@@ -67,22 +68,19 @@ function RiskBadge({ risk }: { risk: ForecastRisk }): React.JSX.Element {
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium',
-        risk === 'On Track' &&
-          'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300',
-        risk === 'At Risk' &&
-          'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
-        risk === 'High Risk' &&
-          'border-destructive/30 bg-destructive/10 text-destructive',
+        'inline-flex items-center gap-2 rounded-[10px] px-3 py-2 text-sm font-medium',
+        risk === 'On Track' && 'bg-brand-subtle text-brand-emphasis',
+        risk === 'At Risk' && 'bg-warning-subtle text-warning-foreground',
+        risk === 'High Risk' && 'bg-danger-subtle text-danger-foreground',
       )}
     >
       <span
         aria-hidden="true"
         className={cn(
           'size-2 rounded-full',
-          risk === 'On Track' && 'bg-emerald-500',
-          risk === 'At Risk' && 'bg-amber-500',
-          risk === 'High Risk' && 'bg-destructive',
+          risk === 'On Track' && 'bg-brand',
+          risk === 'At Risk' && 'bg-warning',
+          risk === 'High Risk' && 'bg-danger',
         )}
       />
       <span>Risk: {risk}</span>

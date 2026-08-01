@@ -38,22 +38,27 @@ export function BarChart({
   const max = Math.max(...items.map((i) => i.value), 1)
 
   return (
-    <div className={cn('rounded-xl border bg-card p-4 shadow-sm', className)}>
-      <h3 className="mb-3 text-sm font-semibold">{title}</h3>
+    <div className={cn('rounded-lg border bg-card p-[18px]', className)}>
+      <h3 className="mb-4 text-sm font-semibold text-foreground">{title}</h3>
       {items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No data available</p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-4">
           {items.map((item) => (
-            <li key={item.label} className="flex items-center gap-2">
-              <span
-                className="w-28 shrink-0 truncate text-xs text-muted-foreground"
-                title={item.label}
-              >
-                {item.label}
-              </span>
+            <li key={item.label} className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-2 text-[12.5px]">
+                <span
+                  className="min-w-0 truncate text-foreground"
+                  title={item.label}
+                >
+                  {item.label}
+                </span>
+                <span className="shrink-0 tnum text-muted-foreground">
+                  {formatValue(item.value)}
+                </span>
+              </div>
               <div
-                className="relative h-6 flex-1 overflow-hidden rounded bg-muted"
+                className="relative h-2.5 w-full overflow-hidden rounded-full bg-muted"
                 role="meter"
                 aria-valuenow={item.value}
                 aria-valuemin={0}
@@ -61,15 +66,12 @@ export function BarChart({
                 aria-label={`${item.label}: ${formatValue(item.value)}`}
               >
                 <div
-                  className="h-full rounded bg-primary transition-all"
+                  className="h-full rounded-full bg-brand transition-all"
                   style={{
                     width: `${Math.max((item.value / max) * 100, 2)}%`,
                   }}
                 />
               </div>
-              <span className="w-20 shrink-0 text-right text-xs font-medium tabular-nums">
-                {formatValue(item.value)}
-              </span>
             </li>
           ))}
         </ul>

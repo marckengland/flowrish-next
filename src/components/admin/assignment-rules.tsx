@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Zap, Plus, Trash2, GripVertical } from 'lucide-react'
+import { Plus, Trash2, ArrowRight } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
@@ -46,6 +46,72 @@ const RULE_TYPE_DESCRIPTIONS: Record<RuleType, string> = {
   TERRITORY: 'Assign leads based on company name or region match',
   DEAL_SIZE: 'Assign leads based on deal value range',
   ROUND_ROBIN: 'Distribute leads evenly among selected users',
+}
+
+/**
+ * Renders the "IF" side of a rule card from its type + config — a short,
+ * human-readable summary of the matching condition.
+ */
+function describeCondition(
+  type: RuleType,
+  config: Record<string, unknown>,
+): React.ReactNode {
+  switch (type) {
+    case 'TERRITORY': {
+      const parts = [
+        ...((config.companies as string[] | undefined) ?? []),
+        ...((config.states as string[] | undefined) ?? []),
+        ...((config.countries as string[] | undefined) ?? []),
+      ]
+      return (
+        <>
+          Territory matches{' '}
+          <strong>{parts.length > 0 ? parts.join(', ') : 'configured region'}</strong>
+        </>
+      )
+    }
+    case 'DEAL_SIZE': {
+      const min = config.min as number | undefined
+      const max = config.max as number | undefined
+      let range = 'any value'
+      if (min != null && max != null) range = `$${min}–$${max}`
+      else if (min != null) range = `≥ $${min}`
+      else if (max != null) range = `≤ $${max}`
+      return (
+        <>
+          Deal value <strong>{range}</strong>
+        </>
+      )
+    }
+    case 'ROUND_ROBIN':
+      return 'Any new lead'
+    default:
+      return RULE_TYPE_LABELS[type]
+  }
+}
+
+/**
+ * Renders the "THEN" side of a rule card from its type + config.
+ */
+function describeAction(
+  type: RuleType,
+  config: Record<string, unknown>,
+): React.ReactNode {
+  switch (type) {
+    case 'ROUND_ROBIN': {
+      const count = ((config.userIds as string[] | undefined) ?? []).length
+      return (
+        <>
+          Round-robin{' '}
+          <strong>
+            {count > 0 ? `${count} user${count === 1 ? '' : 's'}` : 'team'}
+          </strong>
+        </>
+      )
+    }
+    default:
+      return 'Assign to configured user'
+  }
 }
 
 export function AssignmentRules(): React.JSX.Element {
@@ -172,17 +238,14 @@ export function AssignmentRules(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Zap className="size-5 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-lg font-semibold">Assignment Rules</h2>
-        </div>
+        <h2 className="text-sm font-semibold text-foreground">Assignment rules</h2>
         <Button
           variant="default"
           size="sm"
           onClick={() => setShowCreateForm(!showCreateForm)}
         >
           <Plus className="size-4" aria-hidden="true" />
-          <span>Add Rule</span>
+          <span>Add rule</span>
         </Button>
       </div>
 
@@ -392,39 +455,46 @@ export function AssignmentRules(): React.JSX.Element {
           <p className="text-sm text-muted-foreground">Loading rules...</p>
         </div>
       ) : !rules || rules.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-md border bg-card py-12">
-          <Zap className="size-8 text-muted-foreground" aria-hidden="true" />
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border bg-card py-12">
           <p className="text-sm font-medium text-muted-foreground">No assignment rules</p>
           <p className="text-xs text-muted-foreground">
             Add rules to automatically assign new leads to team members.
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {rules
             .sort((a, b) => a.priority - b.priority)
             .map((rule) => (
               <div
                 key={rule.id}
-                className={`flex items-center gap-3 rounded-md border p-3 ${
-                  rule.isActive ? 'bg-card' : 'bg-muted/30 opacity-60'
+                className={`flex items-center gap-3.5 rounded-[11px] border bg-card px-4 py-3.5 ${
+                  rule.isActive ? '' : 'opacity-60'
                 }`}
               >
-                <GripVertical className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      #{rule.priority}
-                    </span>
-                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-                      {RULE_TYPE_LABELS[rule.type]}
-                    </span>
-                    {!rule.isActive && (
-                      <span className="text-xs text-muted-foreground">(disabled)</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex shrink-0 gap-1">
+                <span className="shrink-0 rounded-md bg-muted px-2.5 py-1 font-mono text-[11px] font-medium text-muted-foreground">
+                  IF
+                </span>
+                <span className="text-[13.5px] text-foreground">
+                  {describeCondition(rule.type, rule.config)}
+                </span>
+                <ArrowRight
+                  className="size-[15px] shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span className="text-[13.5px] text-foreground">
+                  {describeAction(rule.type, rule.config)}
+                </span>
+                <div className="ml-auto flex shrink-0 items-center gap-1">
+                  <span
+                    className={`text-[11px] ${
+                      rule.isActive
+                        ? 'text-brand-emphasis'
+                        : 'text-muted-foreground'
+                    }`}
+                  >
+                    {rule.isActive ? 'Active' : 'Disabled'}
+                  </span>
                   <Button
                     variant="ghost"
                     size="icon-xs"

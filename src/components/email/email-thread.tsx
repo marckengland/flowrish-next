@@ -58,7 +58,7 @@ export function EmailThread({
     return (
       <div
         className={cn(
-          'flex flex-col items-center gap-2 rounded-md border border-dashed bg-card px-4 py-6 text-sm',
+          'flex flex-col items-center gap-2 rounded-lg border border-dashed bg-card px-4 py-6 text-sm',
           className,
         )}
       >
@@ -160,11 +160,11 @@ function MessageBubble({
   return (
     <article
       className={cn(
-        'rounded-md border p-3',
+        'rounded-lg border p-3',
         message.isOutbound
-          ? 'ml-4 border-primary/20 bg-primary/5'
+          ? 'ml-4 border-brand/20 bg-brand-subtle/60'
           : 'mr-4 border-border bg-card',
-        isLatest && 'ring-1 ring-ring/20',
+        isLatest && 'ring-1 ring-brand/20',
       )}
     >
       <div className="flex items-center justify-between gap-2">

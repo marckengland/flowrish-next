@@ -1,6 +1,7 @@
 import { requireSession } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { createTenantPrisma } from '@/server/db/middleware'
+import { PageHeader } from '@/components/layout/page-header'
 import { CadenceList } from '@/components/cadences/cadence-list'
 import type {
   CadenceListItem,
@@ -67,14 +68,11 @@ export default async function CadencesPage(): Promise<React.JSX.Element> {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Cadences</h1>
-        <p className="text-sm text-muted-foreground">
-          Build multi-step outreach sequences, enroll leads, and track
-          completion across your pipeline.
-        </p>
-      </header>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Cadences"
+        description="Automated multi-step outreach sequences"
+      />
 
       <CadenceList initialData={initialData} canManage={canManage} />
     </div>

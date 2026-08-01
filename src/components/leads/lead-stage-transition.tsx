@@ -94,7 +94,7 @@ export function LeadStageTransition({
   return (
     <section
       aria-label="Move stage"
-      className="flex flex-col gap-3 rounded-md border bg-card p-4"
+      className="flex flex-col gap-3 rounded-lg border bg-card p-[18px]"
     >
       <h3 className="text-sm font-semibold">Move stage</h3>
 
@@ -108,7 +108,7 @@ export function LeadStageTransition({
                 className={cn(
                   'inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium',
                   isCurrent
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'bg-brand text-brand-foreground'
                     : closed
                       ? 'bg-muted text-muted-foreground'
                       : 'bg-muted/60 text-muted-foreground',
@@ -149,7 +149,7 @@ export function LeadStageTransition({
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               disabled={pending}
-              className="h-9 w-full rounded-lg border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-9 w-full rounded-[10px] border border-input bg-card px-3 text-sm transition-[color,box-shadow,border-color] focus-visible:border-brand focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <option value="">Select stage…</option>
               {others.map((s) => (

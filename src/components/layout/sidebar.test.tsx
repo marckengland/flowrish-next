@@ -2,13 +2,26 @@
 import { createRoot } from 'react-dom/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { Sidebar } from './sidebar'
+import { Sidebar, type SidebarUser } from './sidebar'
 import { useLayoutStore } from '@/stores/layout'
 import type { Permission } from '@/types/permissions'
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/',
+  useRouter: () => ({ replace: vi.fn(), refresh: vi.fn(), push: vi.fn() }),
 }))
+
+vi.mock('@/lib/supabase/client', () => ({
+  createSupabaseBrowser: () => ({
+    auth: { signOut: vi.fn().mockResolvedValue({ error: null }) },
+  }),
+}))
+
+const TEST_USER: SidebarUser = {
+  name: 'Maya Kessler',
+  email: 'maya@example.com',
+  roleLabel: 'RevOps Lead',
+}
 
 /**
  * Tests that the Sidebar filters navigation items based on the user's
@@ -53,19 +66,24 @@ describe('Sidebar', () => {
     useLayoutStore.setState({ sidebarCollapsed: false, chatOpen: false })
   })
 
-  it('shows ungated items (Dashboard, Tasks, Search) to any user', () => {
-    const { container, unmount } = mount(<Sidebar permissions={[]} />)
+  it('shows ungated items (Dashboard, Tasks, Rhythm) to any user', () => {
+    const { container, unmount } = mount(
+      <Sidebar permissions={[]} user={TEST_USER} />,
+    )
     const labels = linkLabels(container)
 
     expect(labels).toContain('Dashboard')
     expect(labels).toContain('Tasks')
-    expect(labels).toContain('Search')
+    expect(labels).toContain('Rhythm')
     unmount()
   })
 
   it('hides Settings when user lacks admin:settings', () => {
     const { container, unmount } = mount(
-      <Sidebar permissions={['leads:read'] satisfies Permission[]} />,
+      <Sidebar
+        permissions={['leads:read'] satisfies Permission[]}
+        user={TEST_USER}
+      />,
     )
     expect(linkLabels(container)).not.toContain('Settings')
     unmount()
@@ -73,7 +91,10 @@ describe('Sidebar', () => {
 
   it('shows Settings when user has admin:settings', () => {
     const { container, unmount } = mount(
-      <Sidebar permissions={['admin:settings'] satisfies Permission[]} />,
+      <Sidebar
+        permissions={['admin:settings'] satisfies Permission[]}
+        user={TEST_USER}
+      />,
     )
     expect(linkLabels(container)).toContain('Settings')
     unmount()
@@ -81,25 +102,41 @@ describe('Sidebar', () => {
 
   it('shows Admin only when user has admin:users', () => {
     const { container, rerender, unmount } = mount(
-      <Sidebar permissions={['leads:read'] satisfies Permission[]} />,
+      <Sidebar
+        permissions={['leads:read'] satisfies Permission[]}
+        user={TEST_USER}
+      />,
     )
     expect(linkLabels(container)).not.toContain('Admin')
 
-    rerender(<Sidebar permissions={['admin:users'] satisfies Permission[]} />)
+    rerender(
+      <Sidebar
+        permissions={['admin:users'] satisfies Permission[]}
+        user={TEST_USER}
+      />,
+    )
     expect(linkLabels(container)).toContain('Admin')
     unmount()
   })
 
   it('shows Cadences when user has either cadences:read or cadences:manage', () => {
     const { container, rerender, unmount } = mount(
-      <Sidebar permissions={['cadences:read'] satisfies Permission[]} />,
+      <Sidebar
+        permissions={['cadences:read'] satisfies Permission[]}
+        user={TEST_USER}
+      />,
     )
     expect(linkLabels(container)).toContain('Cadences')
 
-    rerender(<Sidebar permissions={['cadences:manage'] satisfies Permission[]} />)
+    rerender(
+      <Sidebar
+        permissions={['cadences:manage'] satisfies Permission[]}
+        user={TEST_USER}
+      />,
+    )
     expect(linkLabels(container)).toContain('Cadences')
 
-    rerender(<Sidebar permissions={[]} />)
+    rerender(<Sidebar permissions={[]} user={TEST_USER} />)
     expect(linkLabels(container)).not.toContain('Cadences')
     unmount()
   })
@@ -113,8 +150,11 @@ describe('Sidebar', () => {
       'cadences:read',
       'admin:users',
       'admin:settings',
+      'forecast:read',
     ]
-    const { container, unmount } = mount(<Sidebar permissions={allPerms} />)
+    const { container, unmount } = mount(
+      <Sidebar permissions={allPerms} user={TEST_USER} />,
+    )
     const labels = linkLabels(container)
 
     for (const label of [
@@ -122,10 +162,12 @@ describe('Sidebar', () => {
       'Pipeline',
       'Leads',
       'Contacts',
+      'Companies',
       'Tasks',
+      'Rhythm',
       'Cadences',
-      'CSV Import/Export',
-      'Search',
+      'Forecast',
+      'Import / Export',
       'Admin',
       'Settings',
     ]) {
@@ -136,25 +178,20 @@ describe('Sidebar', () => {
 
   it('renders the organization name in the brand area when provided', () => {
     const { container, unmount } = mount(
-      <Sidebar permissions={[]} organizationName="Acme Inc" />,
+      <Sidebar permissions={[]} organizationName="Acme Inc" user={TEST_USER} />,
     )
     expect(container.textContent).toContain('Acme Inc')
     unmount()
   })
 
-  it('reflects the collapsed state from the layout store via aria/data attributes', () => {
-    useLayoutStore.setState({ sidebarCollapsed: true, chatOpen: false })
+  it('renders the pinned user card with name and role', () => {
     const { container, unmount } = mount(
-      <Sidebar permissions={['leads:read'] satisfies Permission[]} />,
+      <Sidebar permissions={[]} user={TEST_USER} />,
     )
-
-    const aside = container.querySelector('aside')
-    expect(aside).not.toBeNull()
-    expect(aside?.getAttribute('data-collapsed')).toBe('true')
-
-    const toggle = container.querySelector('button[aria-controls="primary-navigation"]')
-    expect(toggle?.getAttribute('aria-expanded')).toBe('false')
-    expect(toggle?.getAttribute('aria-label')).toBe('Expand sidebar')
+    expect(container.textContent).toContain('Maya Kessler')
+    expect(container.textContent).toContain('RevOps Lead')
+    const signOut = container.querySelector('button[aria-label="Sign out"]')
+    expect(signOut).not.toBeNull()
     unmount()
   })
 })

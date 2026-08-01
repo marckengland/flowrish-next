@@ -83,7 +83,7 @@ export function SearchBar({
       </label>
       <div className="relative w-full">
         <Search
-          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          className="pointer-events-none absolute left-3.5 top-1/2 size-[17px] -translate-y-1/2 text-muted-foreground"
           aria-hidden="true"
         />
         <input
@@ -96,9 +96,9 @@ export function SearchBar({
           placeholder={placeholder}
           autoComplete="off"
           className={cn(
-            'h-9 w-full rounded-md border border-input bg-background pl-9 pr-8 text-sm text-foreground shadow-sm outline-none transition-colors',
+            'h-[46px] w-full rounded-xl border border-input bg-card pl-11 pr-10 text-[15px] text-foreground outline-none transition-[color,box-shadow,border-color]',
             'placeholder:text-muted-foreground',
-            'focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30',
+            'focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15',
           )}
         />
         {value.length > 0 && (

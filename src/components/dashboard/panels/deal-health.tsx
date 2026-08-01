@@ -1,6 +1,8 @@
 import Link from 'next/link'
 
 import { EmptyState, MetricCard } from '@/components/dashboard/metric-card'
+import { Badge, type BadgeProps } from '@/components/ui/badge'
+import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { DealHealth } from '@/server/services/rhythm'
 
@@ -36,47 +38,52 @@ export function DealHealthPanel({
 }: DealHealthPanelProps): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3.5 sm:grid-cols-3">
         <MetricCard
           label="Healthy"
           value={summary.healthy}
+          tone="brand"
           hint="Score ≥ 60"
         />
         <MetricCard
           label="At risk"
           value={summary.atRisk}
+          tone="warning"
           hint="Score 35–59"
         />
         <MetricCard
           label="Critical"
           value={summary.critical}
+          tone="danger"
           hint="Score < 35"
         />
       </div>
 
-      <section
-        aria-labelledby="deal-health-heading"
-        className="rounded-md border bg-card"
-      >
-        <header className="border-b px-4 py-3">
-          <h2
-            id="deal-health-heading"
-            className="text-sm font-semibold text-foreground"
-          >
-            Lowest-scoring deals
-          </h2>
-        </header>
+      <Card aria-labelledby="deal-health-heading" className="overflow-hidden">
+        <CardHeader>
+          <CardTitle id="deal-health-heading">Lowest-scoring deals</CardTitle>
+        </CardHeader>
         {leads.length === 0 ? (
           <EmptyState
             title="No open deals to score"
             description="Deals will appear here once they progress through your pipeline."
-            className="m-4"
+            className="m-[18px]"
           />
         ) : (
-          <ul className="divide-y">
+          <ul className="divide-y divide-row-divider">
             {leads.map((row) => (
-              <li key={row.leadId} className="flex items-center gap-3 px-4 py-3">
-                <HealthBadge health={row.health} score={row.engagementScore} />
+              <li
+                key={row.leadId}
+                className="flex items-center gap-3.5 px-[18px] py-3 transition-colors hover:bg-background"
+              >
+                <span
+                  className={cn(
+                    'w-7 shrink-0 text-xs font-semibold tnum',
+                    HEALTH_TEXT[row.health],
+                  )}
+                >
+                  {row.engagementScore}
+                </span>
                 <div className="flex min-w-0 flex-1 flex-col">
                   <Link
                     href={`/leads/${row.leadId}`}
@@ -90,37 +97,28 @@ export function DealHealthPanel({
                       : 'No deal value set'}
                   </span>
                 </div>
+                <Badge variant={HEALTH_VARIANT[row.health]} size="sm">
+                  {row.health}
+                </Badge>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Card>
     </div>
   )
 }
 
-function HealthBadge({
-  health,
-  score,
-}: {
-  health: DealHealth
-  score: number
-}): React.JSX.Element {
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium',
-        health === 'Healthy'
-          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
-          : health === 'At Risk'
-            ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
-            : 'bg-destructive/10 text-destructive',
-      )}
-    >
-      <span className="tabular-nums">{score}</span>
-      <span>{health}</span>
-    </span>
-  )
+const HEALTH_VARIANT: Record<DealHealth, NonNullable<BadgeProps['variant']>> = {
+  Healthy: 'brand',
+  'At Risk': 'warning',
+  Critical: 'danger',
+}
+
+const HEALTH_TEXT: Record<DealHealth, string> = {
+  Healthy: 'text-brand-emphasis',
+  'At Risk': 'text-warning-foreground',
+  Critical: 'text-danger-foreground',
 }
 
 function formatCurrency(value: number): string {

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Loader2, Pause, Play, LogOut } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import {
   pauseEnrollment,
@@ -256,22 +257,16 @@ export function EnrollmentList({
 }
 
 function StatusBadge({ status }: { status: EnrollmentStatus }): React.JSX.Element {
-  const classes: Record<EnrollmentStatus, string> = {
-    ACTIVE: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-    PAUSED: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
-    COMPLETED: 'bg-blue-500/10 text-blue-700 dark:text-blue-300',
-    EXITED: 'bg-muted text-muted-foreground',
+  const variant: Record<
+    EnrollmentStatus,
+    'brand' | 'warning' | 'ai' | 'neutral'
+  > = {
+    ACTIVE: 'brand',
+    PAUSED: 'warning',
+    COMPLETED: 'ai',
+    EXITED: 'neutral',
   }
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-        classes[status],
-      )}
-    >
-      {formatStatus(status)}
-    </span>
-  )
+  return <Badge variant={variant[status]}>{formatStatus(status)}</Badge>
 }
 
 function formatStatus(status: EnrollmentStatus): string {

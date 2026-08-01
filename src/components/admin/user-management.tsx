@@ -5,7 +5,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Users, UserPlus, Mail, Trash2, LogOut } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Dialog } from '@/components/ui/dialog'
+
+/** Two-letter initials for an avatar chip, derived from a display name. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
 
 /**
  * User management component — invite users and manage roles.
@@ -148,19 +157,20 @@ export function UserManagement(): React.JSX.Element {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3.5">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Users className="size-5 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-lg font-semibold">User Management</h2>
-        </div>
+        <h2 className="text-sm font-semibold text-foreground">
+          {members && members.length > 0
+            ? `${members.length} member${members.length === 1 ? '' : 's'}`
+            : 'Members'}
+        </h2>
         <Button
           variant="default"
           size="sm"
           onClick={() => setShowInviteForm(!showInviteForm)}
         >
           <UserPlus className="size-4" aria-hidden="true" />
-          <span>Invite User</span>
+          <span>Invite member</span>
         </Button>
       </div>
 
@@ -257,78 +267,105 @@ export function UserManagement(): React.JSX.Element {
           <p className="text-sm text-muted-foreground">Loading members...</p>
         </div>
       ) : !members || members.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-md border bg-card py-12">
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border bg-card py-12">
           <Users className="size-8 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm font-medium text-muted-foreground">No members found</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
-            <thead className="border-b bg-muted/50">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Name</th>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Email</th>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Role</th>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Joined</th>
-                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Actions</th>
+        <div className="overflow-hidden rounded-lg border bg-card">
+          <table className="w-full border-collapse text-[13.5px]">
+            <thead>
+              <tr className="border-b bg-muted/40">
+                <th className="eyebrow px-4 py-3 text-left">Member</th>
+                <th className="eyebrow px-4 py-3 text-left">Role</th>
+                <th className="eyebrow px-4 py-3 text-left">Teams</th>
+                <th className="eyebrow px-4 py-3 text-left">Status</th>
+                <th className="eyebrow px-4 py-3 text-right">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y">
-              {members.map((member) => (
-                <tr key={member.id} className="hover:bg-muted/30">
-                  <td className="px-3 py-2 font-medium">
-                    {member.user.name}
-                    {member.user.email === currentUserEmail && (
-                      <span className="ml-2 inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                        YOU
+            <tbody>
+              {members.map((member) => {
+                const tms = member.teamMemberships ?? []
+                type TM = (typeof tms)[number]
+                const roleName =
+                  tms.length === 0
+                    ? 'No role'
+                    : (tms.reduce((a: TM, b: TM) =>
+                        (a.role?.hierarchy ?? 99) <= (b.role?.hierarchy ?? 99)
+                          ? a
+                          : b,
+                      ).role?.name ?? 'No role')
+                const isOwnerRole = roleName.toUpperCase() === 'OWNER'
+                const teamNames = tms.map((tm) => tm.team?.name).filter(Boolean)
+                return (
+                  <tr
+                    key={member.id}
+                    className="border-b border-row-divider last:border-0 hover:bg-muted/30"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-brand text-[11px] font-bold text-brand-foreground">
+                          {initials(member.user.name)}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 font-semibold text-foreground">
+                            {member.user.name}
+                            {member.user.email === currentUserEmail && (
+                              <Badge variant="brand" size="sm">
+                                YOU
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="truncate text-[11.5px] text-muted-foreground">
+                            {member.user.email}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant={isOwnerRole ? 'solid' : 'neutral'} size="md">
+                        {roleName}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {teamNames.length > 0 ? teamNames.join(', ') : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-1.5 text-xs text-brand-emphasis">
+                        <span className="size-1.5 rounded-full bg-brand" />
+                        Active
                       </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">{member.user.email}</td>
-                  <td className="px-3 py-2">
-                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-                      {(() => {
-                        const tms = member.teamMemberships ?? []
-                        if (tms.length === 0) return 'No role'
-                        // Show the highest-privilege role (lowest hierarchy)
-                        type TM = (typeof tms)[number]
-                        const best = tms.reduce((a: TM, b: TM) =>
-                          (a.role?.hierarchy ?? 99) <= (b.role?.hierarchy ?? 99) ? a : b
-                        )
-                        return best.role?.name ?? 'No role'
-                      })()}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {new Date(member.joinedAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {member.user.email === currentUserEmail ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setConfirmAction({ type: 'leave', member })}
-                        disabled={leaveMutation.isPending}
-                      >
-                        <LogOut className="size-3.5" />
-                        <span className="text-xs">Leave</span>
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setConfirmAction({ type: 'remove', member })}
-                        disabled={removeMutation.isPending}
-                      >
-                        <Trash2 className="size-3.5" />
-                        <span className="sr-only">Remove</span>
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {member.user.email === currentUserEmail ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground hover:bg-danger-subtle hover:text-danger-foreground"
+                          onClick={() => setConfirmAction({ type: 'leave', member })}
+                          disabled={leaveMutation.isPending}
+                        >
+                          <LogOut className="size-3.5" />
+                          <span className="text-xs">Leave</span>
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground hover:bg-danger-subtle hover:text-danger-foreground"
+                          onClick={() => setConfirmAction({ type: 'remove', member })}
+                          disabled={removeMutation.isPending}
+                        >
+                          <Trash2 className="size-3.5" />
+                          <span className="sr-only">Remove</span>
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

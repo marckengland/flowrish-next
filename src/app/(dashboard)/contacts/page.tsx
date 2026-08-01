@@ -4,6 +4,7 @@ import { getContacts } from '@/server/services/contacts'
 import { getCompanies } from '@/server/services/contacts'
 import { ContactTable } from '@/components/contacts/contact-table'
 import { ContactCreateDialog } from '@/components/contacts/contact-create-dialog'
+import { PageHeader } from '@/components/layout/page-header'
 import type { ContactListItem } from '@/hooks/use-contacts'
 
 /**
@@ -50,16 +51,14 @@ export default async function ContactsPage(): Promise<React.JSX.Element> {
   }))
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Contacts</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage contacts linked to your leads and companies.
-          </p>
-        </div>
-        {canWrite && <ContactCreateDialog companies={companyOptions} />}
-      </header>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Contacts"
+        description="People across your accounts"
+        actions={
+          canWrite ? <ContactCreateDialog companies={companyOptions} /> : null
+        }
+      />
 
       <ContactTable initialData={initialData} page={1} pageSize={20} />
     </div>

@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { inputBaseClass } from '@/components/ui/input'
 import { createCompany, updateCompany } from '@/server/actions/contacts'
 import { cn } from '@/lib/utils'
 
@@ -141,10 +142,7 @@ function Field({
         id={id}
         name={name}
         required={required}
-        className={cn(
-          'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
-          className,
-        )}
+        className={cn(inputBaseClass, className)}
         {...rest}
       />
     </div>

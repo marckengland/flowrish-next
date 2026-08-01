@@ -41,7 +41,7 @@ export interface ExportButtonProps {
  * Validates: Requirement 11.6
  */
 export function ExportButton({
-  label = 'Export CSV',
+  label = 'Export leads',
   className,
 }: ExportButtonProps): React.JSX.Element {
   const [isLoading, setIsLoading] = useState(false)
@@ -84,6 +84,7 @@ export function ExportButton({
     <div className={className}>
       <Button
         type="button"
+        variant="outline"
         onClick={handleClick}
         disabled={isLoading}
         aria-label={label}

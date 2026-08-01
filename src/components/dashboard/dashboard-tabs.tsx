@@ -62,7 +62,7 @@ export function DashboardTabs({
     >
       <Tabs.List
         loopFocus
-        className="flex flex-wrap items-center gap-1 border-b"
+        className="flex flex-wrap items-center gap-6 border-b"
         aria-label="Dashboard sections"
       >
         {visible.map((it) => (
@@ -70,11 +70,11 @@ export function DashboardTabs({
             key={it.value}
             value={it.value}
             className={cn(
-              // Button-like pill that sits above the bottom border of the list,
-              // with an underline indicating the active tab.
-              'relative -mb-px inline-flex h-9 items-center whitespace-nowrap rounded-t-md border border-b-0 border-transparent px-3 text-sm font-medium text-muted-foreground transition-colors',
-              'hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              'data-[selected]:border-border data-[selected]:bg-card data-[selected]:text-foreground',
+              // Editorial underline tab: sits on the list's bottom border and
+              // grows an ink underline + medium weight when active.
+              'relative -mb-px inline-flex h-10 items-center whitespace-nowrap border-b-2 border-transparent text-[14px] text-muted-foreground transition-colors',
+              'hover:text-foreground focus-visible:outline-none focus-visible:text-foreground',
+              'data-[selected]:border-foreground data-[selected]:font-medium data-[selected]:text-foreground',
             )}
           >
             {it.label}

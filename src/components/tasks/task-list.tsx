@@ -2,9 +2,11 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, Check, Loader2, UserCog } from 'lucide-react'
+import { Check, Loader2, UserCog } from 'lucide-react'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { TaskReassign } from '@/components/tasks/task-reassign'
 import {
@@ -43,13 +45,16 @@ export interface TaskListProps {
 /**
  * Task list with overdue highlighting and inline "Complete" action.
  *
+ * Presented as a single card of divided rows (per the visual redesign):
+ * a rounded checkbox that fills emerald when a task is completed, the
+ * task title with a muted "lead · assignee" subline, and a right-aligned
+ * status chip — a danger badge for overdue, a warning badge for tasks
+ * due today, and a mono date otherwise. Completed tasks strike through
+ * the title and dim the row.
+ *
  * - Sorted by `dueDate` ascending (server-enforced per Requirement 18.4)
- * - Overdue rows (`isOverdue: true`) carry a destructive accent and
- *   visible badge so they stand out — no grace period, the server flags
- *   a task the moment its due time passes
- * - Completed tasks are rendered with a muted strike-through so the same
- *   list can toggle between open/completed via filter without rebuilding
- * - Tapping "Complete" fires `useCompleteTaskMutation`, which hits
+ * - Completed tasks are pushed to the bottom via `groupTasks`
+ * - Tapping the checkbox fires `useCompleteTaskMutation`, which hits
  *   `PATCH /api/tasks/[id]` with `{ isComplete: true }` and invalidates
  *   the tasks cache on success
  *
@@ -80,7 +85,7 @@ export function TaskList({
       <div
         role="status"
         aria-live="polite"
-        className="flex items-center gap-2 rounded-md border bg-card p-4 text-sm text-muted-foreground"
+        className="flex items-center gap-2 rounded-lg border bg-card p-4 text-sm text-muted-foreground"
       >
         <Loader2 className="size-3 animate-spin" aria-hidden="true" />
         <span>Loading tasks…</span>
@@ -92,7 +97,7 @@ export function TaskList({
     return (
       <div
         role="alert"
-        className="rounded-md border bg-card p-4 text-sm text-destructive"
+        className="rounded-lg border bg-card p-4 text-sm text-danger-foreground"
       >
         Couldn&apos;t load tasks.{' '}
         {query.error instanceof Error ? query.error.message : ''}
@@ -102,7 +107,7 @@ export function TaskList({
 
   if (tasks.length === 0) {
     return (
-      <div className="rounded-md border bg-card p-6 text-sm text-muted-foreground">
+      <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
         No tasks match the current filters. Create a task to start tracking
         follow-ups.
       </div>
@@ -110,31 +115,32 @@ export function TaskList({
   }
 
   return (
-    <ol
-      aria-label="Task list"
-      className="flex flex-col gap-2"
-    >
-      {grouped.map((task) => (
-        <li key={task.id}>
-          <TaskRow
-            task={task}
-            canComplete={canComplete}
-            canReassign={allowReassign && !task.isComplete}
-            onReassign={() => setReassignTask(task)}
-            isCompleting={
-              completeMutation.isPending &&
-              completeMutation.variables === task.id
-            }
-            onComplete={() => completeMutation.mutate(task.id)}
-            completeError={
-              completeMutation.isError &&
-              completeMutation.variables === task.id
-                ? completeMutation.error
-                : null
-            }
-          />
-        </li>
-      ))}
+    <>
+      <Card className="overflow-hidden">
+        <ol aria-label="Task list" className="divide-y divide-row-divider">
+          {grouped.map((task) => (
+            <li key={task.id}>
+              <TaskRow
+                task={task}
+                canComplete={canComplete}
+                canReassign={allowReassign && !task.isComplete}
+                onReassign={() => setReassignTask(task)}
+                isCompleting={
+                  completeMutation.isPending &&
+                  completeMutation.variables === task.id
+                }
+                onComplete={() => completeMutation.mutate(task.id)}
+                completeError={
+                  completeMutation.isError &&
+                  completeMutation.variables === task.id
+                    ? completeMutation.error
+                    : null
+                }
+              />
+            </li>
+          ))}
+        </ol>
+      </Card>
       {reassignTask ? (
         <TaskReassign
           open
@@ -144,7 +150,7 @@ export function TaskList({
           currentAssigneeId={reassignTask.assigneeId}
         />
       ) : null}
-    </ol>
+    </>
   )
 }
 
@@ -165,10 +171,13 @@ function TaskRow({
   onComplete: () => void
   completeError: unknown
 }): React.JSX.Element {
-  const overdue = task.isOverdue
-  const priorityClass = priorityAccent(task.priority)
+  const overdue = task.isOverdue && !task.isComplete
+  const dueToday = !overdue && !task.isComplete && isSameDay(task.dueDate, new Date())
   const leadName = task.lead
     ? [task.lead.firstName, task.lead.lastName].filter(Boolean).join(' ').trim()
+    : null
+  const assigneeName = task.assignee
+    ? task.assignee.name?.trim() || task.assignee.email
     : null
 
   return (
@@ -176,16 +185,22 @@ function TaskRow({
       data-overdue={overdue ? 'true' : 'false'}
       data-complete={task.isComplete ? 'true' : 'false'}
       className={cn(
-        'relative flex cursor-pointer flex-col gap-2 rounded-md border bg-card p-3 transition-colors hover:bg-muted/30 focus-within:bg-muted/30',
-        overdue && 'border-destructive/40 bg-destructive/5',
-        task.isComplete && 'opacity-70',
+        'relative transition-colors hover:bg-background',
+        task.isComplete && 'opacity-55',
       )}
     >
-      <header className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex items-center gap-3 px-[18px] py-3.5">
+        <CompleteCheckbox
+          task={task}
+          canComplete={canComplete}
+          isCompleting={isCompleting}
+          onComplete={onComplete}
+        />
+
         <div className="min-w-0 flex-1">
           <h3
             className={cn(
-              'text-sm font-medium text-foreground',
+              'text-[13.5px] font-medium text-foreground',
               task.isComplete && 'line-through',
             )}
           >
@@ -196,107 +211,150 @@ function TaskRow({
               {task.title}
             </Link>
           </h3>
-          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span
-              className={cn(
-                'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide',
-                priorityClass,
-              )}
-            >
-              {task.priority}
-            </span>
-            <time dateTime={task.dueDate}>
-              Due {formatDateTime(task.dueDate)}
-            </time>
-            {overdue ? (
-              <span
-                role="status"
-                className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5 font-medium text-destructive"
-              >
-                <AlertTriangle className="size-3" aria-hidden="true" />
-                Overdue
-              </span>
-            ) : null}
-          </p>
+          {leadName || assigneeName ? (
+            <p className="mt-0.5 flex flex-wrap items-center gap-1 truncate text-xs text-muted-foreground">
+              {leadName && task.lead ? (
+                <Link
+                  href={`/leads/${task.lead.id}`}
+                  className="relative z-10 transition-colors hover:text-foreground hover:underline"
+                >
+                  {leadName}
+                </Link>
+              ) : null}
+              {leadName && assigneeName ? (
+                <span aria-hidden="true">·</span>
+              ) : null}
+              {assigneeName ? <span>{assigneeName}</span> : null}
+            </p>
+          ) : null}
         </div>
 
-        {!task.isComplete && canComplete ? (
-          <div className="relative z-10 flex items-center gap-1">
-            {canReassign ? (
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                onClick={() => onReassign()}
-                aria-label={`Reassign "${task.title}"`}
-                title="Reassign"
-              >
-                <UserCog className="size-3" aria-hidden="true" />
-                <span>Reassign</span>
-              </Button>
-            ) : null}
+        <div className="relative z-10 flex shrink-0 items-center gap-2">
+          {canReassign ? (
             <Button
               type="button"
-              size="xs"
-              variant="outline"
-              onClick={() => onComplete()}
-              disabled={isCompleting}
-              aria-label={`Mark "${task.title}" complete`}
+              size="icon-xs"
+              variant="ghost"
+              onClick={() => onReassign()}
+              aria-label={`Reassign "${task.title}"`}
+              title="Reassign"
             >
-              {isCompleting ? (
-                <>
-                  <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-                  <span>Saving…</span>
-                </>
-              ) : (
-                <>
-                  <Check className="size-3" aria-hidden="true" />
-                  <span>Complete</span>
-                </>
-              )}
+              <UserCog aria-hidden="true" />
             </Button>
-          </div>
-        ) : task.isComplete && task.completedAt ? (
-          <span className="text-xs text-muted-foreground">
-            Completed {formatDateTime(task.completedAt)}
-          </span>
-        ) : null}
-      </header>
-
-      {task.description ? (
-        <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-          {task.description}
-        </p>
-      ) : null}
-
-      <footer className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        {leadName && task.lead ? (
-          <Link
-            href={`/leads/${task.lead.id}`}
-            className="relative z-10 inline-flex items-center gap-1 text-foreground transition-colors hover:underline focus-visible:underline"
-          >
-            <span aria-hidden="true">·</span>
-            <span>{leadName || 'Lead'}</span>
-          </Link>
-        ) : null}
-        {task.assignee ? (
-          <span>
-            Assigned to{' '}
-            <span className="text-foreground">
-              {task.assignee.name?.trim() || task.assignee.email}
-            </span>
-          </span>
-        ) : null}
-      </footer>
+          ) : null}
+          <StatusChip task={task} overdue={overdue} dueToday={dueToday} />
+        </div>
+      </div>
 
       {completeError ? (
-        <p role="alert" className="text-xs text-destructive">
+        <p role="alert" className="px-[18px] pb-2.5 text-xs text-danger-foreground">
           {completeError instanceof Error
             ? completeError.message
             : 'Couldn’t complete task.'}
         </p>
       ) : null}
     </article>
+  )
+}
+
+/**
+ * Rounded checkbox affordance. Fills emerald with a check when the task
+ * is complete; renders an interactive toggle button when the user can
+ * complete tasks; otherwise renders a static empty box.
+ */
+function CompleteCheckbox({
+  task,
+  canComplete,
+  isCompleting,
+  onComplete,
+}: {
+  task: TaskItem
+  canComplete: boolean
+  isCompleting: boolean
+  onComplete: () => void
+}): React.JSX.Element {
+  if (task.isComplete) {
+    return (
+      <span
+        aria-hidden="true"
+        className="flex size-[18px] shrink-0 items-center justify-center rounded-[5px] bg-brand text-brand-foreground"
+      >
+        <Check className="size-3" strokeWidth={3} />
+      </span>
+    )
+  }
+
+  if (canComplete) {
+    return (
+      <button
+        type="button"
+        onClick={() => onComplete()}
+        disabled={isCompleting}
+        aria-label={`Mark "${task.title}" complete`}
+        className="relative z-10 flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border-2 border-muted-foreground/40 text-transparent transition-colors hover:border-brand hover:text-brand focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/25 disabled:opacity-50"
+      >
+        {isCompleting ? (
+          <Loader2 className="size-3 animate-spin text-muted-foreground" aria-hidden="true" />
+        ) : (
+          <Check className="size-3" strokeWidth={3} aria-hidden="true" />
+        )}
+      </button>
+    )
+  }
+
+  return (
+    <span
+      aria-hidden="true"
+      className="flex size-[18px] shrink-0 rounded-[5px] border-2 border-muted-foreground/30"
+    />
+  )
+}
+
+/**
+ * Right-aligned status chip: danger badge for overdue, warning badge for
+ * due-today, a mono "Done" marker for completed tasks, and a mono date
+ * otherwise.
+ */
+function StatusChip({
+  task,
+  overdue,
+  dueToday,
+}: {
+  task: TaskItem
+  overdue: boolean
+  dueToday: boolean
+}): React.JSX.Element {
+  if (task.isComplete) {
+    return (
+      <span
+        className="font-mono text-[11px] tnum text-muted-foreground"
+        title={
+          task.completedAt
+            ? `Completed ${formatDateTime(task.completedAt)}`
+            : undefined
+        }
+      >
+        Done
+      </span>
+    )
+  }
+  if (overdue) {
+    return (
+      <Badge variant="danger" role="status">
+        Overdue
+      </Badge>
+    )
+  }
+  if (dueToday) {
+    return <Badge variant="warning">Due today</Badge>
+  }
+  return (
+    <time
+      dateTime={task.dueDate}
+      className="font-mono text-[11px] tnum text-muted-foreground"
+    >
+      {formatShortDate(task.dueDate)}
+    </time>
   )
 }
 
@@ -316,16 +374,13 @@ export function groupTasks(tasks: readonly TaskItem[]): TaskItem[] {
   return [...open, ...done]
 }
 
-function priorityAccent(priority: TaskItem['priority']): string {
-  switch (priority) {
-    case 'HIGH':
-      return 'border-destructive/40 bg-destructive/10 text-destructive'
-    case 'MEDIUM':
-      return 'border-amber-400/40 bg-amber-100 text-amber-900 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-300'
-    case 'LOW':
-    default:
-      return 'border-muted bg-muted text-muted-foreground'
-  }
+function formatShortDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  })
 }
 
 function formatDateTime(iso: string): string {
@@ -335,4 +390,14 @@ function formatDateTime(iso: string): string {
     dateStyle: 'medium',
     timeStyle: 'short',
   })
+}
+
+function isSameDay(input: Date | string, reference: Date): boolean {
+  const d = input instanceof Date ? input : new Date(input)
+  if (Number.isNaN(d.getTime())) return false
+  return (
+    d.getFullYear() === reference.getFullYear() &&
+    d.getMonth() === reference.getMonth() &&
+    d.getDate() === reference.getDate()
+  )
 }

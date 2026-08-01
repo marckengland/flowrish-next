@@ -21,7 +21,7 @@ export function ForecastPanel({
   winRate,
 }: ForecastPanelProps): React.JSX.Element {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
       <MetricCard
         label="Total pipeline"
         value={formatCurrency(totalPipeline)}
@@ -35,6 +35,7 @@ export function ForecastPanel({
       <MetricCard
         label="AI predicted"
         value={formatCurrency(aiPredicted)}
+        tone="brand"
         hint="70% weighted + 30% monthly run rate"
       />
       <MetricCard

@@ -1,10 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { DollarSign, User } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { useKanbanStore } from '@/stores/kanban'
+import { Badge } from '@/components/ui/badge'
+import { ScoreBadge } from '@/components/scoring/score-badge'
 
 /**
  * Minimal lead shape needed to render a card on the Kanban board.
@@ -71,46 +72,46 @@ export function KanbanCard({
       data-lead-id={lead.id}
       aria-grabbed={draggable ? isDragging : undefined}
       className={cn(
-        'rounded-lg border bg-card p-3 shadow-sm transition-all',
-        draggable && 'cursor-grab hover:shadow-md active:cursor-grabbing',
-        isDragging && 'opacity-50 ring-2 ring-ring',
+        'rounded-[10px] border bg-card p-3 transition-all',
+        draggable
+          ? 'cursor-grab hover:shadow-[0_6px_16px_-8px_rgba(0,0,0,0.2)] active:cursor-grabbing'
+          : 'cursor-pointer hover:shadow-[0_6px_16px_-8px_rgba(0,0,0,0.2)]',
+        isDragging && 'border-brand shadow-lg',
       )}
     >
-      <Link
-        href={`/leads/${lead.id}`}
-        className="block text-sm font-medium leading-tight text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
-        // Prevent the link from interfering with drag initiation — the
-        // drag handler fires on the container, and the browser will still
-        // navigate on a pure click.
-        onDragStart={(e) => e.preventDefault()}
-      >
-        {fullName(lead)}
-      </Link>
-
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1 tabular-nums">
-          <DollarSign className="size-3" aria-hidden="true" />
-          <span aria-label="Deal value">
-            {formatCurrency(lead.dealValue, lead.currency)}
-          </span>
-        </span>
-
-        <span
-          className={cn(
-            'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium',
-            scoreBadgeClasses(lead.score),
-          )}
-          aria-label={`Lead score ${lead.score}`}
+      <div className="flex items-start justify-between gap-2">
+        <Link
+          href={`/leads/${lead.id}`}
+          className="block text-[13px] font-medium leading-tight text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
+          // Prevent the link from interfering with drag initiation — the
+          // drag handler fires on the container, and the browser will still
+          // navigate on a pure click.
+          onDragStart={(e) => e.preventDefault()}
         >
-          {lead.score}
-        </span>
+          {fullName(lead)}
+        </Link>
 
-        {lead.assignedUser && (
-          <span className="flex items-center gap-1">
-            <User className="size-3" aria-hidden="true" />
-            <span className="truncate">{lead.assignedUser.name}</span>
-          </span>
+        {isDragging && (
+          <Badge variant="brand" size="sm" className="shrink-0">
+            MOVING
+          </Badge>
         )}
+      </div>
+
+      {lead.assignedUser && (
+        <p className="mt-1.5 truncate text-[11.5px] text-muted-foreground">
+          {lead.assignedUser.name}
+        </p>
+      )}
+
+      <div className="mt-2.5 flex items-center justify-between gap-2">
+        <span
+          className="tnum text-xs font-semibold text-foreground"
+          aria-label="Deal value"
+        >
+          {formatCurrency(lead.dealValue, lead.currency)}
+        </span>
+        <ScoreBadge score={lead.score} />
       </div>
     </div>
   )
@@ -148,14 +149,4 @@ export function formatCurrency(
   } catch {
     return `${currency} ${n}`
   }
-}
-
-/**
- * Picks a badge color band for a lead score. Mirrors the banding used
- * elsewhere in the app (0–40 cold, 41–70 warm, 71+ hot).
- */
-function scoreBadgeClasses(score: number): string {
-  if (score >= 71) return 'bg-destructive/10 text-destructive'
-  if (score >= 41) return 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-  return 'bg-muted text-muted-foreground'
 }

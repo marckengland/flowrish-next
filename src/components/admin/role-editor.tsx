@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Shield, ChevronDown, ChevronRight } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 /**
  * Role editor component for creating and managing custom roles
@@ -143,14 +144,16 @@ export function RoleEditor(): React.JSX.Element {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium">Roles & Permissions</h3>
+        <h3 className="text-sm font-semibold text-foreground">
+          Roles &amp; permissions
+        </h3>
         <Button
           size="sm"
           onClick={() => setShowCreateForm(!showCreateForm)}
           variant={showCreateForm ? 'secondary' : 'default'}
         >
           <Plus className="size-4" />
-          {showCreateForm ? 'Cancel' : 'New Role'}
+          {showCreateForm ? 'Cancel' : 'New role'}
         </Button>
       </div>
 
@@ -224,16 +227,26 @@ function RoleCard({
   }
 
   return (
-    <div className="rounded-lg border border-border">
+    <div className="rounded-lg border bg-card">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-muted/50 transition-colors"
+        className={cn(
+          'flex w-full items-center justify-between px-4 py-3 text-left transition-colors',
+          isExpanded
+            ? 'bg-brand-subtle text-brand-emphasis'
+            : 'hover:bg-muted/50',
+        )}
       >
         <div className="flex items-center gap-3">
-          <Shield className="size-4 text-muted-foreground" />
+          <Shield
+            className={cn(
+              'size-4',
+              isExpanded ? 'text-brand-emphasis' : 'text-muted-foreground',
+            )}
+          />
           <div>
-            <span className="text-sm font-medium">{role.name}</span>
+            <span className="text-sm font-semibold">{role.name}</span>
             {role.isSystem && (
               <span className="ml-2 text-xs text-muted-foreground">(system)</span>
             )}
@@ -250,7 +263,7 @@ function RoleCard({
       </button>
 
       {isExpanded && (
-        <div className="border-t border-border px-4 py-3 space-y-4">
+        <div className="border-t px-4 py-3 space-y-4">
           {/* Permission toggles grouped by category */}
           {Object.entries(PERMISSION_GROUPS).map(([groupKey, group]) => (
             <div key={groupKey}>
@@ -267,7 +280,7 @@ function RoleCard({
                       type="checkbox"
                       checked={editedPermissions.has(perm)}
                       onChange={() => togglePermission(perm)}
-                      className="rounded border-input"
+                      className="size-4 rounded border-input accent-brand"
                     />
                     <span>{permissionLabel(perm)}</span>
                   </label>
@@ -277,7 +290,7 @@ function RoleCard({
           ))}
 
           {/* Actions */}
-          <div className="flex items-center gap-2 pt-2 border-t border-border">
+          <div className="flex items-center gap-2 pt-2 border-t">
             {hasChanges && (
               <Button size="sm" onClick={savePermissions} disabled={isUpdating}>
                 {isUpdating ? 'Saving...' : 'Save Permissions'}
@@ -336,7 +349,7 @@ function CreateRoleForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-lg border border-border p-4 space-y-4 bg-muted/30">
+    <form onSubmit={handleSubmit} className="rounded-lg border p-4 space-y-4 bg-muted/30">
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium mb-1">Role Name</label>
@@ -346,7 +359,7 @@ function CreateRoleForm({
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Sales Rep"
             required
-            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-sm"
+            className="flex h-9 w-full rounded-[10px] border border-input bg-background px-3 py-1 text-sm shadow-sm"
           />
         </div>
         <div>
@@ -360,7 +373,7 @@ function CreateRoleForm({
             max={10}
             value={hierarchy}
             onChange={(e) => setHierarchy(parseInt(e.target.value, 10))}
-            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-sm"
+            className="flex h-9 w-full rounded-[10px] border border-input bg-background px-3 py-1 text-sm shadow-sm"
           />
         </div>
       </div>
@@ -379,7 +392,7 @@ function CreateRoleForm({
                     type="checkbox"
                     checked={selectedPermissions.has(perm)}
                     onChange={() => togglePermission(perm)}
-                    className="rounded border-input"
+                    className="size-4 rounded border-input accent-brand"
                   />
                   <span>{permissionLabel(perm)}</span>
                 </label>

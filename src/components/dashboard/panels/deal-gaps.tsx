@@ -1,6 +1,8 @@
 import Link from 'next/link'
 
 import { EmptyState, MetricCard } from '@/components/dashboard/metric-card'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import type { DealGap } from '@/server/services/rhythm'
 
 export interface DealGapRow {
@@ -38,7 +40,7 @@ export function DealGapsPanel({
 }: DealGapsPanelProps): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3.5 sm:grid-cols-3">
         <MetricCard
           label="No recent activity"
           value={summary.noRecentActivity}
@@ -56,30 +58,22 @@ export function DealGapsPanel({
         />
       </div>
 
-      <section
-        aria-labelledby="deal-gaps-heading"
-        className="rounded-md border bg-card"
-      >
-        <header className="border-b px-4 py-3">
-          <h2
-            id="deal-gaps-heading"
-            className="text-sm font-semibold text-foreground"
-          >
-            Deals with gaps
-          </h2>
-        </header>
+      <Card aria-labelledby="deal-gaps-heading" className="overflow-hidden">
+        <CardHeader>
+          <CardTitle id="deal-gaps-heading">Deals with gaps</CardTitle>
+        </CardHeader>
         {leads.length === 0 ? (
           <EmptyState
             title="No gaps detected"
             description="Every open deal has recent activity and a scheduled next step."
-            className="m-4"
+            className="m-[18px]"
           />
         ) : (
-          <ul className="divide-y">
+          <ul className="divide-y divide-row-divider">
             {leads.map((row) => (
               <li
                 key={row.leadId}
-                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-2 px-[18px] py-3 transition-colors hover:bg-background sm:flex-row sm:items-center sm:justify-between"
               >
                 <Link
                   href={`/leads/${row.leadId}`}
@@ -87,16 +81,12 @@ export function DealGapsPanel({
                 >
                   {row.leadName}
                 </Link>
-                <ul
-                  aria-label="Gaps"
-                  className="flex flex-wrap gap-1.5 text-xs"
-                >
+                <ul aria-label="Gaps" className="flex flex-wrap gap-1.5">
                   {row.gaps.map((gap) => (
-                    <li
-                      key={gap}
-                      className="rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground"
-                    >
-                      {GAP_LABELS[gap]}
+                    <li key={gap}>
+                      <Badge variant="warning" size="sm">
+                        {GAP_LABELS[gap]}
+                      </Badge>
                     </li>
                   ))}
                 </ul>
@@ -104,7 +94,7 @@ export function DealGapsPanel({
             ))}
           </ul>
         )}
-      </section>
+      </Card>
     </div>
   )
 }

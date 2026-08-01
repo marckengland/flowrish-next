@@ -26,7 +26,7 @@ export default async function TaskDetailPage({
 
   if (!hasPermission(session.dbUser, 'leads:read')) {
     return (
-      <div className="flex flex-col items-start gap-2 rounded-md border bg-card p-6">
+      <div className="flex flex-col items-start gap-2 rounded-lg border bg-card p-6">
         <h1 className="text-lg font-semibold">Task</h1>
         <p className="text-sm text-muted-foreground">
           You don&apos;t have permission to view tasks in this organization.

@@ -147,6 +147,15 @@ describe('LeadTable', () => {
               dealValue: '1500',
               currency: 'USD',
               score: 72,
+              // The table shows the pipeline stage pill (not lead status),
+              // so give this row a "Qualified" stage to assert on.
+              stage: {
+                id: 'stage-q',
+                name: 'Qualified',
+                order: 2,
+                isClosedWon: false,
+                isClosedLost: false,
+              },
               assignedUser: { id: 'u1', name: 'Ops Rep', email: 'ops@example.com' },
             }),
           ],

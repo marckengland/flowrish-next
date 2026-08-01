@@ -28,7 +28,7 @@ const SECTIONS = [
     key: 'noActivitySevenDays' as const,
     title: 'No activity (7+ days)',
     icon: Clock,
-    iconClass: 'text-red-600 dark:text-red-400',
+    iconClass: 'text-danger-foreground',
     description:
       'These deals have gone cold — no emails, calls, or meetings in over a week.',
   },
@@ -36,7 +36,7 @@ const SECTIONS = [
     key: 'noFutureMeeting' as const,
     title: 'No future meeting',
     icon: Calendar,
-    iconClass: 'text-amber-600 dark:text-amber-400',
+    iconClass: 'text-warning-foreground',
     description:
       'No upcoming meeting scheduled. Deals without next steps tend to stall.',
   },
@@ -44,16 +44,16 @@ const SECTIONS = [
     key: 'singleThreaded' as const,
     title: 'Single-threaded',
     icon: Users,
-    iconClass: 'text-purple-600 dark:text-purple-400',
+    iconClass: 'text-ai',
     description:
       'Only one or no contacts linked. Multi-threading raises win rates significantly.',
   },
 ]
 
 const RISK_COLOR: Record<DealGapEntry['riskLevel'], string> = {
-  critical: 'text-red-600 dark:text-red-400',
-  at_risk: 'text-amber-600 dark:text-amber-400',
-  healthy: 'text-emerald-600 dark:text-emerald-400',
+  critical: 'text-danger-foreground',
+  at_risk: 'text-warning-foreground',
+  healthy: 'text-brand-emphasis',
 }
 
 /**
@@ -86,7 +86,7 @@ export function DealGapsPanel(): React.JSX.Element {
   }
   if (isError) {
     return (
-      <p role="alert" className="text-sm text-destructive">
+      <p role="alert" className="text-sm text-danger-foreground">
         {error instanceof Error ? error.message : 'Failed to load deal gaps.'}
       </p>
     )
@@ -101,7 +101,7 @@ export function DealGapsPanel(): React.JSX.Element {
         return (
           <section
             key={section.key}
-            className="rounded-md border bg-card"
+            className="rounded-lg border bg-card"
             aria-label={section.title}
           >
             <header className="flex items-center gap-2 border-b px-4 py-2.5">
@@ -118,7 +118,7 @@ export function DealGapsPanel(): React.JSX.Element {
               {section.description}
             </p>
             {deals.length === 0 ? (
-              <p className="px-4 pb-3 text-xs text-emerald-600 dark:text-emerald-400">
+              <p className="px-4 pb-3 text-xs text-brand-emphasis">
                 No deals with this gap.
               </p>
             ) : (
@@ -170,7 +170,7 @@ export function DealGapsPanel(): React.JSX.Element {
       {data.noActivitySevenDays.length === 0
         && data.noFutureMeeting.length === 0
         && data.singleThreaded.length === 0 ? (
-        <p className="flex items-center gap-2 rounded-md border bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+        <p className="flex items-center gap-2 rounded-lg border border-brand/30 bg-brand-subtle p-3 text-sm text-brand-emphasis">
           <AlertTriangle className="size-4" aria-hidden="true" />
           Every open deal has recent activity, a future meeting, and at
           least two stakeholders. Nice work.

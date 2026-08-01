@@ -1,8 +1,13 @@
+import Link from 'next/link'
+import { Filter, TrendingUp } from 'lucide-react'
+
 import { requireSession } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getLeadAccessFilter } from '@/server/services/access'
 import { getLeads } from '@/server/services/leads'
 import { getOrCreateDefaultPipeline } from '@/server/services/pipeline'
+import { PageHeader } from '@/components/layout/page-header'
+import { Button } from '@/components/ui/button'
 import {
   KanbanBoard,
   type KanbanStage,
@@ -75,16 +80,33 @@ export default async function PipelinePage(): Promise<React.JSX.Element> {
 
   return (
     <div className="flex flex-col gap-4">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {pipeline.name}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {canMove
-            ? 'Drag leads between stages to update their pipeline position.'
-            : 'Read-only view of the organization pipeline.'}
-        </p>
-      </header>
+      <PageHeader
+        title={pipeline.name}
+        description={
+          <>
+            <span className="tnum">{firstPage.pagination.total}</span> open
+            deals{canMove ? null : ' · Read-only'}
+          </>
+        }
+        actions={
+          <>
+            <Button variant="outline" size="lg" type="button" title="Filter deals">
+              <Filter className="size-4" aria-hidden="true" />
+              <span>Filter</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              nativeButton={false}
+              render={<Link href="/forecast" />}
+              title="View forecast"
+            >
+              <TrendingUp className="size-4" aria-hidden="true" />
+              <span>Forecast</span>
+            </Button>
+          </>
+        }
+      />
 
       <KanbanBoard
         stages={stages}

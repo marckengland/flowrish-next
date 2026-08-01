@@ -164,18 +164,18 @@ export default async function LeadDetailPage({
   )
 
   return (
-    <div className="flex flex-col gap-5">
-      <nav className="text-sm">
+    <div className="flex max-w-[1080px] flex-col gap-5">
+      <nav>
         <Link
           href="/leads"
-          className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+          className="inline-flex items-center gap-1.5 font-mono text-[13px] text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronLeft className="size-4" aria-hidden="true" />
           <span>Back to leads</span>
         </Link>
       </nav>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-5">
           <LeadDetail
             lead={{
@@ -231,10 +231,10 @@ export default async function LeadDetailPage({
           />
         </div>
 
-        <aside className="flex flex-col gap-5">
+        <aside className="flex flex-col gap-[18px]">
           <section
             aria-label="Convert lead"
-            className="flex flex-col gap-3 rounded-md border bg-card p-4"
+            className="flex flex-col gap-3 rounded-lg border bg-card p-[18px]"
           >
             <h2 className="text-sm font-semibold">Convert</h2>
             {canWrite ? (
@@ -251,9 +251,9 @@ export default async function LeadDetailPage({
 
           <section
             aria-label="Conversation intelligence"
-            className="flex flex-col gap-3 rounded-md border bg-card p-4"
+            className="flex flex-col gap-3 rounded-lg border border-brand/30 bg-brand-subtle p-[18px]"
           >
-            <h2 className="text-sm font-semibold">
+            <h2 className="text-sm font-semibold text-brand-emphasis">
               Conversation intelligence
             </h2>
             <ConversationIntelligence
@@ -265,9 +265,9 @@ export default async function LeadDetailPage({
           {canWrite && (
             <section
               aria-label="AI Tools"
-              className="flex flex-col gap-3 rounded-md border bg-card p-4"
+              className="flex flex-col gap-3 rounded-lg border border-ai/30 bg-ai-subtle p-[18px]"
             >
-              <h2 className="text-sm font-semibold">AI Tools</h2>
+              <h2 className="text-sm font-semibold text-ai">AI Tools</h2>
               <EmailGenerator leadId={lead.id} />
               {lead.companyId && (
                 <AccountResearch companyId={lead.companyId} />
@@ -278,7 +278,7 @@ export default async function LeadDetailPage({
           {canWrite && (
             <section
               aria-label="Duplicate detection"
-              className="flex flex-col gap-3 rounded-md border bg-card p-4"
+              className="flex flex-col gap-3 rounded-lg border bg-card p-[18px]"
             >
               <h2 className="text-sm font-semibold">Duplicates</h2>
               <DuplicateCheck
@@ -292,9 +292,11 @@ export default async function LeadDetailPage({
           {canWrite && !canDelete && (
             <section
               aria-label="Request deletion"
-              className="flex flex-col gap-3 rounded-md border border-destructive/20 bg-card p-4"
+              className="flex flex-col gap-3 rounded-lg border border-danger/20 bg-card p-[18px]"
             >
-              <h2 className="text-sm font-semibold text-destructive">Danger Zone</h2>
+              <h2 className="text-sm font-semibold text-danger-foreground">
+                Danger Zone
+              </h2>
               <DeletionRequestButton
                 leadId={lead.id}
                 leadName={`${lead.firstName} ${lead.lastName}`.trim()}

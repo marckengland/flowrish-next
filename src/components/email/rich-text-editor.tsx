@@ -330,7 +330,7 @@ export function RichTextEditor({
     return (
       <div
         className={cn(
-          'animate-pulse rounded-md border bg-muted',
+          'animate-pulse rounded-[10px] border bg-muted',
           className,
         )}
         style={{ minHeight }}
@@ -382,8 +382,8 @@ export function RichTextEditor({
   return (
     <div
       className={cn(
-        'relative flex flex-col rounded-md border transition-colors',
-        isDragOver && 'border-primary ring-1 ring-primary/30',
+        'relative flex flex-col rounded-[10px] border transition-colors',
+        isDragOver && 'border-brand ring-1 ring-brand/30',
         className,
       )}
       onDragOver={handleDragOver}
@@ -438,7 +438,7 @@ export function RichTextEditor({
         {isDragOver && onFilesDropped && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-primary/5 text-sm font-medium text-primary"
+            className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[10px] bg-brand-subtle text-sm font-medium text-brand-emphasis"
           >
             Drop files to attach
           </div>
@@ -913,7 +913,7 @@ function PreviewSection({ html }: { html: string }) {
   // can visually distinguish replaced text from literal copy.
   let preview = html
   for (const t of PERSONALIZATION_TAGS) {
-    const replacement = `<span class="text-purple-600 font-medium">${t.sample}</span>`
+    const replacement = `<span class="text-ai font-medium">${t.sample}</span>`
     preview = preview
       .split(t.tag)
       .join(replacement)

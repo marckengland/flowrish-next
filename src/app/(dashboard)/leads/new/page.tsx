@@ -39,10 +39,10 @@ export default async function NewLeadPage(): Promise<React.JSX.Element> {
 
   return (
     <div className="flex flex-col gap-5">
-      <nav className="text-sm">
+      <nav>
         <Link
           href="/leads"
-          className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+          className="inline-flex items-center gap-1.5 font-mono text-[13px] text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronLeft className="size-4" aria-hidden="true" />
           <span>Back to leads</span>
@@ -50,14 +50,16 @@ export default async function NewLeadPage(): Promise<React.JSX.Element> {
       </nav>
 
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">New lead</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-[24px] font-bold leading-tight tracking-[-0.02em]">
+          New lead
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Add a prospect to your pipeline. Required fields are marked with an
           asterisk.
         </p>
       </header>
 
-      <div className="rounded-md border bg-card p-5">
+      <div className="max-w-[860px] rounded-lg border bg-card p-[18px]">
         <NewLeadForm stages={stages} />
       </div>
     </div>

@@ -10,11 +10,10 @@ interface ScoreBadgeProps {
  * Color-tiered score badge. Reused on the ranked lead list, the lead
  * detail header, and inside Kanban cards.
  *
- * Score tiers (matching the original Flowrish UX):
- *   - 75–100  green  (hot)
- *   - 50–74   blue   (warm)
- *   - 25–49   amber  (cool)
- *   -  0–24   red    (cold)
+ * Score bands (design handoff):
+ *   - 70–100  red tint    (high)
+ *   - 50–69   amber tint  (medium)
+ *   -  0–49   neutral     (low)
  *
  * Scores outside [0, 100] are clamped before display so a badly-shaped
  * upstream value doesn't render with broken styling.
@@ -40,12 +39,43 @@ export function ScoreBadge({
   )
 }
 
+/**
+ * Band tones per the design handoff:
+ *   - high  (≥70)   red tint    ("high-score badges")
+ *   - medium (50–69) amber tint  ("medium score badges")
+ *   - low   (<50)   neutral gray
+ */
 function scoreToneClass(score: number): string {
-  if (score >= 75)
-    return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-  if (score >= 50)
-    return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-  if (score >= 25)
-    return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-  return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+  if (score >= 70) return 'bg-danger-subtle text-danger-foreground'
+  if (score >= 50) return 'bg-warning-subtle text-warning-foreground'
+  return 'bg-muted text-muted-foreground'
+}
+
+interface ScoreCircleProps {
+  score: number
+  className?: string
+}
+
+/**
+ * Band-colored score circle used in priority queues (dashboard "Top
+ * priorities", Rhythm queue). Matches the design's 36px tinted circle
+ * with tabular numerals.
+ */
+export function ScoreCircle({
+  score,
+  className,
+}: ScoreCircleProps): React.JSX.Element {
+  const clamped = Math.max(0, Math.min(100, Math.round(score)))
+  return (
+    <span
+      className={cn(
+        'flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums',
+        scoreToneClass(clamped),
+        className,
+      )}
+      title={`Score: ${clamped}`}
+    >
+      {clamped}
+    </span>
+  )
 }

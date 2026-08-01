@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
 import { LeadFilters, type FilterOption } from '@/components/leads/lead-filters'
 import { LeadTable } from '@/components/leads/lead-table'
 import { prisma } from '@/server/db/client'
@@ -79,27 +80,27 @@ export default async function LeadsPage(): Promise<React.JSX.Element> {
     pagination: firstPage.pagination,
   }
 
+  const leadCount = initialData.pagination.total
+
   return (
-    <div className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Leads</h1>
-          <p className="text-sm text-muted-foreground">
-            Track prospects, filter by stage or owner, and open a lead to see
-            its full timeline.
-          </p>
-        </div>
-        {canWrite && (
-          <Button
-            render={<Link href="/leads/new" />}
-            nativeButton={false}
-            size="sm"
-          >
-            <Plus className="size-4" aria-hidden="true" />
-            <span>New lead</span>
-          </Button>
-        )}
-      </header>
+    <div className="flex max-w-[1120px] flex-col gap-5">
+      <PageHeader
+        title="Leads"
+        description={`${leadCount.toLocaleString()} ${
+          leadCount === 1 ? 'lead' : 'leads'
+        } in your book of business`}
+        actions={
+          canWrite ? (
+            <Button
+              render={<Link href="/leads/new" />}
+              nativeButton={false}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              <span>New lead</span>
+            </Button>
+          ) : undefined
+        }
+      />
 
       <LeadFilters stages={stageOptions} assignees={assigneeOptions} />
 

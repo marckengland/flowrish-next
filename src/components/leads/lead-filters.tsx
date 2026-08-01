@@ -97,7 +97,7 @@ export function LeadFilters({
     <section
       aria-label="Lead filters"
       className={cn(
-        'flex flex-col gap-3 rounded-md border bg-card p-3 sm:flex-row sm:flex-wrap sm:items-end',
+        'flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:flex-wrap sm:items-end',
         className,
       )}
     >
@@ -188,10 +188,7 @@ function Field({
 }): React.JSX.Element {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-[14rem]">
-      <label
-        htmlFor={id}
-        className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-      >
+      <label htmlFor={id} className="eyebrow">
         {label}
       </label>
       {children}

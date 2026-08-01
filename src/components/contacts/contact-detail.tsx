@@ -89,7 +89,9 @@ export function ContactDetailView({
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{fullName}</h1>
+          <h1 className="text-[24px] font-bold leading-tight tracking-[-0.02em]">
+            {fullName}
+          </h1>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             {contact.jobTitle ? (
               <span className="flex items-center gap-1">
@@ -146,17 +148,17 @@ export function ContactDetailView({
 
       <section
         aria-labelledby="contact-info"
-        className="rounded-md border bg-card"
+        className="rounded-lg border bg-card"
       >
         <h2 id="contact-info" className="sr-only">
           Contact information
         </h2>
-        <dl className="divide-y text-sm">
+        <dl className="divide-y divide-row-divider text-sm">
           <DetailRow icon={Mail} label="Email">
             {contact.email ? (
               <a
                 href={`mailto:${contact.email}`}
-                className="text-blue-600 hover:underline dark:text-blue-400"
+                className="text-brand-emphasis hover:underline"
               >
                 {contact.email}
               </a>
@@ -168,7 +170,7 @@ export function ContactDetailView({
             {contact.phone ? (
               <a
                 href={`tel:${contact.phone}`}
-                className="text-blue-600 hover:underline dark:text-blue-400"
+                className="text-brand-emphasis hover:underline"
               >
                 {contact.phone}
               </a>
@@ -182,7 +184,7 @@ export function ContactDetailView({
                 href={normalizeUrl(contact.linkedinUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:underline dark:text-blue-400"
+                className="text-brand-emphasis hover:underline"
               >
                 {contact.linkedinUrl}
               </a>
@@ -202,16 +204,16 @@ export function ContactDetailView({
           Linked leads ({leads.length})
         </h2>
         {leads.length === 0 ? (
-          <p className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+          <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
             This contact isn’t linked to any leads yet.
           </p>
         ) : (
-          <ul className="divide-y rounded-md border">
+          <ul className="divide-y divide-row-divider rounded-lg border bg-card">
             {leads.map((lead) => (
               <li key={lead.id}>
                 <Link
                   href={`/leads/${lead.id}`}
-                  className="flex items-center justify-between px-3 py-2.5 text-sm transition-colors hover:bg-muted/40"
+                  className="flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-background"
                 >
                   <span className="font-medium">
                     {lead.firstName} {lead.lastName}
@@ -236,7 +238,7 @@ interface DetailRowProps {
 function DetailRow({ icon: Icon, label, children }: DetailRowProps) {
   return (
     <div className="grid grid-cols-[140px_1fr] items-center gap-3 px-4 py-2.5">
-      <dt className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <dt className="eyebrow flex items-center gap-2">
         <Icon className="size-3.5" aria-hidden />
         {label}
       </dt>

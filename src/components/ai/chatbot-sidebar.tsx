@@ -9,7 +9,6 @@ import {
   ChevronUp,
   Loader2,
   Send,
-  User,
   X,
   XCircle,
   Zap,
@@ -412,30 +411,28 @@ export function ChatbotSidebar(): React.JSX.Element | null {
 
   return (
     <>
-      {/* Mobile backdrop — visible only below the `sm` breakpoint,
-          where the sidebar renders as a fixed overlay rather than an
-          inline column. Tapping outside the sidebar dismisses it. */}
+      {/* Scrim overlay behind the drawer. Tapping outside dismisses it. */}
       <div
         aria-hidden="true"
         onClick={() => setOpen(false)}
-        className="fixed inset-0 z-30 bg-black/40 sm:hidden"
+        className="fixed inset-0 z-40 bg-black/[0.28]"
       />
       <aside
         aria-label="AI assistant"
         role="complementary"
-        className="fixed inset-y-0 right-0 z-40 flex w-[min(22rem,calc(100vw-2rem))] flex-col border-l bg-background shadow-lg sm:static sm:h-full sm:w-96 sm:shrink-0 sm:shadow-sm"
+        className="fixed inset-y-0 right-0 z-50 flex w-[min(392px,calc(100vw-2rem))] flex-col border-l bg-card shadow-[-24px_0_60px_-24px_rgba(0,0,0,0.28)]"
       >
-      <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
-        <div className="flex items-center gap-2">
+      <header className="flex h-[60px] shrink-0 items-center justify-between border-b px-[18px]">
+        <div className="flex items-center gap-2.5">
           <span
             aria-hidden="true"
-            className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary"
+            className="flex size-8 items-center justify-center rounded-[9px] bg-brand-subtle text-brand-emphasis"
           >
-            <Bot className="size-4" />
+            <Bot className="size-[17px]" />
           </span>
           <div className="leading-tight">
-            <p className="text-sm font-semibold">AI Assistant</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm font-semibold">Ask Flowrish</p>
+            <p className="text-[11.5px] text-muted-foreground">
               Ask anything or request an action
             </p>
           </div>
@@ -462,7 +459,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
         role="log"
         aria-live="polite"
         aria-busy={pending || undefined}
-        className="flex-1 space-y-3 overflow-y-auto p-4"
+        className="flex-1 space-y-3.5 overflow-y-auto p-[18px]"
       >
         {turns.length === 0 ? (
           <EmptyState onPrompt={(p) => send(p)} />
@@ -488,22 +485,22 @@ export function ChatbotSidebar(): React.JSX.Element | null {
       </div>
 
       <form
-        className="border-t p-3"
+        className="border-t p-3.5"
         onSubmit={(event) => {
           event.preventDefault()
           send()
         }}
       >
         {autoConfirm && (
-          <p className="mb-1.5 flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
+          <p className="mb-2 flex items-center gap-1.5 text-[10.5px] text-warning-foreground">
             <Zap className="size-3" aria-hidden="true" />
-            Auto-confirm ON — actions run without asking
+            Auto-confirm is ON — actions run without asking
           </p>
         )}
         <label htmlFor="chatbot-input" className="sr-only">
           Message
         </label>
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-2.5">
           <textarea
             id="chatbot-input"
             ref={textareaRef}
@@ -513,11 +510,12 @@ export function ChatbotSidebar(): React.JSX.Element | null {
             rows={2}
             placeholder="Ask the assistant…"
             disabled={pending}
-            className="flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 resize-none rounded-[10px] border border-input bg-card px-3 py-2.5 text-sm shadow-sm transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50"
           />
           <Button
             type="submit"
-            size="icon-sm"
+            size="icon-lg"
+            className="rounded-[10px]"
             disabled={pending || input.trim().length === 0}
             aria-label="Send message"
             title="Send"
@@ -525,8 +523,8 @@ export function ChatbotSidebar(): React.JSX.Element | null {
             <Send className="size-4" aria-hidden="true" />
           </Button>
         </div>
-        <p className="mt-1 text-[10px] text-muted-foreground">
-          Press Enter to send. Shift+Enter for a new line.
+        <p className="mt-2 text-[10.5px] text-muted-foreground">
+          Enter to send · Shift+Enter for a new line
         </p>
       </form>
       </aside>
@@ -552,7 +550,7 @@ function AutoConfirmToggle({
           : 'Auto-confirm is OFF: actions wait for your explicit confirm click.'
       }
     >
-      <span className="hidden sm:inline">Auto-run</span>
+      <span>Auto-run</span>
       <button
         type="button"
         role="switch"
@@ -561,7 +559,7 @@ function AutoConfirmToggle({
         onClick={() => onChange(!value)}
         className={cn(
           'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          value ? 'bg-amber-500' : 'bg-muted',
+          value ? 'bg-warning' : 'bg-muted',
         )}
       >
         <span
@@ -615,16 +613,18 @@ function EmptyState({
   onPrompt: (text: string) => void
 }): React.JSX.Element {
   return (
-    <div className="space-y-3">
-      <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-center text-sm text-muted-foreground">
-        <Bot
-          className="mx-auto mb-2 size-5 text-muted-foreground/70"
+    <div className="space-y-3.5">
+      <div className="flex gap-2.5">
+        <span
           aria-hidden="true"
-        />
-        <p className="font-medium text-foreground">How can I help?</p>
-        <p className="mt-1 text-xs">
-          Ask a question or request an action — try one of these prompts.
-        </p>
+          className="mt-0.5 flex size-[26px] shrink-0 items-center justify-center rounded-full bg-muted text-foreground"
+        >
+          <Bot className="size-3.5" />
+        </span>
+        <div className="rounded-xl rounded-tl-[3px] bg-muted px-3 py-2.5 text-[13px] leading-relaxed text-foreground">
+          Hi there — I can pull up records, draft emails, or take actions like
+          creating leads and enrolling in cadences. What do you need?
+        </div>
       </div>
       <div className="flex flex-col gap-1.5">
         {QUICK_PROMPTS.map((p) => (
@@ -632,7 +632,7 @@ function EmptyState({
             key={p}
             type="button"
             onClick={() => onPrompt(p)}
-            className="rounded-lg border bg-card px-2.5 py-1.5 text-left text-[12px] transition-colors hover:bg-muted/40"
+            className="rounded-[9px] border bg-card px-3 py-2 text-left text-[12.5px] transition-colors hover:bg-muted/50"
           >
             {p}
           </button>
@@ -656,16 +656,8 @@ function Turn({
   if (turn.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="flex max-w-[85%] items-start gap-2">
-          <div className="rounded-lg rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
-            <p className="whitespace-pre-wrap break-words">{turn.content}</p>
-          </div>
-          <span
-            aria-hidden="true"
-            className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
-          >
-            <User className="size-3.5" />
-          </span>
+        <div className="max-w-[85%] rounded-xl rounded-tr-[3px] bg-foreground px-3 py-2.5 text-[13px] text-background">
+          <p className="whitespace-pre-wrap break-words">{turn.content}</p>
         </div>
       </div>
     )
@@ -673,7 +665,7 @@ function Turn({
   if (turn.role === 'error') {
     return (
       <div role="alert" className="flex justify-start">
-        <div className="max-w-[85%] rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        <div className="max-w-[85%] rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-[13px] text-destructive">
           <p>{turn.content}</p>
         </div>
       </div>
@@ -681,15 +673,15 @@ function Turn({
   }
   return (
     <div className="flex justify-start">
-      <div className="flex w-full max-w-[90%] items-start gap-2">
+      <div className="flex w-full max-w-[90%] items-start gap-2.5">
         <span
           aria-hidden="true"
-          className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"
+          className="mt-0.5 flex size-[26px] shrink-0 items-center justify-center rounded-full bg-muted text-foreground"
         >
           <Bot className="size-3.5" />
         </span>
         <div className="flex-1 space-y-2">
-          <div className="rounded-lg rounded-tl-sm bg-muted px-3 py-2 text-sm text-foreground">
+          <div className="rounded-xl rounded-tl-[3px] bg-muted px-3 py-2.5 text-[13px] text-foreground">
             <Markdown source={turn.content} />
           </div>
           {turn.action && turn.actionStatus === 'pending' && (
@@ -728,16 +720,16 @@ function ActionCard({
 }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false)
   return (
-    <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-800 dark:bg-amber-950/30">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-amber-800 dark:text-amber-200">
-        <Zap className="size-3" aria-hidden="true" />
+    <div className="rounded-[10px] border border-warning bg-warning-subtle p-[11px]">
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-warning-foreground">
+        <Zap className="size-3.5" aria-hidden="true" />
         <span>{ACTION_LABELS[action.type] ?? 'Run action'}: </span>
         <span className="font-normal">{action.description}</span>
       </div>
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="mt-1 flex items-center gap-1 text-[10px] text-amber-700 hover:underline dark:text-amber-300"
+        className="mt-1 flex items-center gap-1 text-[10px] text-warning-foreground hover:underline"
       >
         {expanded ? (
           <ChevronUp className="size-3" />
@@ -747,7 +739,7 @@ function ActionCard({
         {expanded ? 'Hide details' : 'Show details'}
       </button>
       {expanded && (
-        <pre className="mt-1 break-words rounded bg-amber-100/50 p-1.5 font-mono text-[10px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+        <pre className="mt-1 break-words rounded bg-warning/10 p-1.5 font-mono text-[10px] text-warning-foreground">
           {action.type}: {JSON.stringify(action.params, null, 2)}
         </pre>
       )}
@@ -755,14 +747,14 @@ function ActionCard({
         <button
           type="button"
           onClick={onConfirm}
-          className="flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-emerald-700"
+          className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-[12px] font-semibold text-brand-foreground transition-colors hover:bg-brand-hover"
         >
           <Check className="size-3" aria-hidden="true" /> Confirm
         </button>
         <button
           type="button"
           onClick={onReject}
-          className="flex items-center gap-1 rounded bg-destructive px-2 py-1 text-[11px] font-medium text-destructive-foreground hover:bg-destructive/90"
+          className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-[12px] font-semibold text-foreground/70 transition-colors hover:bg-muted"
         >
           <XCircle className="size-3" aria-hidden="true" /> Cancel
         </button>
@@ -787,16 +779,15 @@ function ActionStatusBadge({
     { className: string; icon: React.ReactNode }
   > = {
     pending: {
-      className: 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200',
+      className: 'border-border bg-muted text-muted-foreground',
       icon: <Loader2 className="size-3 animate-spin" aria-hidden="true" />,
     },
     confirmed: {
-      className: 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200',
+      className: 'border-border bg-muted text-muted-foreground',
       icon: <Loader2 className="size-3 animate-spin" aria-hidden="true" />,
     },
     executed: {
-      className:
-        'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200',
+      className: 'border-brand/30 bg-brand-subtle text-brand-emphasis',
       icon: <Check className="size-3" aria-hidden="true" />,
     },
     rejected: {
@@ -804,7 +795,7 @@ function ActionStatusBadge({
       icon: <XCircle className="size-3" aria-hidden="true" />,
     },
     failed: {
-      className: 'border-destructive/30 bg-destructive/5 text-destructive',
+      className: 'border-danger/30 bg-danger-subtle text-danger-foreground',
       icon: <XCircle className="size-3" aria-hidden="true" />,
     },
   }
@@ -812,7 +803,7 @@ function ActionStatusBadge({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11px]',
+        'flex flex-wrap items-center gap-2 rounded-[10px] border px-2.5 py-1.5 text-[11px]',
         cfg.className,
       )}
     >

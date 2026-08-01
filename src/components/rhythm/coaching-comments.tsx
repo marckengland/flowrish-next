@@ -135,7 +135,7 @@ export function CoachingComments({
   return (
     <section
       aria-label="Coaching comments"
-      className="rounded-md border bg-background/60 p-3"
+      className="rounded-lg border bg-background/60 p-3"
     >
       <header className="flex items-center justify-between">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -172,7 +172,7 @@ export function CoachingComments({
               Loading coaching comments…
             </p>
           ) : query.isError ? (
-            <p role="alert" className="text-xs text-destructive">
+            <p role="alert" className="text-xs text-danger-foreground">
               {query.error instanceof Error
                 ? query.error.message
                 : 'Couldn’t load coaching comments.'}
@@ -186,7 +186,7 @@ export function CoachingComments({
               {comments.map((comment) => (
                 <li
                   key={comment.id}
-                  className="rounded-md border bg-card px-3 py-2 text-sm"
+                  className="rounded-lg border bg-card px-3 py-2 text-sm"
                 >
                   <header className="flex items-center justify-between gap-2 text-xs">
                     <span className="font-medium text-foreground">
@@ -228,10 +228,10 @@ export function CoachingComments({
                 onChange={(e) => setContent(e.target.value)}
                 rows={2}
                 placeholder="Add coaching feedback…"
-                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-full rounded-[10px] border border-input bg-card px-3 py-1.5 text-sm shadow-sm transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15"
               />
               {mutation.isError ? (
-                <p role="alert" className="text-xs text-destructive">
+                <p role="alert" className="text-xs text-danger-foreground">
                   {mutation.error instanceof Error
                     ? mutation.error.message
                     : 'Couldn’t add comment.'}

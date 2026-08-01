@@ -82,7 +82,7 @@ export function DealHealth({
 
       <section
         aria-labelledby="rhythm-deal-health-heading"
-        className="rounded-md border bg-card"
+        className="rounded-lg border bg-card"
       >
         <header className="border-b px-4 py-3">
           <h2
@@ -156,10 +156,10 @@ function HealthBadge({
       className={cn(
         'inline-flex items-center gap-2 self-start rounded-full px-2.5 py-1 text-xs font-medium',
         health === 'Healthy'
-          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
+          ? 'bg-brand-subtle text-brand-emphasis'
           : health === 'At Risk'
-            ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
-            : 'bg-destructive/10 text-destructive',
+            ? 'bg-warning-subtle text-warning-foreground'
+            : 'bg-danger-subtle text-danger-foreground',
       )}
     >
       <span className="tabular-nums">{score}</span>

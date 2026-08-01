@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Trash2 } from 'lucide-react'
+import { Loader2, Mail, Phone, Trash2 } from 'lucide-react'
 
 import { useContactsQuery, useDeleteContactMutation, type ContactListItem } from '@/hooks/use-contacts'
 import { Button } from '@/components/ui/button'
@@ -30,11 +30,12 @@ export interface ContactTableProps {
 }
 
 /**
- * Data table for the contacts list page.
+ * Card-grid list for the contacts page.
  *
  * - Fetches data via TanStack Query (`useContactsQuery`)
  * - Supports search filtering
- * - Links each row to contact detail (future)
+ * - Each card links to contact detail; a stretched overlay link keeps
+ *   the whole card clickable while the delete control stays reachable.
  *
  * Validates: Requirement 19.1
  */
@@ -60,7 +61,7 @@ export function ContactTable({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {/* Search input */}
       <div className="flex items-center gap-3">
         <Input
@@ -79,82 +80,87 @@ export function ContactTable({
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-md border bg-card">
-        <table className="w-full min-w-[700px] text-sm">
-          <thead className="bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th scope="col" className="px-3 py-2 font-medium">Name</th>
-              <th scope="col" className="px-3 py-2 font-medium">Email</th>
-              <th scope="col" className="px-3 py-2 font-medium">Phone</th>
-              <th scope="col" className="px-3 py-2 font-medium">Job Title</th>
-              <th scope="col" className="px-3 py-2 font-medium">Company</th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {query.isError ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-sm text-destructive" role="alert">
-                  Couldn&apos;t load contacts.{' '}
-                  {query.error instanceof Error ? query.error.message : ''}
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-sm text-muted-foreground">
-                  {currentSearch ? 'No contacts match your search.' : 'No contacts yet.'}
-                </td>
-              </tr>
-            ) : (
-              rows.map((contact) => (
-                <tr
-                  key={contact.id}
-                  className="relative cursor-pointer border-t transition-colors hover:bg-muted/30 focus-within:bg-muted/30"
+      {query.isError ? (
+        <div
+          role="alert"
+          className="rounded-lg border bg-card p-8 text-center text-sm text-destructive"
+        >
+          Couldn&apos;t load contacts.{' '}
+          {query.error instanceof Error ? query.error.message : ''}
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
+          {currentSearch ? 'No contacts match your search.' : 'No contacts yet.'}
+        </div>
+      ) : (
+        <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+          {rows.map((contact) => {
+            const fullName = `${contact.firstName} ${contact.lastName}`.trim()
+            const roleCompany = [contact.jobTitle, contact.company?.name]
+              .filter(Boolean)
+              .join(' · ')
+            return (
+              <div
+                key={contact.id}
+                className="group relative rounded-lg border bg-card p-4 transition-colors hover:bg-background"
+              >
+                <Link
+                  href={`/contacts/${contact.id}`}
+                  aria-label={`View ${fullName}`}
+                  className="absolute inset-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+
+                <div className="mb-3.5 flex items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="flex size-[42px] shrink-0 items-center justify-center rounded-full bg-brand-subtle text-sm font-semibold text-brand-emphasis"
+                  >
+                    {initials(contact.firstName, contact.lastName)}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-foreground">
+                      {fullName}
+                    </div>
+                    {roleCompany ? (
+                      <div className="truncate text-xs text-muted-foreground">
+                        {roleCompany}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5 text-[12.5px] text-muted-foreground">
+                  {contact.email ? (
+                    <div className="flex items-center gap-2">
+                      <Mail className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <span className="truncate">{contact.email}</span>
+                    </div>
+                  ) : null}
+                  {contact.phone ? (
+                    <div className="flex items-center gap-2">
+                      <Phone className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <span className="truncate">{contact.phone}</span>
+                    </div>
+                  ) : null}
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() =>
+                    handleDelete(contact.id, fullName)
+                  }
+                  disabled={deleteMutation.isPending}
+                  aria-label={`Delete ${fullName}`}
+                  className="absolute right-2 top-2 z-10 text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
                 >
-                  <td className="px-3 py-2 font-medium">
-                    <Link
-                      href={`/contacts/${contact.id}`}
-                      className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
-                    >
-                      {contact.firstName} {contact.lastName}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {contact.email ?? '—'}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {contact.phone ?? '—'}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {contact.jobTitle ?? '—'}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {contact.company?.name ?? '—'}
-                  </td>
-                  <td className="relative z-10 px-3 py-2 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        handleDelete(
-                          contact.id,
-                          `${contact.firstName} ${contact.lastName}`,
-                        )
-                      }
-                      disabled={deleteMutation.isPending}
-                      aria-label={`Delete ${contact.firstName} ${contact.lastName}`}
-                    >
-                      <Trash2 className="size-4 text-muted-foreground" aria-hidden="true" />
-                    </Button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                  <Trash2 className="size-4" aria-hidden="true" />
+                </Button>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {contactsPage?.pagination && (
         <p className="text-xs text-muted-foreground" aria-live="polite">
@@ -166,4 +172,13 @@ export function ContactTable({
       )}
     </div>
   )
+}
+
+/**
+ * Two-letter initials from a contact's name, used for the avatar chip.
+ */
+function initials(firstName: string, lastName: string): string {
+  const a = firstName.trim().charAt(0)
+  const b = lastName.trim().charAt(0)
+  return `${a}${b}`.toUpperCase() || '?'
 }

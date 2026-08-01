@@ -485,10 +485,10 @@ export function StepEditor({
                     aria-pressed={isActive}
                     title={opt.description}
                     className={cn(
-                      'flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-all',
+                      'flex flex-col items-center gap-1.5 rounded-[10px] border p-3 text-center transition-all',
                       isActive
-                        ? cn('ring-1 ring-offset-1', opt.activeClass)
-                        : 'border-muted hover:bg-muted/50',
+                        ? 'border-brand bg-brand-subtle text-brand-emphasis'
+                        : 'border-border text-muted-foreground hover:bg-muted/50',
                       !canEdit && 'cursor-not-allowed opacity-50',
                     )}
                   >
@@ -553,7 +553,7 @@ export function StepEditor({
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   Personalization tags
                   <HelpTooltip
-                    text="These tags get replaced with real data when the email sends. For example, {{FirstName}} becomes the lead's first name."
+                    text="These tags get replaced with real data when the email sends. For example, {FirstName} becomes the lead's first name."
                   />
                 </span>
               </div>
@@ -605,7 +605,7 @@ export function StepEditor({
                   value={emailSubject}
                   onChange={(e) => setEmailSubject(e.target.value)}
                   disabled={!canEdit}
-                  placeholder="e.g. Quick question about {{CompanyName}}"
+                  placeholder="e.g. Quick question about {Company}"
                   className={inputClasses}
                 />
               </div>
@@ -616,7 +616,7 @@ export function StepEditor({
                   {canEdit ? (
                     <div className="flex items-center gap-2">
                       {testStatus.kind === 'sent' ? (
-                        <span className="text-xs text-emerald-700 dark:text-emerald-300">
+                        <span className="text-xs text-brand-emphasis">
                           Sent to {testStatus.recipient}
                         </span>
                       ) : testStatus.kind === 'error' ? (
@@ -650,7 +650,7 @@ export function StepEditor({
                   <RichTextEditor
                     defaultValue={emailBody}
                     onChange={setEmailBody}
-                    placeholder="Hi {{FirstName}}, I noticed your team at {{CompanyName}}…"
+                    placeholder="Hi {FirstName}, I noticed your team at {Company}…"
                     minHeight="160px"
                     onFilesDropped={(files) => uploadAttachmentFiles(files)}
                   />

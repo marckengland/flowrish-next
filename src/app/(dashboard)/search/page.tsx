@@ -5,6 +5,8 @@ import { useCallback, useId, useMemo, useState } from 'react'
 import { Filter, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { cn } from '@/lib/utils'
 import { SearchBar } from '@/components/search/search-bar'
 import {
   FilterPanel,
@@ -21,6 +23,12 @@ const ENTITY_TYPE_OPTIONS: { value: SearchEntityType; label: string }[] = [
   { value: 'Lead', label: 'Leads' },
   { value: 'Contact', label: 'Contacts' },
   { value: 'Company', label: 'Companies' },
+]
+
+/** Entity filter pills shown under the search input ("All" clears the filter). */
+const ENTITY_PILLS: { value: SearchEntityType | ''; label: string }[] = [
+  { value: '', label: 'All' },
+  ...ENTITY_TYPE_OPTIONS,
 ]
 
 /**
@@ -49,7 +57,6 @@ export default function SearchPage(): React.JSX.Element {
   const [dateTo, setDateTo] = useState('')
   const [leadFilters, setLeadFilters] = useState<PanelFilters>(emptySearchFilters)
 
-  const entityTypeId = useId()
   const dateFromId = useId()
   const dateToId = useId()
 
@@ -117,28 +124,48 @@ export default function SearchPage(): React.JSX.Element {
   const showLeadFilters = entityType === 'Lead' || entityType === ''
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
-          <p className="text-sm text-muted-foreground">
-            Find leads, contacts, and companies across your organization.
-          </p>
-        </div>
+    <div className="flex max-w-[720px] flex-col gap-4">
+      <PageHeader title="Search" />
 
-        <div className="flex items-center gap-2">
-          <SearchBar
-            defaultValue={initialQuery}
-            navigateOnSubmit={false}
-            onSearch={handleSearch}
-            className="max-w-lg"
-          />
+      <div className="flex flex-col gap-3.5">
+        <SearchBar
+          defaultValue={initialQuery}
+          navigateOnSubmit={false}
+          onSearch={handleSearch}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            role="group"
+            aria-label="Filter by entity type"
+            className="flex flex-wrap gap-2"
+          >
+            {ENTITY_PILLS.map((pill) => {
+              const selected = entityType === pill.value
+              return (
+                <button
+                  key={pill.label}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setEntityType(pill.value)}
+                  className={cn(
+                    'rounded-full px-3 py-[5px] text-xs font-medium transition-colors',
+                    selected
+                      ? 'bg-brand text-brand-foreground'
+                      : 'border bg-card text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  {pill.label}
+                </button>
+              )
+            })}
+          </div>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowFilters((v) => !v)}
             aria-expanded={showFilters}
             aria-controls="search-filters"
+            className="sm:ml-auto"
           >
             <Filter className="size-4" aria-hidden="true" />
             <span>Filters</span>
@@ -149,7 +176,7 @@ export default function SearchPage(): React.JSX.Element {
             )}
           </Button>
         </div>
-      </header>
+      </div>
 
       {showFilters && (
         <section
@@ -158,24 +185,6 @@ export default function SearchPage(): React.JSX.Element {
           className="flex flex-col gap-3"
         >
           <div className="flex flex-col gap-3 rounded-md border bg-card p-3 sm:flex-row sm:flex-wrap sm:items-end">
-            <FilterField id={entityTypeId} label="Entity type">
-              <select
-                id={entityTypeId}
-                value={entityType}
-                onChange={(e) =>
-                  setEntityType((e.target.value as SearchEntityType) || '')
-                }
-                className={selectClasses}
-              >
-                <option value="">All types</option>
-                {ENTITY_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </FilterField>
-
             <FilterField id={dateFromId} label="From date">
               <input
                 id={dateFromId}
@@ -263,4 +272,4 @@ function FilterField({
 }
 
 const selectClasses =
-  'h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50'
+  'h-9 w-full rounded-[10px] border border-input bg-card px-2.5 text-sm text-foreground outline-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50'

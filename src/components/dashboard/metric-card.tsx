@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 
+type MetricTone = 'default' | 'brand' | 'warning' | 'danger'
+
 export interface MetricCardProps {
   /** Short label describing the metric. */
   label: string
@@ -11,40 +13,60 @@ export interface MetricCardProps {
   hint?: ReactNode
   /** Optional leading icon — render a Lucide icon or similar. */
   icon?: ReactNode
+  /** Colors the value + hint to convey positive/at-risk/critical states. */
+  tone?: MetricTone
   className?: string
 }
 
+const TONE_VALUE: Record<MetricTone, string> = {
+  default: 'text-foreground',
+  brand: 'text-brand-emphasis',
+  warning: 'text-warning-foreground',
+  danger: 'text-danger-foreground',
+}
+
+const TONE_HINT: Record<MetricTone, string> = {
+  default: 'text-muted-foreground',
+  brand: 'text-brand-emphasis',
+  warning: 'text-warning-foreground',
+  danger: 'text-danger-foreground',
+}
+
 /**
- * Reusable metric card used across the dashboard tabs. Renders a labeled
- * headline value with optional supporting context. Kept as a pure
- * presentational Server Component so it can be shared freely between
- * panels without forcing client hydration.
+ * Reusable metric card used across the dashboard tabs and forecast.
+ *
+ * Design: white card, hairline border, mono uppercase eyebrow label, a
+ * 28px tabular-nums headline value, and an optional supporting line. The
+ * `tone` prop tints the value + hint for positive/at-risk/critical states.
  */
 export function MetricCard({
   label,
   value,
   hint,
   icon,
+  tone = 'default',
   className,
 }: MetricCardProps): React.JSX.Element {
   return (
     <div
       className={cn(
-        'flex flex-col gap-2 rounded-md border bg-card p-4 text-card-foreground shadow-sm',
+        'flex flex-col rounded-lg border bg-card p-4 text-card-foreground',
         className,
       )}
     >
-      <div className="flex items-center justify-between gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <span>{label}</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="eyebrow">{label}</span>
         {icon ? (
           <span aria-hidden="true" className="text-muted-foreground/80">
             {icon}
           </span>
         ) : null}
       </div>
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
+      <div className={cn('mt-2.5 text-[28px] font-semibold tnum leading-none', TONE_VALUE[tone])}>
+        {value}
+      </div>
       {hint ? (
-        <div className="text-xs text-muted-foreground">{hint}</div>
+        <div className={cn('mt-1.5 text-xs', TONE_HINT[tone])}>{hint}</div>
       ) : null}
     </div>
   )
@@ -67,7 +89,7 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'rounded-md border border-dashed bg-card p-6 text-center text-sm text-muted-foreground',
+        'rounded-lg border border-dashed bg-card p-6 text-center text-sm text-muted-foreground',
         className,
       )}
     >

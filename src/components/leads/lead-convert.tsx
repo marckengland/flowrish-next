@@ -75,7 +75,7 @@ export function LeadConvert({
       role="alertdialog"
       aria-labelledby="convert-lead-heading"
       aria-describedby="convert-lead-description"
-      className="flex flex-col gap-3 rounded-md border bg-card p-4"
+      className="flex flex-col gap-3 rounded-lg border bg-card p-4"
     >
       <div>
         <h3 id="convert-lead-heading" className="text-sm font-semibold">

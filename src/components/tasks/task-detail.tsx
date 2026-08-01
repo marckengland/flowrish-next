@@ -14,6 +14,7 @@ import {
   User as UserIcon,
 } from 'lucide-react'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -73,36 +74,28 @@ export function TaskDetailView({
         data-overdue={overdue ? 'true' : 'false'}
         data-complete={task.isComplete ? 'true' : 'false'}
         className={cn(
-          'flex flex-col gap-3 rounded-md border bg-card p-5',
-          overdue && 'border-destructive/40 bg-destructive/5',
+          'flex flex-col gap-3 rounded-lg border bg-card p-5',
+          overdue && 'border-danger/40 bg-danger-subtle',
           task.isComplete && 'opacity-80',
         )}
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span
-                className={cn(
-                  'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide',
-                  priorityAccent(task.priority),
-                )}
-              >
+              <Badge variant={priorityVariant(task.priority)} size="sm" className="uppercase">
                 {task.priority}
-              </span>
+              </Badge>
               {overdue ? (
-                <span
-                  role="status"
-                  className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive"
-                >
+                <Badge variant="danger" size="sm" role="status">
                   <AlertTriangle className="size-3" aria-hidden="true" />
                   Overdue
-                </span>
+                </Badge>
               ) : null}
               {task.isComplete ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+                <Badge variant="brand" size="sm">
                   <CheckCircle2 className="size-3" aria-hidden="true" />
                   Completed
-                </span>
+                </Badge>
               ) : null}
             </div>
             <h1
@@ -151,7 +144,7 @@ export function TaskDetailView({
         </div>
 
         {completeError ? (
-          <p role="alert" className="text-xs text-destructive">
+          <p role="alert" className="text-xs text-danger-foreground">
             {completeError instanceof Error
               ? completeError.message
               : 'Couldn’t complete task.'}
@@ -161,7 +154,7 @@ export function TaskDetailView({
 
       <section
         aria-labelledby="task-meta"
-        className="rounded-md border bg-card"
+        className="rounded-lg border bg-card"
       >
         <h2 id="task-meta" className="sr-only">
           Task details
@@ -181,7 +174,7 @@ export function TaskDetailView({
             {leadName && task.lead ? (
               <Link
                 href={`/leads/${task.lead.id}`}
-                className="text-blue-600 hover:underline dark:text-blue-400"
+                className="font-medium text-brand-emphasis hover:underline"
               >
                 {leadName}
               </Link>
@@ -204,7 +197,7 @@ export function TaskDetailView({
       {task.description ? (
         <section
           aria-labelledby="task-description"
-          className="flex flex-col gap-2 rounded-md border bg-card p-4"
+          className="flex flex-col gap-2 rounded-lg border bg-card p-[18px]"
         >
           <h2
             id="task-description"
@@ -253,15 +246,17 @@ function DetailRow({ icon: Icon, label, children }: DetailRowProps) {
   )
 }
 
-function priorityAccent(priority: TaskItem['priority']): string {
+function priorityVariant(
+  priority: TaskItem['priority'],
+): 'danger' | 'warning' | 'neutral' {
   switch (priority) {
     case 'HIGH':
-      return 'border-destructive/40 bg-destructive/10 text-destructive'
+      return 'danger'
     case 'MEDIUM':
-      return 'border-amber-400/40 bg-amber-100 text-amber-900 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-300'
+      return 'warning'
     case 'LOW':
     default:
-      return 'border-muted bg-muted text-muted-foreground'
+      return 'neutral'
   }
 }
 

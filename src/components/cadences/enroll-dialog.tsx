@@ -288,7 +288,7 @@ function EnrollModal({
         {result ? (
           <div
             role="status"
-            className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300"
+            className="rounded-[10px] border border-brand/30 bg-brand-subtle px-3 py-2 text-sm text-brand-emphasis"
           >
             {result.type === 'single'
               ? 'Lead enrolled.'

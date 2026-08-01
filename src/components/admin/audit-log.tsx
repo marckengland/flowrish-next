@@ -5,6 +5,27 @@ import { useQuery } from '@tanstack/react-query'
 import { ScrollText, Filter, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Badge, type BadgeProps } from '@/components/ui/badge'
+
+/**
+ * Maps an audit action verb to a semantic Badge tone:
+ * CREATE / ENROLL = brand, UPDATE = warning, DELETE = danger.
+ */
+function actionVariant(action: string): NonNullable<BadgeProps['variant']> {
+  switch (action.toUpperCase()) {
+    case 'CREATE':
+    case 'ENROLL':
+    case 'IMPORT':
+      return 'brand'
+    case 'UPDATE':
+    case 'EXPORT':
+      return 'warning'
+    case 'DELETE':
+      return 'danger'
+    default:
+      return 'neutral'
+  }
+}
 
 /**
  * Filterable audit trail component.
@@ -79,10 +100,7 @@ export function AuditLog(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ScrollText className="size-5 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-lg font-semibold">Audit Log</h2>
-        </div>
+        <h2 className="text-sm font-semibold text-foreground">Audit log</h2>
         <Button
           variant="outline"
           size="sm"
@@ -99,7 +117,7 @@ export function AuditLog(): React.JSX.Element {
       {showFilters && (
         <div
           id="audit-filters"
-          className="grid grid-cols-1 gap-3 rounded-md border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4"
+          className="grid grid-cols-1 gap-3 rounded-lg border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4"
         >
           <div className="flex flex-col gap-1">
             <label htmlFor="filter-entity-type" className="text-xs font-medium text-muted-foreground">
@@ -171,7 +189,7 @@ export function AuditLog(): React.JSX.Element {
           <p className="text-sm text-muted-foreground">Loading audit log...</p>
         </div>
       ) : !data || data.entries.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-md border bg-card py-12">
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border bg-card py-12">
           <ScrollText className="size-8 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm font-medium text-muted-foreground">No audit entries</p>
           <p className="text-xs text-muted-foreground">
@@ -182,33 +200,40 @@ export function AuditLog(): React.JSX.Element {
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <thead className="border-b bg-muted/50">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Action</th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Entity</th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Entity ID</th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">User</th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Date</th>
+          <div className="overflow-hidden rounded-lg border bg-card">
+            <table className="w-full border-collapse text-[13.5px]">
+              <thead>
+                <tr className="border-b bg-muted/40">
+                  <th className="eyebrow px-4 py-3 text-left">Action</th>
+                  <th className="eyebrow px-4 py-3 text-left">Entity</th>
+                  <th className="eyebrow px-4 py-3 text-left">Entity ID</th>
+                  <th className="eyebrow px-4 py-3 text-left">Actor</th>
+                  <th className="eyebrow px-4 py-3 text-right">When</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody>
                 {data.entries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-muted/30">
-                    <td className="px-3 py-2">
-                      <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+                  <tr
+                    key={entry.id}
+                    className="border-b border-row-divider last:border-0 hover:bg-muted/30"
+                  >
+                    <td className="px-4 py-3">
+                      <Badge
+                        variant={actionVariant(entry.action)}
+                        size="sm"
+                        className="rounded-[5px] font-mono font-semibold"
+                      >
                         {entry.action}
-                      </span>
+                      </Badge>
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{entry.entityType}</td>
-                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                    <td className="px-4 py-3 text-foreground">{entry.entityType}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                       {entry.entityId.slice(0, 8)}...
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                       {entry.userId.slice(0, 8)}...
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">
+                    <td className="px-4 py-3 text-right font-mono text-muted-foreground">
                       {new Date(entry.createdAt).toLocaleString()}
                     </td>
                   </tr>

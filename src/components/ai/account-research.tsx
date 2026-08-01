@@ -171,7 +171,7 @@ export function AccountResearch({
             label="Challenges"
             icon={
               <TriangleAlert
-                className="size-3.5 text-amber-600 dark:text-amber-400"
+                className="size-3.5 text-warning-foreground"
                 aria-hidden="true"
               />
             }
@@ -208,7 +208,7 @@ export function AccountResearch({
                         href={source}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 underline hover:no-underline dark:text-blue-400"
+                        className="text-brand-emphasis underline hover:no-underline"
                       >
                         {source}
                       </a>

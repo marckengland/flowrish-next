@@ -50,7 +50,7 @@ describe('PriorityList', () => {
   it('renders the empty state when there are no actions', () => {
     const { container, unmount } = mount(<PriorityList actions={[]} />)
     const text = container.textContent ?? ''
-    expect(text).toContain('Open actions')
+    expect(text).toContain('Priority queue')
     expect(text).toContain('Nothing to do right now')
     unmount()
   })
@@ -84,11 +84,11 @@ describe('PriorityList', () => {
 
     const { container, unmount } = mount(<PriorityList actions={actions} />)
     const text = container.textContent ?? ''
-    // 3 total open actions
-    expect(text).toContain('Open actions')
+    // Queue header + total open count ("3 open")
+    expect(text).toContain('Priority queue')
     expect(text).toContain('3')
-    // At least one overdue
-    expect(text).toContain('Overdue')
+    // Overdue actions surface an OVERDUE signal chip
+    expect(text).toContain('OVERDUE')
     // Task titles render
     expect(text).toContain('Overdue + Due Today')
     expect(text).toContain('Far future')
@@ -110,9 +110,10 @@ describe('PriorityList', () => {
     )
     expect(leadLinks.length).toBeGreaterThan(0)
     const text = container.textContent ?? ''
-    expect(text).toContain('Score 88')
-    // Currency is rendered via Intl; the dollar sign + 12,500 digits should appear.
+    // Deal value is rendered in the subline via Intl; the digits appear.
     expect(text).toContain('12,500')
+    // The lead name subline renders.
+    expect(text).toContain('Globex Corp')
     unmount()
   })
 
@@ -123,7 +124,7 @@ describe('PriorityList', () => {
       title: 'Urgent callback',
     })
     const { container, unmount } = mount(<PriorityList actions={[action]} />)
-    expect(container.textContent ?? '').toContain('High priority')
+    expect(container.textContent ?? '').toContain('HIGH PRIORITY')
     unmount()
   })
 })

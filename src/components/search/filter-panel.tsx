@@ -54,7 +54,7 @@ export function FilterPanel({
   }
 
   const inputClass =
-    'h-8 w-full rounded-md border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+    'h-9 w-full rounded-[10px] border border-input bg-card px-2.5 text-sm text-foreground outline-none transition-[color,box-shadow,border-color] focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15'
 
   const hasActiveFilters = Object.values(filters).some((v) => v !== '')
 

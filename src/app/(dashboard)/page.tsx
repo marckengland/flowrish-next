@@ -1,6 +1,10 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { Calendar, Plus } from 'lucide-react'
 
 import { DashboardTabs, type DashboardTabItem } from '@/components/dashboard/dashboard-tabs'
+import { PageHeader } from '@/components/layout/page-header'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { CommitVsAiPanel } from '@/components/dashboard/panels/commit-vs-ai'
 import { DealGapsPanel, type DealGapRow } from '@/components/dashboard/panels/deal-gaps'
 import {
@@ -362,13 +366,26 @@ export default async function DashboardPage({
   ]
 
   return (
-    <div className="flex flex-col gap-4">
-      <header>
-        <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Signals, forecasts and pipeline metrics for your organization.
-        </p>
-      </header>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Dashboard"
+        description="Signals, forecasts and pipeline metrics for your organization."
+        actions={
+          <>
+            <Button variant="outline" size="lg" type="button">
+              <Calendar className="size-4" aria-hidden="true" />
+              This month
+            </Button>
+            <Link
+              href="/leads/new"
+              className={buttonVariants({ size: 'lg' })}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              New lead
+            </Link>
+          </>
+        }
+      />
       <DashboardTabs items={items} defaultValue={activeTab} />
     </div>
   )

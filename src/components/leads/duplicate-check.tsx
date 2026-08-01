@@ -123,7 +123,7 @@ export function DuplicateCheck({ leadId, leadEmail, companyName }: DuplicateChec
       )}
 
       {mergeSuccess && (
-        <p className="text-xs text-green-600" role="status">
+        <p className="text-xs text-brand-emphasis" role="status">
           {mergeSuccess}
         </p>
       )}
@@ -140,7 +140,7 @@ export function DuplicateCheck({ leadId, leadEmail, companyName }: DuplicateChec
           {matches.map((match) => (
             <div
               key={match.leadId}
-              className="flex flex-col gap-1.5 rounded-md border bg-muted/30 p-2"
+              className="flex flex-col gap-1.5 rounded-[10px] border bg-muted/30 p-2"
             >
               <div className="flex flex-col gap-0.5">
                 <span className="text-sm font-medium">{match.leadName}</span>

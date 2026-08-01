@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CompanyForm } from '@/components/companies/company-form'
 import { DeleteCompanyDialog } from '@/components/companies/delete-company-dialog'
@@ -90,7 +91,7 @@ export function CompanyDetailView({
             <ArrowLeft className="size-4" aria-hidden="true" />
           </Button>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 className="text-[24px] font-bold leading-tight tracking-[-0.02em]">
               {company.name}
             </h1>
             <div className="mt-1 flex flex-wrap gap-3 text-sm text-muted-foreground">
@@ -105,7 +106,7 @@ export function CompanyDetailView({
                   href={normalizeUrl(company.website)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400"
+                  className="flex items-center gap-1 text-brand-emphasis hover:underline"
                 >
                   <Globe className="size-3.5" aria-hidden="true" />
                   {company.website}
@@ -151,7 +152,7 @@ export function CompanyDetailView({
       {editing ? (
         <section
           aria-label="Edit company"
-          className="rounded-md border bg-card p-4"
+          className="rounded-lg border bg-card p-4"
         >
           <CompanyForm
             company={{
@@ -178,15 +179,15 @@ export function CompanyDetailView({
           Contacts ({contacts.length})
         </h2>
         {contacts.length === 0 ? (
-          <p className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+          <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
             No contacts associated with this company.
           </p>
         ) : (
-          <ul className="divide-y rounded-md border">
+          <ul className="divide-y divide-row-divider rounded-lg border bg-card">
             {contacts.map((c) => (
               <li
                 key={c.id}
-                className="flex items-center justify-between px-3 py-2.5 text-sm"
+                className="flex items-center justify-between px-4 py-2.5 text-sm"
               >
                 <div>
                   <span className="font-medium">
@@ -218,28 +219,28 @@ export function CompanyDetailView({
           Leads ({leadCount})
         </h2>
         {leads.length === 0 ? (
-          <p className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+          <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
             No leads associated with this company.
           </p>
         ) : (
-          <ul className="divide-y rounded-md border">
+          <ul className="divide-y divide-row-divider rounded-lg border bg-card">
             {leads.map((lead) => (
               <li key={lead.id}>
                 <Link
                   href={`/leads/${lead.id}`}
-                  className="flex items-center justify-between px-3 py-2.5 text-sm transition-colors hover:bg-muted/40"
+                  className="flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-background"
                 >
                   <span className="font-medium">
                     {lead.firstName} {lead.lastName}
                   </span>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     {lead.stage ? (
-                      <span className="rounded-full bg-muted px-2 py-0.5">
+                      <Badge variant="neutral" size="sm">
                         {lead.stage.name}
-                      </span>
+                      </Badge>
                     ) : null}
                     {lead.dealValue !== null ? (
-                      <span>
+                      <span className="tnum">
                         ${lead.dealValue.toLocaleString()}
                         {lead.currency ? (
                           <span className="ml-0.5 text-[10px] uppercase">

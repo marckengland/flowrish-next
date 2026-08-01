@@ -12,6 +12,8 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { createCadence } from '@/server/actions/cadences'
@@ -215,9 +217,9 @@ export function CadenceList({
           totalAcrossAllFilters={enrichedAll.length}
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
+        <Card className="overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="border-b bg-muted/50">
+            <thead className="border-b border-border bg-muted/40">
               <tr>
                 <SortHeader
                   label="Cadence"
@@ -275,11 +277,11 @@ export function CadenceList({
                 />
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-row-divider">
               {filtered.map((cadence) => (
                 <tr
                   key={cadence.id}
-                  className="relative cursor-pointer transition-colors hover:bg-muted/40 focus-within:bg-muted/40"
+                  className="relative cursor-pointer transition-colors hover:bg-background focus-within:bg-background"
                 >
                   <td className="px-4 py-3">
                     <Link
@@ -311,7 +313,7 @@ export function CadenceList({
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
 
       <p className="text-xs text-muted-foreground" aria-live="polite">
@@ -372,19 +374,11 @@ function StatCard({
   onClick,
   tone,
 }: StatCardProps): React.JSX.Element {
-  const toneClasses: Record<StatCardProps['tone'], string> = {
-    neutral: 'border-border',
-    active:
-      'data-[active=true]:border-emerald-500 data-[active=true]:bg-emerald-500/10',
-    draft: 'data-[active=true]:border-slate-500 data-[active=true]:bg-slate-500/10',
-    archived:
-      'data-[active=true]:border-amber-500 data-[active=true]:bg-amber-500/10',
-  }
   const valueClasses: Record<StatCardProps['tone'], string> = {
     neutral: 'text-foreground',
-    active: 'text-emerald-700 dark:text-emerald-300',
+    active: 'text-brand-emphasis',
     draft: 'text-foreground',
-    archived: 'text-amber-700 dark:text-amber-300',
+    archived: 'text-warning-foreground',
   }
   return (
     <button
@@ -393,13 +387,12 @@ function StatCard({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'rounded-lg border bg-card p-3 text-left transition-colors hover:bg-muted/40',
-        toneClasses[tone],
-        active ? 'ring-1 ring-ring' : null,
+        'rounded-lg border bg-card px-4 py-3.5 text-left transition-colors hover:bg-background',
+        active ? 'border-brand ring-1 ring-brand' : 'border-border',
       )}
     >
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={cn('mt-1 text-2xl font-semibold', valueClasses[tone])}>
+      <p className={cn('mt-1.5 text-2xl font-semibold tnum', valueClasses[tone])}>
         {value}
       </p>
     </button>
@@ -434,7 +427,7 @@ function SortHeader({
       scope="col"
       aria-sort={ariaSort}
       className={cn(
-        'px-4 py-2.5 text-xs font-medium',
+        'px-4 py-2.5',
         align === 'right' ? 'text-right' : 'text-left',
       )}
     >
@@ -442,9 +435,9 @@ function SortHeader({
         type="button"
         onClick={() => onSort(field)}
         className={cn(
-          'relative z-10 inline-flex items-center gap-1 hover:text-foreground',
+          'eyebrow relative z-10 inline-flex items-center gap-1 transition-colors hover:text-foreground',
           align === 'right' && 'ml-auto',
-          isActive ? 'text-foreground' : 'text-muted-foreground',
+          isActive ? 'text-foreground' : null,
         )}
       >
         {label}
@@ -459,25 +452,21 @@ export function StatusBadge({
 }: {
   status: CadenceStatus
 }): React.JSX.Element {
-  const tone = (() => {
+  const variant: 'brand' | 'neutral' | 'warning' = (() => {
     switch (status) {
-      case 'DRAFT':
-        return 'bg-muted text-muted-foreground'
       case 'ACTIVE':
-        return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+        return 'brand'
       case 'ARCHIVED':
-        return 'bg-slate-500/10 text-slate-700 dark:text-slate-300'
+        return 'warning'
+      case 'DRAFT':
+      default:
+        return 'neutral'
     }
   })()
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-        tone,
-      )}
-    >
+    <Badge variant={variant}>
       {status.charAt(0) + status.slice(1).toLowerCase()}
-    </span>
+    </Badge>
   )
 }
 

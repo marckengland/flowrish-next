@@ -174,7 +174,7 @@ export function KanbanBoard({
       </div>
 
       {moveMutation.isError && (
-        <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive" role="alert">
+        <p className="rounded-[10px] bg-danger-subtle px-3 py-2 text-xs text-danger-foreground" role="alert">
           {(moveMutation.error as Error | undefined)?.message ??
             'Something went wrong moving that lead.'}
         </p>
@@ -183,7 +183,7 @@ export function KanbanBoard({
       {truncated && pagination ? (
         <p
           role="status"
-          className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-200"
+          className="rounded-[10px] bg-warning-subtle px-3 py-2 text-xs text-warning-foreground"
         >
           Showing {pagination.pageSize} of {pagination.total} leads.
           Use filters or the leads list to see the rest.
@@ -191,7 +191,10 @@ export function KanbanBoard({
       ) : null}
 
       <div
-        className="flex gap-4 overflow-x-auto pb-4"
+        className="grid gap-3.5"
+        style={{
+          gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))`,
+        }}
         aria-label="Pipeline Kanban board"
       >
         {stages.map((stage) => (
@@ -282,39 +285,37 @@ function StageColumn({
       aria-label={`${stage.name} stage column`}
       data-stage-id={stage.id}
       className={cn(
-        'flex w-72 shrink-0 flex-col rounded-lg border bg-muted/40 transition-shadow',
-        isDragOver && 'ring-2 ring-ring ring-offset-1',
-        stage.isClosedWon && 'border-emerald-500/30',
-        stage.isClosedLost && 'border-destructive/30',
+        'flex min-w-0 flex-col rounded-lg p-1.5 transition-colors',
+        isDragOver && 'bg-brand-subtle ring-1 ring-brand/40',
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-        <h3 className="truncate text-sm font-semibold">{stage.name}</h3>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {totalLabel && (
-            <span
-              className="max-w-[10rem] truncate tabular-nums"
-              aria-label="Stage total value"
-              title={totalLabel}
-            >
-              {totalLabel}
-            </span>
-          )}
+      <div className="mb-2.5 flex items-center justify-between gap-2 px-0.5">
+        <h3 className="truncate text-[13px] font-semibold text-foreground">
+          {stage.name}{' '}
           <span
-            className="rounded-full bg-muted px-2 py-0.5 font-medium"
+            className="tnum font-normal text-muted-foreground"
             aria-label={`${leads.length} leads`}
           >
             {leads.length}
           </span>
-        </div>
+        </h3>
+        {totalLabel && (
+          <span
+            className="tnum max-w-[8rem] truncate font-mono text-[11px] text-muted-foreground"
+            aria-label="Stage total value"
+            title={totalLabel}
+          >
+            {totalLabel}
+          </span>
+        )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2">
+      <div className="flex flex-1 flex-col gap-2.5">
         {leads.map((lead) => (
           <KanbanCard key={lead.id} lead={lead} draggable={canMove} />
         ))}
         {leads.length === 0 && (
-          <p className="py-8 text-center text-xs text-muted-foreground">
+          <p className="rounded-[10px] border border-dashed py-8 text-center text-xs text-muted-foreground">
             No leads
           </p>
         )}

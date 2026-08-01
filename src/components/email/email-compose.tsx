@@ -368,7 +368,7 @@ export function EmailCompose({
   return (
     <form
       onSubmit={handleSubmit}
-      className={cn('flex flex-col gap-3 rounded-md border bg-card p-4', className)}
+      className={cn('flex flex-col gap-3 rounded-lg border bg-card p-[18px]', className)}
       aria-busy={isPending || undefined}
       aria-label={isReply ? 'Reply email' : 'Compose email'}
     >
@@ -393,7 +393,7 @@ export function EmailCompose({
           specific reply target. Lets the user opt out of "reply on
           existing thread" when they want to start a fresh subject. */}
       {latestThread && !replyLocked && (
-        <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+        <div className="flex items-start gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
           <MailPlus
             className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
             aria-hidden="true"
@@ -419,7 +419,7 @@ export function EmailCompose({
             onClick={() =>
               setThreadMode((m) => (m === 'reply' ? 'new' : 'reply'))
             }
-            className="shrink-0 rounded border bg-background px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
+            className="shrink-0 rounded-[10px] border bg-card px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
             disabled={isPending}
           >
             {threadMode === 'reply'
@@ -523,9 +523,9 @@ export function EmailCompose({
               <li
                 key={`${att.file.name}-${i}`}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border bg-background px-2 py-0.5 text-xs',
+                  'inline-flex items-center gap-1.5 rounded-full border bg-card px-2 py-0.5 text-xs',
                   att.status === 'failed' && 'border-destructive/40 text-destructive',
-                  att.status === 'uploaded' && 'border-emerald-500/40 text-emerald-700 dark:text-emerald-300',
+                  att.status === 'uploaded' && 'border-brand/40 text-brand-emphasis',
                 )}
                 title={att.error}
               >
@@ -564,7 +564,7 @@ export function EmailCompose({
       {success ? (
         <div
           role="status"
-          className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300"
+          className="rounded-lg border border-brand/30 bg-brand-subtle px-3 py-2 text-sm text-brand-emphasis"
         >
           {success}
         </div>
@@ -572,7 +572,7 @@ export function EmailCompose({
 
       <div className="flex flex-wrap items-center justify-end gap-2">
         {testStatus.kind === 'sent' ? (
-          <span className="mr-auto text-xs text-emerald-700 dark:text-emerald-300">
+          <span className="mr-auto text-xs text-brand-emphasis">
             Test sent to {testStatus.recipient}
           </span>
         ) : testStatus.kind === 'error' ? (
@@ -632,7 +632,7 @@ export function EmailCompose({
 }
 
 const inputClasses =
-  'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50'
+  'flex h-10 w-full rounded-[10px] border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50'
 
 function prefixReplySubject(subject: string): string {
   const trimmed = subject.trim()

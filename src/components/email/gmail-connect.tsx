@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle2, Loader2, Mail, Unplug } from 'lucide-react'
+import { Loader2, Mail, Unplug } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -230,18 +230,21 @@ export function GmailConnect({
   if (state.status === 'connected') {
     return (
       <div className={cn('flex flex-col gap-2', className)}>
-        <div className="flex flex-wrap items-center gap-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
-          <CheckCircle2
-            className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400"
-            aria-hidden="true"
-          />
+        <div className="flex flex-wrap items-center gap-3.5 rounded-xl border bg-card px-[18px] py-[18px]">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-brand-subtle text-brand-emphasis">
+            <Mail className="size-[19px]" aria-hidden="true" />
+          </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground">Gmail connected</p>
+            <p className="text-[13.5px] font-semibold text-foreground">Gmail connected</p>
             {state.email ? (
               <p className="truncate text-xs text-muted-foreground">
-                {state.email}
+                {state.email} · sending &amp; threading enabled
               </p>
-            ) : null}
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Sending &amp; threading enabled
+              </p>
+            )}
             {state.lastSyncAt ? (
               <p className="text-[11px] text-muted-foreground">
                 Last sync: {formatRelative(state.lastSyncAt)}

@@ -3,6 +3,7 @@ import { hasPermission } from '@/server/auth/permissions'
 import { getCompanies } from '@/server/services/contacts'
 import { CompanyTable } from '@/components/companies/company-table'
 import { CompanyCreateDialog } from '@/components/companies/company-create-dialog'
+import { PageHeader } from '@/components/layout/page-header'
 import type { CompanyListItem } from '@/hooks/use-companies'
 
 /**
@@ -44,16 +45,12 @@ export default async function CompaniesPage(): Promise<React.JSX.Element> {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Companies</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage companies and track their linked contacts and leads.
-          </p>
-        </div>
-        {canWrite && <CompanyCreateDialog />}
-      </header>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Companies"
+        description="Accounts across your pipeline"
+        actions={canWrite ? <CompanyCreateDialog /> : null}
+      />
 
       <CompanyTable initialData={initialData} page={1} pageSize={20} />
     </div>

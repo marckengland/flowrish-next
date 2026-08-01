@@ -30,7 +30,7 @@ export function DateRangeFilter({
   className,
 }: DateRangeFilterProps): React.JSX.Element {
   const inputClass =
-    'h-8 rounded-lg border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+    'h-9 rounded-[10px] border bg-background px-2.5 text-sm text-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25'
 
   const isFiltered = Boolean(startDate || endDate)
 
@@ -69,7 +69,7 @@ export function DateRangeFilter({
         <button
           type="button"
           onClick={onClear}
-          className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+          className="rounded-[10px] px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           Clear
         </button>

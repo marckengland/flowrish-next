@@ -1,4 +1,5 @@
 import { MetricCard, EmptyState } from '@/components/dashboard/metric-card'
+import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 
 /**
  * Per-rep summary shown in the Team View tab. The server pre-computes the
@@ -38,11 +39,12 @@ export function TeamViewPanel({ reps }: TeamViewPanelProps): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3.5 sm:grid-cols-3">
         <MetricCard label="Team size" value={reps.length} />
         <MetricCard
           label="Team overdue"
           value={totalOverdue}
+          tone={totalOverdue > 0 ? 'danger' : 'default'}
           hint={totalOverdue > 0 ? 'Aggregated across reps' : 'Team is on track'}
         />
         <MetricCard
@@ -51,21 +53,13 @@ export function TeamViewPanel({ reps }: TeamViewPanelProps): React.JSX.Element {
         />
       </div>
 
-      <section
-        aria-labelledby="team-view-heading"
-        className="rounded-md border bg-card"
-      >
-        <header className="border-b px-4 py-3">
-          <h2
-            id="team-view-heading"
-            className="text-sm font-semibold text-foreground"
-          >
-            Per-rep signals
-          </h2>
-        </header>
-        <ul className="divide-y">
+      <Card aria-labelledby="team-view-heading" className="overflow-hidden">
+        <CardHeader>
+          <CardTitle id="team-view-heading">Per-rep signals</CardTitle>
+        </CardHeader>
+        <ul className="divide-y divide-row-divider">
           {reps.map((rep) => (
-            <li key={rep.userId} className="flex flex-col gap-2 px-4 py-3">
+            <li key={rep.userId} className="flex flex-col gap-2 px-[18px] py-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-medium text-foreground">
                   {rep.name}
@@ -81,10 +75,7 @@ export function TeamViewPanel({ reps }: TeamViewPanelProps): React.JSX.Element {
               ) : (
                 <ol className="flex flex-col gap-1 text-xs text-muted-foreground">
                   {rep.topUrgent.map((a) => (
-                    <li
-                      key={a.id}
-                      className="flex items-start gap-2 tabular-nums"
-                    >
+                    <li key={a.id} className="flex items-start gap-2 tnum">
                       <span className="inline-flex w-7 shrink-0 justify-end font-semibold text-foreground">
                         {a.priorityScore}
                       </span>
@@ -96,7 +87,7 @@ export function TeamViewPanel({ reps }: TeamViewPanelProps): React.JSX.Element {
             </li>
           ))}
         </ul>
-      </section>
+      </Card>
     </div>
   )
 }

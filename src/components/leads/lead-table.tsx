@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import { ScoreBadge } from '@/components/scoring/score-badge'
 import { useFiltersStore } from '@/stores/filters'
 import { useLeadsQuery, type LeadListItem } from '@/hooks/use-leads'
 
@@ -94,9 +96,9 @@ export function LeadTable({
         <span>Updating…</span>
       </div>
 
-      <div className="overflow-x-auto rounded-md border bg-card">
-        <table className="w-full min-w-[880px] text-sm">
-          <thead className="bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="overflow-x-auto rounded-lg border bg-card">
+        <table className="w-full min-w-[860px] text-sm">
+          <thead className="border-b bg-muted/40 text-left">
             <tr>
               <SortableHeader
                 label="Name"
@@ -112,18 +114,11 @@ export function LeadTable({
                 dir={sortDir}
                 onSort={toggleSort}
               />
-              <th scope="col" className="px-3 py-2 font-medium">
+              <th scope="col" className="eyebrow px-4 py-3">
                 Stage
               </th>
               <SortableHeader
-                label="Status"
-                sortKey="leadStatus"
-                activeKey={sortKey}
-                dir={sortDir}
-                onSort={toggleSort}
-              />
-              <SortableHeader
-                label="Deal Value"
+                label="Deal value"
                 sortKey="dealValue"
                 activeKey={sortKey}
                 dir={sortDir}
@@ -139,23 +134,23 @@ export function LeadTable({
                 align="right"
               />
               <SortableHeader
-                label="Last Activity"
+                label="Last activity"
                 sortKey="lastActivityAt"
                 activeKey={sortKey}
                 dir={sortDir}
                 onSort={toggleSort}
               />
-              <th scope="col" className="px-3 py-2 font-medium">
+              <th scope="col" className="eyebrow px-4 py-3">
                 Assignee
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-row-divider">
             {query.isError ? (
               <tr>
                 <td
-                  colSpan={8}
-                  className="px-3 py-8 text-center text-sm text-destructive"
+                  colSpan={7}
+                  className="px-4 py-8 text-center text-sm text-danger-foreground"
                   role="alert"
                 >
                   Couldn&apos;t load leads.{' '}
@@ -165,8 +160,8 @@ export function LeadTable({
             ) : sorted.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
-                  className="px-3 py-8 text-center text-sm text-muted-foreground"
+                  colSpan={7}
+                  className="px-4 py-8 text-center text-sm text-muted-foreground"
                 >
                   No leads match the current filters.
                 </td>
@@ -175,9 +170,9 @@ export function LeadTable({
               sorted.map((lead) => (
                 <tr
                   key={lead.id}
-                  className="relative cursor-pointer border-t transition-colors hover:bg-muted/30 focus-within:bg-muted/30"
+                  className="relative cursor-pointer transition-colors hover:bg-background focus-within:bg-background"
                 >
-                  <td className="px-3 py-2 font-medium">
+                  <td className="px-4 py-3 font-semibold">
                     <Link
                       href={`/leads/${lead.id}`}
                       className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
@@ -185,32 +180,33 @@ export function LeadTable({
                       {fullName(lead)}
                     </Link>
                     {lead.email && (
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs font-normal text-muted-foreground">
                         {lead.email}
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">
+                  <td className="px-4 py-3 text-muted-foreground">
                     {lead.companyName ?? '—'}
                   </td>
-                  <td className="px-3 py-2">
-                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                      {lead.stage?.name ?? '—'}
-                    </span>
+                  <td className="px-4 py-3">
+                    {lead.stage?.name ? (
+                      <Badge variant="neutral" size="md">
+                        {lead.stage.name}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {prettyStatus(lead.leadStatus)}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  <td className="tnum px-4 py-3 text-right font-semibold">
                     {formatCurrency(lead.dealValue, lead.currency)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {lead.score}
+                  <td className="px-4 py-3 text-right">
+                    <ScoreBadge score={lead.score} size="md" />
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">
+                  <td className="px-4 py-3 text-muted-foreground">
                     {formatRelative(lead.lastActivityAt)}
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">
+                  <td className="px-4 py-3 text-muted-foreground">
                     {lead.assignedUser?.name ?? 'Unassigned'}
                   </td>
                 </tr>
@@ -221,7 +217,7 @@ export function LeadTable({
       </div>
 
       {leadsPage?.pagination && (
-        <p className="text-xs text-muted-foreground" aria-live="polite">
+        <p className="eyebrow px-0.5" aria-live="polite">
           Showing {sorted.length} of {leadsPage.pagination.total} leads
           {leadsPage.pagination.totalPages > 1 && (
             <> · Page {leadsPage.pagination.page} of {leadsPage.pagination.totalPages}</>
@@ -254,7 +250,7 @@ function SortableHeader({
       scope="col"
       aria-sort={ariaSort}
       className={cn(
-        'px-3 py-2 font-medium',
+        'eyebrow px-4 py-3',
         align === 'right' ? 'text-right' : 'text-left',
       )}
     >
@@ -262,7 +258,7 @@ function SortableHeader({
         type="button"
         onClick={() => onSort(sortKey)}
         className={cn(
-          'inline-flex items-center gap-1 rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40',
+          'inline-flex items-center gap-1 rounded-sm uppercase outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40',
           active && 'text-foreground',
           align === 'right' && 'ml-auto',
         )}
@@ -285,10 +281,6 @@ function SortableHeader({
 function fullName(lead: LeadListItem): string {
   const parts = [lead.firstName, lead.lastName].filter(Boolean)
   return parts.join(' ').trim() || 'Unnamed lead'
-}
-
-function prettyStatus(status: string): string {
-  return status.charAt(0) + status.slice(1).toLowerCase()
 }
 
 function formatCurrency(
