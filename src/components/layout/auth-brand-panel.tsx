@@ -1,5 +1,8 @@
 import Image from 'next/image'
 
+import { isWaitlistEnabled } from '@/lib/waitlist'
+import { PrivateBetaBadge } from '@/components/ui/private-beta-badge'
+
 /**
  * Left-hand dark brand panel shared by the sign-in and onboarding screens.
  *
@@ -26,6 +29,7 @@ export function AuthBrandPanel(): React.JSX.Element {
         <span className="text-[19px] font-semibold tracking-[-0.01em]">
           Flowrish
         </span>
+        {isWaitlistEnabled() && <PrivateBetaBadge className="ml-1" />}
       </div>
 
       <div className="relative">

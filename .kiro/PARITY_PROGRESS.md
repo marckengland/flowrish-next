@@ -371,6 +371,10 @@ useful next step for production deploy confidence.
 - `POST /api/waitlist` returns 404 when disabled.
 - `.env.example`: added `WAITLIST_ENABLED`, plus optional `RESEND_API_KEY`/`RESEND_FROM` (waitlist confirmation email).
 
+### "Private beta" badge on auth screens
+- New `src/components/ui/private-beta-badge.tsx` (presentational emerald pill).
+- Shown gated by `isWaitlistEnabled()` (auto-hides at public launch): in `auth-brand-panel.tsx` (desktop login + onboarding) and above the `onboarding` page heading (the create-workspace/"register" flow, mobile + desktop). Mirrors how Palago labels its private beta.
+
 ### Verified
 - `npx tsc --noEmit` green project-wide; `eslint` clean on changed files. Full `next build` not run here (sandbox `.env` lacks Supabase/Upstash/AI keys — unrelated to these changes).
 

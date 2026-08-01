@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { prisma } from '@/server/db/client'
 import { AuthBrandPanel } from '@/components/layout/auth-brand-panel'
+import { PrivateBetaBadge } from '@/components/ui/private-beta-badge'
+import { isWaitlistEnabled } from '@/lib/waitlist'
 import { OnboardingForm } from './onboarding-form'
 
 /**
@@ -44,6 +46,7 @@ export default async function OnboardingPage() {
 
       <div className="flex items-center justify-center bg-card px-6 py-12">
         <div className="w-full max-w-[380px]">
+          {isWaitlistEnabled() && <PrivateBetaBadge className="mb-3" />}
           <h1 className="mb-1.5 text-[26px] font-bold tracking-[-0.02em] text-foreground">
             Set up your workspace
           </h1>
