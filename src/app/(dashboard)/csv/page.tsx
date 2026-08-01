@@ -2,6 +2,7 @@ import { requireSession } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getFieldMappings } from '@/server/services/csv-import'
 import { ImportWizard } from '@/components/csv/import-wizard'
+import { MigrationGuide } from '@/components/csv/migration-guide'
 import { ExportButton } from '@/components/csv/export-button'
 import { PageHeader } from '@/components/layout/page-header'
 
@@ -51,18 +52,27 @@ export default async function CSVPage(): Promise<React.JSX.Element> {
   return (
     <div className="flex max-w-[820px] flex-col gap-[22px]">
       <PageHeader
-        title="Import / Export"
-        description="Bulk-import leads from CSV with column mapping & duplicate detection"
+        title="Import & Migrate"
+        description="Move your data in from Salesforce, HubSpot or any CSV — with column mapping & duplicate detection."
         actions={canRead ? <ExportButton /> : undefined}
       />
 
       {canWrite && (
-        <section aria-labelledby="import-heading">
-          <h2 id="import-heading" className="sr-only">
-            Import leads
-          </h2>
-          <ImportWizard savedMappings={savedMappings} />
-        </section>
+        <>
+          <section aria-labelledby="migrate-heading">
+            <h2 id="migrate-heading" className="sr-only">
+              Migrate from another CRM
+            </h2>
+            <MigrationGuide />
+          </section>
+
+          <section aria-labelledby="import-heading">
+            <h2 id="import-heading" className="mb-3 text-sm font-semibold text-foreground">
+              Import your CSV
+            </h2>
+            <ImportWizard savedMappings={savedMappings} />
+          </section>
+        </>
       )}
 
       {!canWrite && canRead && (
