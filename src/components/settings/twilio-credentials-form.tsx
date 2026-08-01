@@ -5,6 +5,7 @@ import { Check, Copy, Loader2, Unplug } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
@@ -295,14 +296,24 @@ function Field({
       <label htmlFor={id} className="mb-1 block text-[13px] font-medium text-foreground">
         {label}
       </label>
-      <Input
-        id={id}
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        autoComplete="off"
-      />
+      {type === 'password' ? (
+        <PasswordInput
+          id={id}
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete="off"
+        />
+      ) : (
+        <Input
+          id={id}
+          type={type}
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete="off"
+        />
+      )}
     </div>
   )
 }

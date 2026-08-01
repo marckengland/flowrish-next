@@ -44,6 +44,14 @@ export const envSchema = z.object({
     .url('AI_API_URL must be a valid URL when provided')
     .default('https://generativelanguage.googleapis.com/v1beta/openai'),
   AI_MODEL: z.string().min(1).default('gemini-2.5-flash-lite-preview'),
+
+  // Microsoft 365 / Outlook email (optional) — one Azure app for the
+  // deployment. When unset, the Outlook connector shows setup instructions
+  // instead of a connect button. NEXT_PUBLIC_ id is used client-side to
+  // build the OAuth authorize URL; the secret is server-only.
+  MICROSOFT_CLIENT_ID: z.string().min(1).optional(),
+  MICROSOFT_CLIENT_SECRET: z.string().min(1).optional(),
+  NEXT_PUBLIC_MICROSOFT_CLIENT_ID: z.string().min(1).optional(),
 })
 
 export type Env = z.infer<typeof envSchema>

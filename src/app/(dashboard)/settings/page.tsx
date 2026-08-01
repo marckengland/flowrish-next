@@ -13,7 +13,7 @@ import { AssignmentRules } from '@/components/admin/assignment-rules'
 import { AiPromptConfig } from '@/components/ai/ai-prompt-config'
 import { GmailConnect } from '@/components/email/gmail-connect'
 import { EmailSyncStatus } from '@/components/email/email-sync-status'
-import { MicrosoftSetupCard } from '@/components/email/microsoft-setup-card'
+import { MicrosoftConnect } from '@/components/email/microsoft-connect'
 import { CallingProviders } from '@/components/settings/calling-providers'
 
 /**
@@ -133,7 +133,22 @@ export default function SettingsPage(): React.JSX.Element {
                 </CardContent>
               </Card>
 
-              <MicrosoftSetupCard />
+              <div className="pt-1">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Microsoft 365 / Outlook
+                </h3>
+                <p className="mb-2 mt-0.5 text-[13px] text-muted-foreground">
+                  Connect an Outlook mailbox to send and sync via Microsoft Graph.
+                </p>
+              </div>
+              <MicrosoftConnect
+                clientId={process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID ?? ''}
+                redirectUri={
+                  typeof window !== 'undefined'
+                    ? `${window.location.origin}/api/email/microsoft/callback`
+                    : '/api/email/microsoft/callback'
+                }
+              />
             </div>
           )}
           {activeTab === 'calling' && <CallingProviders />}

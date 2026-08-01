@@ -25,14 +25,15 @@ export async function POST() {
 
     const db = createTenantPrisma(session.organizationId)
     const account = await db.emailAccount.findFirst({
-      where: { userId: session.dbUser.id, provider: 'gmail' },
+      where: { userId: session.dbUser.id },
+      orderBy: { updatedAt: 'desc' },
       select: { id: true },
     })
 
     if (!account) {
       throw new AppError(
         'NO_EMAIL_ACCOUNT',
-        'No connected Gmail account. Connect Gmail before running sync.',
+        'No connected email account. Connect Gmail or Outlook before running sync.',
         400,
       )
     }

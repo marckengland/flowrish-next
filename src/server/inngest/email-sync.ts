@@ -2,6 +2,7 @@ import { inngest } from './client'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
 import { refreshTokenIfNeeded } from '@/server/services/email'
+import { listMicrosoftMessages } from '@/server/services/microsoft-email'
 import { decrypt } from '@/lib/encryption'
 
 const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1'
@@ -96,6 +97,7 @@ export const emailSyncFunction = inngest.createFunction(
           id: true,
           email: true,
           accessToken: true,
+          provider: true,
         },
       })
 
@@ -105,6 +107,106 @@ export const emailSyncFunction = inngest.createFunction(
 
       return acc
     })
+
+    // Microsoft mailboxes use a separate Graph-based path; the Gmail flow
+    // that follows is left exactly as-is.
+    if (account.provider === 'microsoft') {
+      const accountEmail = account.email
+
+      const rows = await step.run('ms-fetch-messages', async () => {
+        const accessToken = decrypt(account.accessToken)
+        const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        return listMicrosoftMessages(accessToken, sinceIso)
+      })
+
+      if (rows.length === 0) {
+        await step.run('ms-update-last-sync-empty', async () => {
+          await db.emailAccount.update({
+            where: { id: accountId },
+            data: { lastSyncAt: new Date() },
+          })
+        })
+        return { synced: 0, skipped: 0 }
+      }
+
+      const results = await step.run('ms-process-messages', async () => {
+        let synced = 0
+        let skipped = 0
+
+        const owner = await db.emailAccount.findFirst({
+          where: { id: accountId },
+          select: { userId: true },
+        })
+
+        for (const row of rows) {
+          const existing = await db.emailMessage.findFirst({
+            where: { externalId: row.externalId },
+            select: { id: true },
+          })
+          if (existing) {
+            skipped++
+            continue
+          }
+
+          const sentAt = new Date(row.sentAt)
+          const emailMessage = await db.emailMessage.create({
+            data: tenantData({
+              externalId: row.externalId,
+              threadId: row.threadId,
+              fromEmail: row.fromEmail,
+              toEmail: row.toEmail,
+              subject: row.subject,
+              bodyPreview: row.bodyPreview?.substring(0, 200) ?? null,
+              sentAt,
+            }),
+          })
+
+          const matchEmail =
+            row.fromEmail === accountEmail.toLowerCase() ? row.toEmail : row.fromEmail
+
+          if (matchEmail && owner) {
+            const lead = await db.lead.findFirst({
+              where: {
+                deletedAt: null,
+                OR: [
+                  { email: { equals: matchEmail, mode: 'insensitive' } },
+                  { altEmail: { equals: matchEmail, mode: 'insensitive' } },
+                ],
+              },
+              select: { id: true },
+            })
+            if (lead) {
+              await db.activity.create({
+                data: tenantData({
+                  type: 'EMAIL',
+                  leadId: lead.id,
+                  createdById: owner.userId,
+                  notes: row.subject ? `Email: ${row.subject}` : 'Email',
+                  emailMessageId: emailMessage.id,
+                }),
+              })
+              await db.lead.update({
+                where: { id: lead.id },
+                data: { lastActivityAt: sentAt },
+              })
+            }
+          }
+
+          synced++
+        }
+
+        return { synced, skipped }
+      })
+
+      await step.run('ms-update-last-sync', async () => {
+        await db.emailAccount.update({
+          where: { id: accountId },
+          data: { lastSyncAt: new Date() },
+        })
+      })
+
+      return results
+    }
 
     // Step 2: Fetch recent message IDs from Gmail
     const messageIds = await step.run('fetch-message-list', async () => {

@@ -7,6 +7,10 @@ import {
   replacePersonalizationTags as replaceTags,
   type PersonalizationLead,
 } from '@/lib/personalization-tags'
+import {
+  deliverMicrosoftEmail,
+  refreshMicrosoftToken,
+} from '@/server/services/microsoft-email'
 
 const GMAIL_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1'
@@ -197,27 +201,34 @@ export async function refreshTokenIfNeeded(
   // Decrypt the refresh token
   const refreshToken = decrypt(account.refreshToken)
 
-  // Call Google token refresh endpoint
-  const response = await fetch(GMAIL_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      refresh_token: refreshToken,
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
-      grant_type: 'refresh_token',
-    }),
-  })
+  // Refresh via the account's provider. Both providers return the same
+  // { access_token, refresh_token?, expires_in } shape so the update
+  // logic below is shared.
+  let data: GmailTokenResponse
+  if (account.provider === 'microsoft') {
+    data = await refreshMicrosoftToken(refreshToken)
+  } else {
+    const response = await fetch(GMAIL_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        refresh_token: refreshToken,
+        client_id: env.GOOGLE_CLIENT_ID,
+        client_secret: env.GOOGLE_CLIENT_SECRET,
+        grant_type: 'refresh_token',
+      }),
+    })
 
-  if (!response.ok) {
-    throw new AppError(
-      'TOKEN_REFRESH_FAILED',
-      'Failed to refresh Gmail token. Please re-authenticate.',
-      401,
-    )
+    if (!response.ok) {
+      throw new AppError(
+        'TOKEN_REFRESH_FAILED',
+        'Failed to refresh Gmail token. Please re-authenticate.',
+        401,
+      )
+    }
+
+    data = (await response.json()) as GmailTokenResponse
   }
-
-  const data = (await response.json()) as GmailTokenResponse
 
   // Encrypt new tokens and update the account
   const newAccessToken = encrypt(data.access_token)
@@ -436,15 +447,17 @@ export async function sendEmail(
     throw new AppError('LEAD_NO_EMAIL', 'Lead does not have an email address', 400)
   }
 
-  // Get the user's connected email account
+  // Get the user's connected email account (Gmail or Microsoft). When a
+  // user has more than one, the most recently connected wins.
   const emailAccount = await db.emailAccount.findFirst({
-    where: { userId, provider: 'gmail' },
+    where: { userId },
+    orderBy: { updatedAt: 'desc' },
   })
 
   if (!emailAccount) {
     throw new AppError(
       'NO_EMAIL_ACCOUNT',
-      'No connected Gmail account. Please connect your Gmail account first.',
+      'No connected email account. Please connect Gmail or Outlook first.',
       400,
     )
   }
@@ -471,74 +484,81 @@ export async function sendEmail(
   // Wrap body in HTML document with base styling
   const htmlBody = wrapHtmlEmail(personalizedBody)
 
-  // For replies, look up the previous message on the thread so we can
-  // emit the In-Reply-To / References headers Gmail uses to thread
-  // conversations correctly. Falling back to no headers is fine — the
-  // `threadId` on the JSON payload already carries the conversation.
-  let inReplyToHeader: string | null = null
-  if (threadId) {
-    const lastMessageOnThread = await db.emailMessage.findFirst({
-      where: { threadId },
-      orderBy: { sentAt: 'desc' },
-      select: { externalId: true },
+  // Deliver via the account's provider, capturing an external message id
+  // and a thread/conversation id for our EmailMessage record.
+  let externalId: string
+  let resultThreadId: string
+
+  if (updatedAccount.provider === 'microsoft') {
+    const delivered = await deliverMicrosoftEmail({
+      accessToken,
+      to: lead.email,
+      subject: personalizedSubject,
+      htmlBody,
+      attachments,
     })
-    if (lastMessageOnThread?.externalId) {
-      // Gmail message IDs are not RFC 5322 Message-IDs but Gmail accepts
-      // them for threading purposes.
-      inReplyToHeader = `<${lastMessageOnThread.externalId}@mail.gmail.com>`
+    externalId = delivered.externalId
+    resultThreadId = delivered.threadId
+  } else {
+    // Gmail: emit In-Reply-To / References headers so replies thread.
+    let inReplyToHeader: string | null = null
+    if (threadId) {
+      const lastMessageOnThread = await db.emailMessage.findFirst({
+        where: { threadId },
+        orderBy: { sentAt: 'desc' },
+        select: { externalId: true },
+      })
+      if (lastMessageOnThread?.externalId) {
+        inReplyToHeader = `<${lastMessageOnThread.externalId}@mail.gmail.com>`
+      }
     }
+
+    const rawEmail =
+      attachments.length > 0
+        ? buildRawEmailWithAttachments(
+            updatedAccount.email,
+            lead.email,
+            personalizedSubject,
+            htmlBody,
+            attachments,
+            inReplyToHeader,
+          )
+        : buildRawEmail(
+            updatedAccount.email,
+            lead.email,
+            personalizedSubject,
+            htmlBody,
+            inReplyToHeader,
+          )
+
+    const sendResponse = await fetch(`${GMAIL_API_BASE}/users/me/messages/send`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        raw: rawEmail,
+        ...(threadId ? { threadId } : {}),
+      }),
+    })
+
+    if (!sendResponse.ok) {
+      const errorText = await sendResponse.text()
+      throw new AppError('EMAIL_SEND_FAILED', `Failed to send email: ${errorText}`, 500)
+    }
+
+    const sendData = (await sendResponse.json()) as GmailSendResponse
+    externalId = sendData.id
+    resultThreadId = sendData.threadId
   }
-
-  // Build the raw email (RFC 2822 format, base64url encoded). When
-  // attachments are present, switch to a `multipart/mixed` body so the
-  // attachments travel with the message rather than as a separate
-  // upload to the lead activity.
-  const rawEmail =
-    attachments.length > 0
-      ? buildRawEmailWithAttachments(
-          updatedAccount.email,
-          lead.email,
-          personalizedSubject,
-          htmlBody,
-          attachments,
-          inReplyToHeader,
-        )
-      : buildRawEmail(
-          updatedAccount.email,
-          lead.email,
-          personalizedSubject,
-          htmlBody,
-          inReplyToHeader,
-        )
-
-  // Send via Gmail API
-  const sendResponse = await fetch(`${GMAIL_API_BASE}/users/me/messages/send`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      raw: rawEmail,
-      // Passing threadId tells Gmail to attach this message to the
-      // existing conversation rather than start a new one.
-      ...(threadId ? { threadId } : {}),
-    }),
-  })
-
-  if (!sendResponse.ok) {
-    const errorText = await sendResponse.text()
-    throw new AppError('EMAIL_SEND_FAILED', `Failed to send email: ${errorText}`, 500)
-  }
-
-  const sendData = (await sendResponse.json()) as GmailSendResponse
 
   // Create EmailMessage record
   // Note: organizationId is auto-injected by the tenant middleware at runtime
   await db.emailMessage.create({
     data: tenantData({
-      externalId: sendData.id,
-      threadId: sendData.threadId,
+      externalId,
+      threadId: resultThreadId,
       fromEmail: updatedAccount.email,
       toEmail: lead.email,
       subject: personalizedSubject,
@@ -564,8 +584,8 @@ export async function sendEmail(
   })
 
   return {
-    messageId: sendData.id,
-    threadId: sendData.threadId,
+    messageId: externalId,
+    threadId: resultThreadId,
     attachmentCount: attachments.length,
   }
 }
@@ -607,13 +627,14 @@ export async function sendTestEmail(
   const db = createTenantPrisma(orgId)
 
   const emailAccount = await db.emailAccount.findFirst({
-    where: { userId, provider: 'gmail' },
+    where: { userId },
+    orderBy: { updatedAt: 'desc' },
   })
 
   if (!emailAccount) {
     throw new AppError(
       'NO_EMAIL_ACCOUNT',
-      'No connected Gmail account. Please connect your Gmail account first.',
+      'No connected email account. Please connect Gmail or Outlook first.',
       400,
     )
   }
@@ -646,46 +667,60 @@ export async function sendTestEmail(
   )
   const htmlBody = wrapHtmlEmail(renderedBody)
 
-  // Send to self — same address Gmail just authenticated as.
+  // Send to self — the connected mailbox address.
   const recipient = updatedAccount.email
-  const rawEmail =
-    attachments.length > 0
-      ? buildRawEmailWithAttachments(
-          recipient,
-          recipient,
-          renderedSubject,
-          htmlBody,
-          attachments,
-          null,
-        )
-      : buildRawEmail(recipient, recipient, renderedSubject, htmlBody, null)
 
-  const sendResponse = await fetch(
-    `${GMAIL_API_BASE}/users/me/messages/send`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
+  let messageId: string
+  if (updatedAccount.provider === 'microsoft') {
+    const delivered = await deliverMicrosoftEmail({
+      accessToken,
+      to: recipient,
+      subject: renderedSubject,
+      htmlBody,
+      attachments,
+    })
+    messageId = delivered.externalId
+  } else {
+    const rawEmail =
+      attachments.length > 0
+        ? buildRawEmailWithAttachments(
+            recipient,
+            recipient,
+            renderedSubject,
+            htmlBody,
+            attachments,
+            null,
+          )
+        : buildRawEmail(recipient, recipient, renderedSubject, htmlBody, null)
+
+    const sendResponse = await fetch(
+      `${GMAIL_API_BASE}/users/me/messages/send`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ raw: rawEmail }),
       },
-      body: JSON.stringify({ raw: rawEmail }),
-    },
-  )
-
-  if (!sendResponse.ok) {
-    const errorText = await sendResponse.text()
-    throw new AppError(
-      'EMAIL_SEND_FAILED',
-      `Failed to send test email: ${errorText}`,
-      500,
     )
-  }
 
-  const sendData = (await sendResponse.json()) as GmailSendResponse
+    if (!sendResponse.ok) {
+      const errorText = await sendResponse.text()
+      throw new AppError(
+        'EMAIL_SEND_FAILED',
+        `Failed to send test email: ${errorText}`,
+        500,
+      )
+    }
+
+    const sendData = (await sendResponse.json()) as GmailSendResponse
+    messageId = sendData.id
+  }
 
   // Intentionally skip EmailMessage / Activity creation — test sends
   // shouldn't pollute the lead timeline or the inbox sync state.
-  return { messageId: sendData.id, recipient }
+  return { messageId, recipient }
 }
 
 /**
