@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Phone } from 'lucide-react'
+import { Loader2, Phone, PhoneOff } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useCreateActivityMutation } from '@/hooks/use-activities'
+import { useTwilioDialer } from '@/hooks/use-twilio-dialer'
 
 export interface ClickToCallProps {
   leadId: string
@@ -14,6 +15,8 @@ export interface ClickToCallProps {
   leadName: string
   /** Whether the current user may log the call as an activity. */
   canLog: boolean
+  /** Org's selected voice provider; enables in-browser calling for 'twilio'. */
+  voiceProvider?: string | null
 }
 
 const OUTCOMES = [
@@ -29,23 +32,24 @@ type Outcome = (typeof OUTCOMES)[number]
 /**
  * Click-to-call for the lead detail.
  *
- * Uses a plain `tel:` link so the call is placed by the rep's device
- * dialer or default softphone — no paid telephony provider required, so
- * there's zero per-minute cost. While the call is in progress an on-screen
- * timer runs, and the rep logs the outcome + duration as a CALL activity
- * (reusing the existing activities pipeline / timeline).
+ * Two calling modes, chosen automatically:
+ *   1. In-browser (Twilio Voice SDK) when the org selected Twilio AND the
+ *      server has Twilio configured — placed + hung up right in the app.
+ *   2. Free `tel:` fallback otherwise — launches the rep's device dialer /
+ *      softphone with zero per-minute cost.
  *
- * The `tel:` action is deliberately provider-agnostic: swapping in an
- * in-browser WebRTC dialer later (Telnyx / SignalWire / Twilio Voice SDK)
- * only means replacing `placeCall` — the logging UI stays the same.
+ * Either way a live timer runs and the rep logs the outcome + duration as
+ * a CALL activity through the existing activities pipeline.
  */
 export function ClickToCall({
   leadId,
   phone,
   leadName,
   canLog,
+  voiceProvider,
 }: ClickToCallProps): React.JSX.Element {
   const [inCall, setInCall] = useState(false)
+  const [twilioActive, setTwilioActive] = useState(false)
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [elapsed, setElapsed] = useState(0)
   const [durationEdited, setDurationEdited] = useState(false)
@@ -53,9 +57,11 @@ export function ClickToCall({
   const [outcome, setOutcome] = useState<Outcome>('Connected')
   const [notes, setNotes] = useState('')
   const [logged, setLogged] = useState(false)
+  const [starting, setStarting] = useState(false)
   const intervalRef = useRef<number | null>(null)
 
   const mutation = useCreateActivityMutation()
+  const dialer = useTwilioDialer()
 
   useEffect(() => {
     if (startedAt == null) return
@@ -69,9 +75,15 @@ export function ClickToCall({
     }
   }, [startedAt, durationEdited])
 
-  function placeCall(): void {
-    // The <a href="tel:"> handles the actual dial-out; here we just start
-    // the timer + reveal the logging panel.
+  // When a Twilio call ends (remote hangup / error), freeze the timer but
+  // keep the logging panel open so the rep can save the outcome.
+  useEffect(() => {
+    if (twilioActive && (dialer.status === 'ended' || dialer.status === 'error')) {
+      setStartedAt(null)
+    }
+  }, [twilioActive, dialer.status])
+
+  function beginTimer(): void {
     setLogged(false)
     setInCall(true)
     setDurationEdited(false)
@@ -80,10 +92,32 @@ export function ClickToCall({
     setStartedAt(Date.now())
   }
 
+  async function placeCall(): Promise<void> {
+    if (!phone) return
+    setLogged(false)
+
+    if (voiceProvider === 'twilio') {
+      setStarting(true)
+      const result = await dialer.start(phone)
+      setStarting(false)
+      if (result === 'connected') {
+        setTwilioActive(true)
+        beginTimer()
+        return
+      }
+      // Twilio not available → fall through to tel:
+    }
+
+    setTwilioActive(false)
+    // `tel:` launches the device dialer without navigating away from the page.
+    window.location.href = `tel:${phone.replace(/[^\d+]/g, '')}`
+    beginTimer()
+  }
+
   async function logCall(): Promise<void> {
-    const composedNotes = notes.trim()
-      ? `${outcome} — ${notes.trim()}`
-      : outcome
+    if (twilioActive) dialer.hangup()
+    setStartedAt(null)
+    const composedNotes = notes.trim() ? `${outcome} — ${notes.trim()}` : outcome
     try {
       await mutation.mutateAsync({
         leadId,
@@ -94,19 +128,24 @@ export function ClickToCall({
       })
       setLogged(true)
       setInCall(false)
+      setTwilioActive(false)
       setStartedAt(null)
       setNotes('')
       setDurationEdited(false)
+      dialer.reset()
     } catch {
-      // mutation.error is surfaced below
+      // mutation.error surfaced below
     }
   }
 
   function cancel(): void {
+    if (twilioActive) dialer.hangup()
     setInCall(false)
+    setTwilioActive(false)
     setStartedAt(null)
     setNotes('')
     setDurationEdited(false)
+    dialer.reset()
   }
 
   if (!phone) {
@@ -117,38 +156,82 @@ export function ClickToCall({
     )
   }
 
-  const telHref = `tel:${phone.replace(/[^\d+]/g, '')}`
+  const twilioStatusLabel =
+    dialer.status === 'connecting'
+      ? 'Connecting…'
+      : dialer.status === 'in-call'
+        ? 'In call'
+        : dialer.status === 'ended'
+          ? 'Call ended'
+          : dialer.status === 'error'
+            ? 'Call error'
+            : 'In call'
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[13px] text-foreground">{phone}</span>
         <Button
-          nativeButton={false}
-          render={<a href={telHref} />}
+          type="button"
           onClick={placeCall}
           size="sm"
+          disabled={starting || dialer.status === 'connecting'}
           aria-label={`Call ${leadName}`}
         >
-          <Phone className="size-4" aria-hidden="true" />
+          {starting || dialer.status === 'connecting' ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Phone className="size-4" aria-hidden="true" />
+          )}
           <span>Call</span>
         </Button>
       </div>
+
+      {voiceProvider === 'twilio' && (
+        <p className="text-[11.5px] text-muted-foreground">
+          In-browser calling via Twilio (falls back to your device dialer if
+          unavailable).
+        </p>
+      )}
 
       {inCall && canLog && (
         <div className="flex flex-col gap-2.5 rounded-[10px] border bg-background/60 p-3">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-2 text-[13px] font-medium text-foreground">
               <span className="relative flex size-2">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand/60" />
-                <span className="relative inline-flex size-2 rounded-full bg-brand" />
+                <span
+                  className={cn(
+                    'absolute inline-flex size-full rounded-full',
+                    startedAt != null ? 'animate-ping bg-brand/60' : 'bg-muted',
+                  )}
+                />
+                <span
+                  className={cn(
+                    'relative inline-flex size-2 rounded-full',
+                    startedAt != null ? 'bg-brand' : 'bg-muted-foreground',
+                  )}
+                />
               </span>
-              In call
+              {twilioActive ? twilioStatusLabel : 'Call in progress'}
             </span>
             <span className="tnum font-mono text-[13px] text-muted-foreground">
               {formatDuration(elapsed)}
             </span>
           </div>
+
+          {twilioActive && dialer.status === 'in-call' && (
+            <div>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => dialer.hangup()}
+              >
+                <PhoneOff className="size-4" aria-hidden="true" />
+                End call
+              </Button>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -211,11 +294,12 @@ export function ClickToCall({
             />
           </div>
 
-          {mutation.isError && (
+          {(mutation.isError || dialer.error) && (
             <p role="alert" className="text-xs text-destructive">
-              {mutation.error instanceof Error
-                ? mutation.error.message
-                : 'Failed to log the call.'}
+              {dialer.error ??
+                (mutation.error instanceof Error
+                  ? mutation.error.message
+                  : 'Failed to log the call.')}
             </p>
           )}
 
@@ -235,7 +319,7 @@ export function ClickToCall({
                   <span>Logging…</span>
                 </>
               ) : (
-                <span>End & log call</span>
+                <span>End &amp; log call</span>
               )}
             </Button>
           </div>

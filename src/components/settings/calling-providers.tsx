@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import {
   Check,
   ExternalLink,
+  KeyRound,
+  Loader2,
   Minus,
   Phone,
   PhoneCall,
@@ -14,8 +16,6 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-
-const STORAGE_KEY = 'flowrish:voice-provider'
 
 interface Provider {
   id: string
@@ -142,21 +142,54 @@ const PROVIDERS: readonly Provider[] = [
  */
 export function CallingProviders(): React.JSX.Element {
   const [selected, setSelected] = useState<string | null>(null)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Load the org-wide selection.
   useEffect(() => {
-    try {
-      setSelected(window.localStorage.getItem(STORAGE_KEY))
-    } catch {
-      // ignore storage failures (private mode, etc.)
+    let cancelled = false
+    fetch('/api/admin/voice-provider', {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data && typeof data.provider !== 'undefined') {
+          setSelected(data.provider ?? null)
+        }
+      })
+      .catch(() => {
+        // Non-fatal — the grid still renders, just without a saved pick.
+      })
+    return () => {
+      cancelled = true
     }
   }, [])
 
-  function choose(id: string): void {
-    setSelected(id)
+  async function choose(id: string): Promise<void> {
+    setSaveError(null)
+    setSaving(id)
+    const previous = selected
+    setSelected(id) // optimistic
     try {
-      window.localStorage.setItem(STORAGE_KEY, id)
+      const res = await fetch('/api/admin/voice-provider', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: id }),
+      })
+      if (!res.ok) {
+        setSelected(previous)
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: { message?: string }
+        }
+        setSaveError(body.error?.message ?? 'Could not save your choice.')
+      }
     } catch {
-      // ignore
+      setSelected(previous)
+      setSaveError('Could not save your choice.')
+    } finally {
+      setSaving(null)
     }
   }
 
@@ -198,12 +231,22 @@ export function CallingProviders(): React.JSX.Element {
           <h3 className="text-sm font-semibold text-foreground">
             Choose a voice provider
           </h3>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">
+          <p className="mt-0.5 max-w-[640px] text-[13px] text-muted-foreground">
             For in-app calling. Pick the one that fits your budget and volume —
-            you can change this anytime.
+            you can change this anytime. All of these connect with{' '}
+            <span className="font-medium text-foreground">API keys</span> (none
+            use OAuth sign-in) — expand{' '}
+            <span className="font-medium text-foreground">How to connect</span>{' '}
+            on any card for step-by-step links to each credential.
           </p>
         </div>
       </div>
+
+      {saveError && (
+        <p role="alert" className="text-[13px] text-destructive">
+          {saveError}
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {PROVIDERS.map((p) => {
@@ -281,8 +324,14 @@ export function CallingProviders(): React.JSX.Element {
                   size="sm"
                   variant={isSelected ? 'outline' : 'default'}
                   onClick={() => choose(p.id)}
+                  disabled={saving !== null}
                 >
-                  {isSelected ? (
+                  {saving === p.id ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                      Saving…
+                    </>
+                  ) : isSelected ? (
                     <>
                       <Check className="size-4" aria-hidden="true" />
                       Selected
@@ -304,6 +353,8 @@ export function CallingProviders(): React.JSX.Element {
                   <ExternalLink className="size-3.5" aria-hidden="true" />
                 </Button>
               </div>
+
+              <ProviderSetup providerId={p.id} />
             </div>
           )
         })}
@@ -317,6 +368,245 @@ export function CallingProviders(): React.JSX.Element {
         in-browser is the next setup step.
       </p>
     </div>
+  )
+}
+
+interface SetupStep {
+  text: string
+  href?: string
+  hrefLabel?: string
+  /** Flowrish env var this step produces (Twilio only). */
+  env?: string
+}
+
+interface SetupGuide {
+  /** How the provider authenticates. */
+  auth: string
+  /** Whether Flowrish can place calls in-browser with this provider today. */
+  live: boolean
+  consoleHref: string
+  consoleLabel: string
+  steps: SetupStep[]
+  /** Env vars to add to the Flowrish deployment (Twilio). */
+  envVars?: { name: string; desc: string }[]
+}
+
+/**
+ * Per-provider connection guides. Every provider here authenticates with
+ * API keys/tokens — none use an OAuth "Sign in with…" flow — so the steps
+ * point directly at the console page where each credential lives.
+ */
+const SETUP_GUIDES: Record<string, SetupGuide> = {
+  twilio: {
+    auth: 'API keys (Account SID + API Key/Secret). No OAuth.',
+    live: true,
+    consoleHref: 'https://console.twilio.com',
+    consoleLabel: 'Open Twilio Console',
+    steps: [
+      {
+        text: 'Create a free Twilio account (or sign in).',
+        href: 'https://www.twilio.com/try-twilio',
+        hrefLabel: 'Sign up',
+      },
+      {
+        text: 'Buy a voice-enabled phone number — this is the number calls come from.',
+        href: 'https://console.twilio.com/us1/develop/phone-numbers/manage/search',
+        hrefLabel: 'Buy a number',
+        env: 'TWILIO_CALLER_ID',
+      },
+      {
+        text: 'Copy your Account SID from the Console dashboard.',
+        href: 'https://console.twilio.com',
+        hrefLabel: 'Account dashboard',
+        env: 'TWILIO_ACCOUNT_SID',
+      },
+      {
+        text: 'Create an API Key — save the SID and Secret (the Secret is shown once).',
+        href: 'https://console.twilio.com/us1/account/keys-credentials/api-keys',
+        hrefLabel: 'Create API key',
+        env: 'TWILIO_API_KEY + TWILIO_API_SECRET',
+      },
+      {
+        text: 'Create a TwiML App and set its Voice “Request URL” to https://<your-domain>/api/voice/twiml, then copy its SID.',
+        href: 'https://console.twilio.com/us1/develop/voice/manage/twiml-apps',
+        hrefLabel: 'Create TwiML App',
+        env: 'TWILIO_TWIML_APP_SID',
+      },
+    ],
+    envVars: [
+      { name: 'TWILIO_ACCOUNT_SID', desc: 'Account SID (starts with AC…)' },
+      { name: 'TWILIO_API_KEY', desc: 'API Key SID (starts with SK…)' },
+      { name: 'TWILIO_API_SECRET', desc: 'API Key Secret (shown once)' },
+      { name: 'TWILIO_TWIML_APP_SID', desc: 'TwiML App SID (starts with AP…)' },
+      { name: 'TWILIO_CALLER_ID', desc: 'Your Twilio number, E.164 (e.g. +14155551234)' },
+    ],
+  },
+  telnyx: {
+    auth: 'API key (V2). No OAuth.',
+    live: false,
+    consoleHref: 'https://portal.telnyx.com',
+    consoleLabel: 'Open Telnyx Portal',
+    steps: [
+      {
+        text: 'Sign up for / sign in to the Telnyx Mission Control Portal.',
+        href: 'https://portal.telnyx.com/#/signup',
+        hrefLabel: 'Sign up',
+      },
+      {
+        text: 'Create an API Key (your name, top-right → API Keys).',
+        href: 'https://portal.telnyx.com/#/app/api-keys',
+        hrefLabel: 'API Keys',
+      },
+      {
+        text: 'Buy a number and create a Voice API Application / WebRTC credential.',
+        href: 'https://developers.telnyx.com/development/api-fundamentals/create-api-keys',
+        hrefLabel: 'Docs',
+      },
+    ],
+  },
+  signalwire: {
+    auth: 'Project ID + API Token + Space URL. No OAuth.',
+    live: false,
+    consoleHref: 'https://signalwire.com/signin',
+    consoleLabel: 'Open SignalWire',
+    steps: [
+      {
+        text: 'Create a SignalWire Space (or sign in).',
+        href: 'https://signalwire.com/signin',
+        hrefLabel: 'Sign in',
+      },
+      {
+        text: 'In your Space, open the API tab to copy your Project ID, API Token and Space URL.',
+        href: 'https://developers.signalwire.com/platform/dashboard/getting-started/your-signalwire-api-space',
+        hrefLabel: 'API credentials guide',
+      },
+      { text: 'Buy a voice-capable phone number in your Space.' },
+    ],
+  },
+  plivo: {
+    auth: 'Auth ID + Auth Token. No OAuth.',
+    live: false,
+    consoleHref: 'https://console.plivo.com',
+    consoleLabel: 'Open Plivo Console',
+    steps: [
+      {
+        text: 'Sign up for / sign in to the Plivo Console.',
+        href: 'https://console.plivo.com',
+        hrefLabel: 'Console',
+      },
+      {
+        text: 'Copy your Auth ID and Auth Token from the dashboard overview.',
+        href: 'https://console.plivo.com/dashboard/',
+        hrefLabel: 'Dashboard',
+      },
+      { text: 'Buy a number and create a Voice application.' },
+    ],
+  },
+  bandwidth: {
+    auth: 'API credentials (username/password) + Account ID. No OAuth.',
+    live: false,
+    consoleHref: 'https://dashboard.bandwidth.com',
+    consoleLabel: 'Open Bandwidth Dashboard',
+    steps: [
+      {
+        text: 'Request an account — Bandwidth onboards through sales.',
+        href: 'https://www.bandwidth.com/communications-apis/voice/',
+        hrefLabel: 'Get started',
+      },
+      {
+        text: 'In the dashboard, find your API credentials and Account ID.',
+        href: 'https://dashboard.bandwidth.com',
+        hrefLabel: 'Dashboard',
+      },
+      { text: 'Provision voice-capable numbers for outbound calling.' },
+    ],
+  },
+}
+
+function ProviderSetup({ providerId }: { providerId: string }): React.JSX.Element | null {
+  const guide = SETUP_GUIDES[providerId]
+  if (!guide) return null
+  return (
+    <details className="mt-4 rounded-[10px] border bg-background/60">
+      <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-[13px] font-medium text-foreground">
+        <KeyRound className="size-3.5 text-muted-foreground" aria-hidden="true" />
+        How to connect
+        {guide.live ? (
+          <Badge variant="brand" size="sm" className="ml-auto">
+            Ready to use
+          </Badge>
+        ) : (
+          <Badge variant="outline" size="sm" className="ml-auto">
+            Integration coming soon
+          </Badge>
+        )}
+      </summary>
+      <div className="border-t px-4 py-3.5">
+        <p className="mb-3 text-[12.5px] text-muted-foreground">
+          <span className="font-medium text-foreground">Authentication:</span>{' '}
+          {guide.auth}
+        </p>
+        <ol className="flex flex-col gap-2.5">
+          {guide.steps.map((s, i) => (
+            <li key={i} className="flex gap-2.5 text-[12.5px]">
+              <span
+                aria-hidden="true"
+                className="mt-0.5 flex size-[20px] shrink-0 items-center justify-center rounded-full bg-muted font-mono text-[11px] font-semibold tnum text-foreground"
+              >
+                {i + 1}
+              </span>
+              <span className="text-foreground/80">
+                {s.text}
+                {s.env && (
+                  <span className="ml-1 font-mono text-[11px] text-brand-emphasis">
+                    → {s.env}
+                  </span>
+                )}
+                {s.href && (
+                  <a
+                    href={s.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-1.5 inline-flex items-center gap-0.5 font-medium text-brand-emphasis hover:underline"
+                  >
+                    {s.hrefLabel ?? 'Open'}
+                    <ExternalLink className="size-3" aria-hidden="true" />
+                  </a>
+                )}
+              </span>
+            </li>
+          ))}
+        </ol>
+
+        {guide.envVars && (
+          <div className="mt-3.5 rounded-[8px] border bg-card p-3">
+            <p className="mb-2 text-[12px] font-medium text-foreground">
+              Add these to your Flowrish environment, then select Twilio above:
+            </p>
+            <ul className="flex flex-col gap-1">
+              {guide.envVars.map((v) => (
+                <li key={v.name} className="flex flex-wrap items-baseline gap-x-2 text-[12px]">
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+                    {v.name}
+                  </code>
+                  <span className="text-muted-foreground">{v.desc}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <a
+          href={guide.consoleHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3.5 inline-flex items-center gap-1 text-[12.5px] font-medium text-brand-emphasis hover:underline"
+        >
+          {guide.consoleLabel}
+          <ExternalLink className="size-3.5" aria-hidden="true" />
+        </a>
+      </div>
+    </details>
   )
 }
 

@@ -9,6 +9,7 @@ import { getLeadById } from '@/server/services/leads'
 import { getActivitiesByLead } from '@/server/services/activities'
 import { getOrCreateDefaultPipeline } from '@/server/services/pipeline'
 import { createTenantPrisma } from '@/server/db/middleware'
+import { prisma } from '@/server/db/client'
 import { AppError } from '@/lib/errors'
 
 import { ClickToCall } from '@/components/leads/click-to-call'
@@ -76,9 +77,13 @@ export default async function LeadDetailPage({
     throw err
   }
 
-  const [activities, pipeline] = await Promise.all([
+  const [activities, pipeline, org] = await Promise.all([
     getActivitiesByLead(id, session.organizationId),
     getOrCreateDefaultPipeline(session.organizationId),
+    prisma.organization.findUnique({
+      where: { id: session.organizationId },
+      select: { voiceProvider: true },
+    }),
   ])
 
   // Look up the lead's most recent email thread so the compose form
@@ -243,6 +248,7 @@ export default async function LeadDetailPage({
               phone={lead.phone}
               leadName={`${lead.firstName} ${lead.lastName}`.trim()}
               canLog={canWrite}
+              voiceProvider={org?.voiceProvider ?? null}
             />
           </section>
 
