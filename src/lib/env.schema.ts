@@ -44,15 +44,6 @@ export const envSchema = z.object({
     .url('AI_API_URL must be a valid URL when provided')
     .default('https://generativelanguage.googleapis.com/v1beta/openai'),
   AI_MODEL: z.string().min(1).default('gemini-2.5-flash-lite-preview'),
-
-  // Twilio Voice (optional) — required only to place calls in-browser.
-  // When any are missing the app falls back to free `tel:` click-to-call.
-  TWILIO_ACCOUNT_SID: z.string().min(1).optional(),
-  TWILIO_API_KEY: z.string().min(1).optional(),
-  TWILIO_API_SECRET: z.string().min(1).optional(),
-  TWILIO_TWIML_APP_SID: z.string().min(1).optional(),
-  // The verified Twilio number calls are placed from (E.164, e.g. +14155551234).
-  TWILIO_CALLER_ID: z.string().min(1).optional(),
 })
 
 export type Env = z.infer<typeof envSchema>

@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { TwilioCredentialsForm } from '@/components/settings/twilio-credentials-form'
 
 interface Provider {
   id: string
@@ -360,6 +361,8 @@ export function CallingProviders(): React.JSX.Element {
         })}
       </div>
 
+      {selected === 'twilio' && <TwilioCredentialsForm />}
+
       <p className="flex items-start gap-2 text-[12px] text-muted-foreground">
         <Sparkles className="mt-0.5 size-3.5 shrink-0 text-brand-emphasis" aria-hidden="true" />
         Rates are indicative US outbound prices (2026) and change often —
@@ -412,33 +415,29 @@ const SETUP_GUIDES: Record<string, SetupGuide> = {
         text: 'Buy a voice-enabled phone number — this is the number calls come from.',
         href: 'https://console.twilio.com/us1/develop/phone-numbers/manage/search',
         hrefLabel: 'Buy a number',
-        env: 'TWILIO_CALLER_ID',
+        env: 'Caller ID field',
       },
       {
         text: 'Copy your Account SID from the Console dashboard.',
         href: 'https://console.twilio.com',
         hrefLabel: 'Account dashboard',
-        env: 'TWILIO_ACCOUNT_SID',
+        env: 'Account SID field',
       },
       {
         text: 'Create an API Key — save the SID and Secret (the Secret is shown once).',
         href: 'https://console.twilio.com/us1/account/keys-credentials/api-keys',
         hrefLabel: 'Create API key',
-        env: 'TWILIO_API_KEY + TWILIO_API_SECRET',
+        env: 'API Key SID + Secret fields',
       },
       {
-        text: 'Create a TwiML App and set its Voice “Request URL” to https://<your-domain>/api/voice/twiml, then copy its SID.',
+        text: 'Create a TwiML App and set its Voice “Request URL” to the webhook URL shown in the form below, then copy its SID.',
         href: 'https://console.twilio.com/us1/develop/voice/manage/twiml-apps',
         hrefLabel: 'Create TwiML App',
-        env: 'TWILIO_TWIML_APP_SID',
+        env: 'TwiML App SID field',
       },
-    ],
-    envVars: [
-      { name: 'TWILIO_ACCOUNT_SID', desc: 'Account SID (starts with AC…)' },
-      { name: 'TWILIO_API_KEY', desc: 'API Key SID (starts with SK…)' },
-      { name: 'TWILIO_API_SECRET', desc: 'API Key Secret (shown once)' },
-      { name: 'TWILIO_TWIML_APP_SID', desc: 'TwiML App SID (starts with AP…)' },
-      { name: 'TWILIO_CALLER_ID', desc: 'Your Twilio number, E.164 (e.g. +14155551234)' },
+      {
+        text: 'Paste all five values into the “Connect your Twilio account” form below and save — they’re stored encrypted for your workspace only.',
+      },
     ],
   },
   telnyx: {

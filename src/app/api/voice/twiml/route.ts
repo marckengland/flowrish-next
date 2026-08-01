@@ -1,20 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { getTwilioCallerId } from '@/server/services/voice'
+
 /**
  * POST /api/voice/twiml
  *
- * TwiML webhook that Twilio hits when the browser `Device` starts an
- * outbound call. It returns instructions to bridge the browser client to
- * the dialed PSTN number, using the org's verified caller ID.
+ * TwiML webhook Twilio hits when a browser `Device` starts an outbound
+ * call. It bridges the browser client to the dialed PSTN number using the
+ * calling org's own verified caller ID.
  *
- * Configure this URL as the Voice "Request URL" of your TwiML App
- * (Console → Voice → TwiML Apps). Twilio calls it directly, so it is NOT
- * behind the app's auth gate — see the middleware allow-list. It only ever
- * echoes the `To` parameter into a `<Dial>` verb; no data is read or
- * written.
+ * The browser dialer passes `To` and `OrgId` as custom call parameters;
+ * Twilio forwards them here. `OrgId` is not sensitive — we only use it to
+ * look up that org's caller ID. Configure this URL as the Voice "Request
+ * URL" of each org's TwiML App. Twilio calls it directly, so it is NOT
+ * behind the app's auth gate (see the middleware allow-list).
  *
- * Hardening note: for production you should verify the `X-Twilio-Signature`
- * header against your auth token before trusting the request.
+ * Hardening note: for production, verify `X-Twilio-Signature` against the
+ * org's auth token before trusting the request.
  */
 function escapeXml(value: string): string {
   return value
@@ -25,28 +27,38 @@ function escapeXml(value: string): string {
     .replace(/'/g, '&apos;')
 }
 
-export async function POST(request: NextRequest) {
-  const callerId = process.env.TWILIO_CALLER_ID ?? ''
+function xml(body: string): NextResponse {
+  return new NextResponse(
+    `<?xml version="1.0" encoding="UTF-8"?>${body}`,
+    { status: 200, headers: { 'Content-Type': 'text/xml' } },
+  )
+}
 
+export async function POST(request: NextRequest) {
   let to = ''
+  let orgId = ''
   try {
     const form = await request.formData()
     to = String(form.get('To') ?? '').trim()
+    orgId = String(form.get('OrgId') ?? '').trim()
   } catch {
-    // Fall through with empty `to` → we return a spoken error below.
+    // fall through to error TwiML
   }
 
-  // Only allow E.164-ish numbers to reach <Dial> (defensive).
   const safeTo = /^[+]?[0-9()\-\s.]{4,20}$/.test(to)
     ? to.replace(/[^\d+]/g, '')
     : ''
 
-  const twiml = safeTo
-    ? `<?xml version="1.0" encoding="UTF-8"?><Response><Dial callerId="${escapeXml(callerId)}"><Number>${escapeXml(safeTo)}</Number></Dial></Response>`
-    : `<?xml version="1.0" encoding="UTF-8"?><Response><Say>Sorry, no valid destination number was provided.</Say></Response>`
+  if (!safeTo) {
+    return xml('<Response><Say>Sorry, no valid destination number was provided.</Say></Response>')
+  }
 
-  return new NextResponse(twiml, {
-    status: 200,
-    headers: { 'Content-Type': 'text/xml' },
-  })
+  const callerId = orgId ? await getTwilioCallerId(orgId) : null
+  if (!callerId) {
+    return xml('<Response><Say>This workspace has not finished setting up calling.</Say></Response>')
+  }
+
+  return xml(
+    `<Response><Dial callerId="${escapeXml(callerId)}"><Number>${escapeXml(safeTo)}</Number></Dial></Response>`,
+  )
 }

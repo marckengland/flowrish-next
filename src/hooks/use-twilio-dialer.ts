@@ -14,6 +14,7 @@ interface TokenResponse {
   configured?: boolean
   token?: string
   identity?: string
+  orgId?: string
   callerId?: string
 }
 
@@ -84,7 +85,9 @@ export function useTwilioDialer() {
         )
 
         setStatus('connecting')
-        const call = await device.connect({ params: { To: toNumber } })
+        const call = await device.connect({
+          params: { To: toNumber, OrgId: data.orgId ?? '' },
+        })
         callRef.current = call
 
         call.on('accept', () => setStatus('in-call'))

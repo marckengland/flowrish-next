@@ -13,6 +13,7 @@ import { AssignmentRules } from '@/components/admin/assignment-rules'
 import { AiPromptConfig } from '@/components/ai/ai-prompt-config'
 import { GmailConnect } from '@/components/email/gmail-connect'
 import { EmailSyncStatus } from '@/components/email/email-sync-status'
+import { MicrosoftSetupCard } from '@/components/email/microsoft-setup-card'
 import { CallingProviders } from '@/components/settings/calling-providers'
 
 /**
@@ -104,7 +105,15 @@ export default function SettingsPage(): React.JSX.Element {
           {activeTab === 'assignment' && <AssignmentRules />}
           {activeTab === 'ai' && <AiPromptConfig />}
           {activeTab === 'email' && (
-            <div className="flex max-w-[560px] flex-col gap-[14px]">
+            <div className="flex max-w-[620px] flex-col gap-[14px]">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Gmail
+                </h3>
+                <p className="mt-0.5 text-[13px] text-muted-foreground">
+                  Connect your Google account to send and sync email.
+                </p>
+              </div>
               <GmailConnect
                 googleClientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''}
                 redirectUri={typeof window !== 'undefined' ? `${window.location.origin}/api/email/callback` : '/api/email/callback'}
@@ -116,13 +125,15 @@ export default function SettingsPage(): React.JSX.Element {
                       Inbox sync
                     </h3>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      Pulls the latest replies from your connected Gmail account
-                      into the activity timeline.
+                      Pulls the latest replies from your connected mailbox into
+                      the activity timeline.
                     </p>
                   </div>
                   <EmailSyncStatus className="shrink-0" />
                 </CardContent>
               </Card>
+
+              <MicrosoftSetupCard />
             </div>
           )}
           {activeTab === 'calling' && <CallingProviders />}
