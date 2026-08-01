@@ -22,11 +22,13 @@ export const metadata: Metadata = {
 
 /**
  * Runs before hydration so the correct theme class is on `<html>` for
- * the very first paint. Without this the page flashes light for dark-mode
- * users on every navigation. The script is kept tiny and self-contained;
- * anything more involved should live in the ThemeToggle component.
+ * the very first paint. The product design is light by default; dark mode
+ * is opt-in via the ThemeToggle and persisted to localStorage. We only
+ * add the `dark` class when the user has explicitly chosen it — we do NOT
+ * follow the OS `prefers-color-scheme`, so a dark-OS user still lands on
+ * the intended light design until they toggle. Kept tiny and self-contained.
  */
-const THEME_INIT_SCRIPT = `(function(){try{var k='flowrish:theme';var s=localStorage.getItem(k);var t=s||(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(t==='dark'){document.documentElement.classList.add('dark');}}catch(_e){}})();`
+const THEME_INIT_SCRIPT = `(function(){try{var k='flowrish:theme';var s=localStorage.getItem(k);if(s==='dark'){document.documentElement.classList.add('dark');}}catch(_e){}})();`
 
 export default function RootLayout({
   children,
