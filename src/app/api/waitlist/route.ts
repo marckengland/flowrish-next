@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/server/db/client'
 import { errorResponse } from '@/lib/errors'
+import { isWaitlistEnabled } from '@/lib/waitlist'
 import {
   sendTransactionalEmail,
   formatWaitlistConfirmationEmail,
@@ -23,6 +24,14 @@ const waitlistSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Feature flag: when the waitlist is disabled, hide the endpoint entirely.
+    if (!isWaitlistEnabled()) {
+      return NextResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'Not found' } },
+        { status: 404 },
+      )
+    }
+
     const body = await request.json()
     const { email, name: rawName } = waitlistSchema.parse(body)
     const name = rawName && rawName.length > 0 ? rawName : undefined

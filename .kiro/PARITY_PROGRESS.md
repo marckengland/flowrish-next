@@ -365,6 +365,12 @@ useful next step for production deploy confidence.
 - `Organization.plan` default `free` → `starter`.
 - **Behavior change:** gating is live — orgs below Growth now get 403 on those features. Set an org to Growth+ to unlock: `UPDATE "Organization" SET plan='growth' WHERE slug='…';`
 
+### Waitlist feature flag (`WAITLIST_ENABLED`)
+- New `src/lib/waitlist.ts` → `isWaitlistEnabled()` (reads `process.env`, default enabled; `WAITLIST_ENABLED=false` disables). Server-only.
+- `(marketing)/page.tsx` branches on it: enabled → CTAs to `#waitlist` + `WaitlistForm` in final CTA + private-beta subtext; disabled → CTAs to `/onboarding` + original button CTA + "14-day trial" subtext.
+- `POST /api/waitlist` returns 404 when disabled.
+- `.env.example`: added `WAITLIST_ENABLED`, plus optional `RESEND_API_KEY`/`RESEND_FROM` (waitlist confirmation email).
+
 ### Verified
 - `npx tsc --noEmit` green project-wide; `eslint` clean on changed files. Full `next build` not run here (sandbox `.env` lacks Supabase/Upstash/AI keys — unrelated to these changes).
 
@@ -372,3 +378,4 @@ useful next step for production deploy confidence.
 - Set real tier prices in `PLAN_TIERS` (kept current pending numbers).
 - Extend entitlement gating to remaining cadence sub-routes (activate, pause/resume, steps, analytics) for defense-in-depth.
 - Set `RESEND_API_KEY` (+ `RESEND_FROM`) in Flowrish env for waitlist confirmation delivery.
+- Waitlist has no owner-facing surface yet: signups land only in the `Waitlist` table (view via Supabase table editor / `prisma studio` / `SELECT … FROM "Waitlist"`). Consider: (a) an auth-gated `/admin/waitlist` list + invite/approve flow that moves `status` pending→invited→joined, and (b) a notification (email/Slack/Telegram) to the owner on each new signup. Same gap applies to Palago.
