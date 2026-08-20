@@ -7,7 +7,7 @@ import { hasPermission } from '@/server/auth/permissions'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { getLeadAccessFilter } from '@/server/services/access'
 import { DashboardTabs } from '@/components/dashboard/dashboard-tabs'
-import { CadenceBuilder } from '@/components/cadences/cadence-builder'
+import { CadenceOverview } from '@/components/cadences/cadence-overview'
 import { CadenceRenameButton } from '@/components/cadences/cadence-rename-button'
 import { EnrollmentList } from '@/components/cadences/enrollment-list'
 import { EnrollDialog } from '@/components/cadences/enroll-dialog'
@@ -246,7 +246,7 @@ export default async function CadenceDetailPage({
             value: 'overview',
             label: 'Overview',
             content: (
-              <CadenceBuilder
+              <CadenceOverview
                 cadenceId={cadence.id}
                 initialSteps={serializedSteps}
                 readOnly={!canManage || isArchived}
