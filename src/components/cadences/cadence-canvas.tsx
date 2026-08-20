@@ -272,6 +272,25 @@ function CanvasAdder(props: {
   )
 }
 
+/**
+ * The fixed-drag plugin eagerly resolves a DRAG_NODE renderer on ready and
+ * the drag indicators once a drag begins. The bundled defaults live in the
+ * Semi Design materials package, which we don't use — so we supply small,
+ * dependency-free equivalents. Without these, flowgram throws
+ * "Unknown render key drag-node".
+ */
+function DragNodePreview(): React.JSX.Element {
+  return (
+    <div className="rounded-md border border-brand bg-card px-3 py-1.5 text-xs font-medium shadow-md">
+      Moving step…
+    </div>
+  )
+}
+
+function DragDropIndicator(): React.JSX.Element {
+  return <div className="h-1 w-16 rounded-full bg-brand/70" aria-hidden="true" />
+}
+
 interface FlowCanvasProps {
   steps: readonly CadenceStep[]
   readOnly: boolean
@@ -321,6 +340,9 @@ function FlowCanvas({
         renderDefaultNode: CanvasNode,
         components: {
           [FlowRendererKey.ADDER]: CanvasAdder,
+          [FlowRendererKey.DRAG_NODE]: DragNodePreview,
+          [FlowRendererKey.DRAGGABLE_ADDER]: DragDropIndicator,
+          [FlowRendererKey.DRAG_HIGHLIGHT_ADDER]: DragDropIndicator,
         },
       },
       history: { enable: true, enableChangeNode: true },
