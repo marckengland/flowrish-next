@@ -314,10 +314,12 @@ function FlowCanvas({
     orderRef.current = steps.map((s) => s.id)
   }, [steps])
 
+  // Only the custom step type needs registering. 'start' / 'end' / 'default'
+  // are flowgram's built-in base registries — redefining a type whose
+  // `extend` equals its own name (e.g. type:'start' extend:'start') creates
+  // an infinite extend-resolution loop ("Maximum call stack size exceeded").
   const nodeRegistries: FlowNodeRegistry[] = useMemo(
     () => [
-      { type: 'start', extend: 'start', meta: { isStart: true, draggable: false, deleteDisable: true, copyDisable: true } },
-      { type: 'end', extend: 'end', meta: { isNodeEnd: true, draggable: false, deleteDisable: true, copyDisable: true } },
       {
         type: STEP_NODE_TYPE,
         extend: 'default',
