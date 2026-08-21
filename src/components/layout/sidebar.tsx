@@ -19,6 +19,7 @@ import {
   TrendingUp,
   ChevronDown,
   LogOut,
+  Radar,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -66,6 +67,12 @@ const NAV_GROUPS: readonly NavGroup[] = [
         label: 'Leads',
         icon: Target,
         permissions: ['leads:read'],
+      },
+      {
+        href: '/leads/discover',
+        label: 'Find Leads',
+        icon: Radar,
+        permissions: ['leads:write'],
       },
       {
         href: '/contacts',
