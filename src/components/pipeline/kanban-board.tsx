@@ -190,14 +190,17 @@ export function KanbanBoard({
         </p>
       ) : null}
 
-      <div
-        className="grid gap-3.5"
-        style={{
-          gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))`,
-        }}
-        aria-label="Pipeline Kanban board"
-      >
-        {stages.map((stage) => (
+      {/* Horizontal scroll so columns stay readable on small screens instead
+          of being crushed to unusable widths (standard kanban behaviour). */}
+      <div className="-mx-1 overflow-x-auto px-1 pb-2">
+        <div
+          className="grid gap-3.5"
+          style={{
+            gridTemplateColumns: `repeat(${stages.length}, minmax(248px, 1fr))`,
+          }}
+          aria-label="Pipeline Kanban board"
+        >
+          {stages.map((stage) => (
           <StageColumn
             key={stage.id}
             stage={stage}
@@ -214,7 +217,8 @@ export function KanbanBoard({
               moveMutation.mutate({ leadId, toStageId: stage.id })
             }}
           />
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   )

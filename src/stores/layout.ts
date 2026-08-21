@@ -15,19 +15,27 @@ import { create } from 'zustand'
  */
 export interface LayoutState {
   sidebarCollapsed: boolean
+  /** Whether the mobile navigation drawer is open (< lg breakpoint only). */
+  mobileNavOpen: boolean
   chatOpen: boolean
   setSidebarCollapsed: (collapsed: boolean) => void
   toggleSidebar: () => void
+  setMobileNavOpen: (open: boolean) => void
+  toggleMobileNav: () => void
   setChatOpen: (open: boolean) => void
   toggleChat: () => void
 }
 
 export const useLayoutStore = create<LayoutState>((set) => ({
   sidebarCollapsed: false,
+  mobileNavOpen: false,
   chatOpen: false,
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
   toggleSidebar: () =>
     set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
+  toggleMobileNav: () =>
+    set((state) => ({ mobileNavOpen: !state.mobileNavOpen })),
   setChatOpen: (open) => set({ chatOpen: open }),
   toggleChat: () => set((state) => ({ chatOpen: !state.chatOpen })),
 }))

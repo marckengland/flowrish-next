@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
-import { Bell, Bot, Search } from 'lucide-react'
+import { Bell, Bot, Menu, Search } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { useLayoutStore } from '@/stores/layout'
@@ -61,11 +61,21 @@ export function Header({
   const pathname = usePathname()
   const chatOpen = useLayoutStore((s) => s.chatOpen)
   const toggleChat = useLayoutStore((s) => s.toggleChat)
+  const toggleMobileNav = useLayoutStore((s) => s.toggleMobileNav)
 
   const title = pageTitle(pathname)
 
   return (
-    <header className="flex h-[60px] shrink-0 items-center gap-4 border-b bg-card px-6">
+    <header className="flex h-[60px] shrink-0 items-center gap-4 border-b bg-card px-4 sm:px-6">
+      <button
+        type="button"
+        onClick={toggleMobileNav}
+        aria-label="Open navigation"
+        className="-ml-1 flex size-9 shrink-0 items-center justify-center rounded-[10px] text-foreground/70 transition-colors hover:bg-muted lg:hidden"
+      >
+        <Menu className="size-5" aria-hidden="true" />
+      </button>
+
       <div className="font-mono text-[12px] text-muted-foreground">
         {organizationName ?? 'Flowrish'}{' '}
         <span className="text-foreground/25">/</span>{' '}

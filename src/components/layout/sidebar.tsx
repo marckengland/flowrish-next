@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   GitBranchPlus,
@@ -20,11 +20,13 @@ import {
   ChevronDown,
   LogOut,
   Radar,
+  X,
   type LucideIcon,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { createSupabaseBrowser } from '@/lib/supabase/client'
+import { useLayoutStore } from '@/stores/layout'
 import type { Permission } from '@/types/permissions'
 
 /**
@@ -170,6 +172,21 @@ export function Sidebar({
   const router = useRouter()
   const [signingOut, setSigningOut] = useState(false)
   const [avatarFailed, setAvatarFailed] = useState(false)
+  const mobileNavOpen = useLayoutStore((s) => s.mobileNavOpen)
+  const setMobileNavOpen = useLayoutStore((s) => s.setMobileNavOpen)
+
+  // Close the mobile drawer on route change and on Escape.
+  useEffect(() => {
+    setMobileNavOpen(false)
+  }, [pathname, setMobileNavOpen])
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') setMobileNavOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [mobileNavOpen, setMobileNavOpen])
 
   const permissionSet = new Set<Permission>(permissions)
   const isVisible = (item: NavItem): boolean => {
@@ -203,28 +220,50 @@ export function Sidebar({
   const showAvatar = user.avatarUrl && !avatarFailed
 
   return (
-    <aside
-      aria-label="Primary navigation"
-      className="flex h-full w-[238px] shrink-0 flex-col bg-sidebar px-3 py-3.5 text-sidebar-foreground"
-    >
-      {/* Brand */}
-      <div className="flex items-center gap-2.5 px-2 pb-4 pt-1.5">
-        <Image
-          src="/flower-emerald.png"
-          alt=""
+    <>
+      {/* Backdrop — mobile only, dismisses the drawer on tap. */}
+      {mobileNavOpen ? (
+        <div
           aria-hidden="true"
-          width={20}
-          height={20}
-          className="size-5 object-contain"
+          onClick={() => setMobileNavOpen(false)}
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
         />
-        <span className="min-w-0 flex-1 truncate text-[16px] font-semibold">
-          {organizationName ?? 'Flowrish'}
-        </span>
-        <ChevronDown
-          className="size-[15px] text-sidebar-foreground/45"
-          aria-hidden="true"
-        />
-      </div>
+      ) : null}
+
+      <aside
+        aria-label="Primary navigation"
+        className={cn(
+          // Off-canvas drawer on mobile; static rail from lg up.
+          'fixed inset-y-0 left-0 z-50 flex h-full w-[264px] flex-col bg-sidebar px-3 py-3.5 text-sidebar-foreground transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-[238px] lg:shrink-0 lg:translate-x-0 lg:shadow-none',
+          mobileNavOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full',
+        )}
+      >
+        {/* Brand */}
+        <div className="flex items-center gap-2.5 px-2 pb-4 pt-1.5">
+          <Image
+            src="/flower-emerald.png"
+            alt=""
+            aria-hidden="true"
+            width={20}
+            height={20}
+            className="size-5 object-contain"
+          />
+          <span className="min-w-0 flex-1 truncate text-[16px] font-semibold">
+            {organizationName ?? 'Flowrish'}
+          </span>
+          <ChevronDown
+            className="hidden size-[15px] text-sidebar-foreground/45 lg:block"
+            aria-hidden="true"
+          />
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(false)}
+            aria-label="Close navigation"
+            className="flex size-7 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-white/10 hover:text-white lg:hidden"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </div>
 
       {/* Nav */}
       <nav
@@ -310,7 +349,8 @@ export function Sidebar({
           <LogOut className="size-[15px]" aria-hidden="true" />
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }
 
