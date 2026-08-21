@@ -1202,10 +1202,10 @@ export async function executeChatAction(
               action: 'UPDATE',
               entityType: 'Lead',
               entityId: action.params.leadId,
-              metadata: JSON.stringify({
+              changes: {
                 via: 'chatbot',
                 leadStatus: action.params.leadStatus,
-              }),
+              },
             }),
           })
           .catch(() => {})
@@ -1238,10 +1238,10 @@ export async function executeChatAction(
               action: 'UPDATE',
               entityType: 'Lead',
               entityId: action.params.leadId,
-              metadata: JSON.stringify({
+              changes: {
                 via: 'chatbot',
                 tier: action.params.tier,
-              }),
+              },
             }),
           })
           .catch(() => {})

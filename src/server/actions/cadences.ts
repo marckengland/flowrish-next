@@ -109,7 +109,7 @@ export async function activateCadence(id: string) {
         action: 'UPDATE',
         entityType: 'Cadence',
         entityId: id,
-        metadata: JSON.stringify({ action: 'activate' }),
+        changes: { action: 'activate' },
       }),
     }).catch((err) => {
       console.error('Audit log failed (activateCadence):', err)
@@ -150,7 +150,7 @@ export async function archiveCadence(id: string) {
         action: 'UPDATE',
         entityType: 'Cadence',
         entityId: id,
-        metadata: JSON.stringify({ action: 'archive' }),
+        changes: { action: 'archive' },
       }),
     }).catch((err) => {
       console.error('Audit log failed (archiveCadence):', err)
@@ -209,7 +209,7 @@ export async function addStep(formData: FormData) {
         action: 'CREATE',
         entityType: 'CadenceStep',
         entityId: step.id,
-        metadata: JSON.stringify({ cadenceId }),
+        changes: { cadenceId },
       }),
     }).catch((err) => {
       console.error('Audit log failed (addStep):', err)
@@ -282,7 +282,7 @@ export async function updateStep(
         action: 'UPDATE',
         entityType: 'CadenceStep',
         entityId: stepId,
-        metadata: JSON.stringify({ cadenceId }),
+        changes: { cadenceId },
       }),
     }).catch((err) => {
       console.error('Audit log failed (updateStep):', err)
@@ -341,7 +341,7 @@ export async function deleteStep(cadenceId: string, stepId: string) {
         action: 'DELETE',
         entityType: 'CadenceStep',
         entityId: stepId,
-        metadata: JSON.stringify({ cadenceId }),
+        changes: { cadenceId },
       }),
     }).catch((err) => {
       console.error('Audit log failed (deleteStep):', err)
@@ -387,7 +387,7 @@ export async function reorderSteps(cadenceId: string, stepIds: string[]) {
         action: 'UPDATE',
         entityType: 'Cadence',
         entityId: cadenceId,
-        metadata: JSON.stringify({ action: 'reorder_steps' }),
+        changes: { action: 'reorder_steps' },
       }),
     }).catch((err) => {
       console.error('Audit log failed (reorderSteps):', err)
@@ -437,7 +437,7 @@ export async function enrollLead(cadenceId: string, leadId: string) {
         action: 'CREATE',
         entityType: 'CadenceEnrollment',
         entityId: enrollment.id,
-        metadata: JSON.stringify({ cadenceId, leadId }),
+        changes: { cadenceId, leadId },
       }),
     }).catch((err) => {
       console.error('Audit log failed (enrollLead):', err)
@@ -487,11 +487,11 @@ export async function bulkEnrollLeads(cadenceId: string, leadIds: string[]) {
         action: 'CREATE',
         entityType: 'CadenceEnrollment',
         entityId: cadenceId,
-        metadata: JSON.stringify({
+        changes: {
           action: 'bulk_enroll',
           enrolledCount: result.enrolledCount,
           skippedCount: result.skippedCount,
-        }),
+        },
       }),
     }).catch((err) => {
       console.error('Audit log failed (bulkEnrollLeads):', err)
@@ -536,7 +536,7 @@ export async function pauseEnrollment(enrollmentId: string) {
         action: 'UPDATE',
         entityType: 'CadenceEnrollment',
         entityId: enrollmentId,
-        metadata: JSON.stringify({ action: 'pause' }),
+        changes: { action: 'pause' },
       }),
     }).catch((err) => {
       console.error('Audit log failed (pauseEnrollment):', err)
@@ -581,7 +581,7 @@ export async function resumeEnrollment(enrollmentId: string) {
         action: 'UPDATE',
         entityType: 'CadenceEnrollment',
         entityId: enrollmentId,
-        metadata: JSON.stringify({ action: 'resume' }),
+        changes: { action: 'resume' },
       }),
     }).catch((err) => {
       console.error('Audit log failed (resumeEnrollment):', err)
@@ -633,7 +633,7 @@ export async function exitEnrollment(
         action: 'UPDATE',
         entityType: 'CadenceEnrollment',
         entityId: enrollmentId,
-        metadata: JSON.stringify({ action: 'exit', reason }),
+        changes: { action: 'exit', reason },
       }),
     }).catch((err) => {
       console.error('Audit log failed (exitEnrollment):', err)

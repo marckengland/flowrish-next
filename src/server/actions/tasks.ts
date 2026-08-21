@@ -99,7 +99,7 @@ export async function completeTask(id: string) {
         action: 'UPDATE',
         entityType: 'Task',
         entityId: id,
-        metadata: JSON.stringify({ action: 'complete' }),
+        changes: { action: 'complete' },
       }),
     }).catch((err) => {
       console.error('Audit log failed (completeTask):', err)
