@@ -23,6 +23,8 @@
 Thumbs.db
 ehthumbs.db
 *.pem
+# editor workspace files (personal, machine-specific)
+*.code-workspace
 
 # debug
 npm-debug.log*

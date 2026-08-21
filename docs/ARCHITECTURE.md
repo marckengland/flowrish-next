@@ -6,7 +6,7 @@ Flowrish CRM is a single Next.js 15 application using the App Router pattern. Al
 
 ## Multi-Tenancy
 
-Every data model (except User, Organization, and auth-related tables) is scoped to an organization via an `organizationId` foreign key. There are 28+ tenant-scoped models in total.
+Every data model (except User, Organization, and auth-related tables) is scoped to an organization via an `organizationId` foreign key. Of the ~40 models in the schema, 33 are tenant-scoped this way.
 
 ### Tenant Isolation Middleware
 

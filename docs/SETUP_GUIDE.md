@@ -52,6 +52,8 @@ cp .env.example .env
 | `AI_API_URL` | Gemini/OpenAI API endpoint | `https://generativelanguage.googleapis.com/v1beta/openai` |
 | `AI_API_KEY` | API key for AI service | — |
 | `AI_MODEL` | Model name | `gemini-2.5-flash-lite-preview` |
+| `NEXT_PUBLIC_SITE_URL` | Canonical site URL for SEO metadata, `sitemap.xml`, and `robots.txt` (`src/lib/site.ts`) | `https://flowrish.com` |
+| `NEXT_PUBLIC_APP_URL` | Base URL for organization invite links. Auto-derived from `VERCEL_URL` on Vercel; set explicitly on other hosts | `http://localhost:3000` |
 
 ### Generating EMAIL_ENCRYPTION_KEY
 
@@ -180,6 +182,25 @@ npm run dev
 ```
 
 Visit `http://localhost:3000`. You'll be redirected to the login page.
+
+### Seeding demo data (optional)
+
+Once you've created an organization, you can fill it with realistic, clearly
+labeled demo data so every data-driven feature has something to show:
+
+```bash
+# Point the seeder at your org (by slug, or by the owner's email), then confirm.
+SEED_ORG_SLUG=your-org-slug SEED_DEMO_CONFIRM=yes npm run seed:demo
+
+# Remove the demo rows again (they're all tagged, e.g. "… (DEMO)"):
+npm run seed:demo:clean
+```
+
+The seeder (`prisma/seed-demo.ts`) targets a **single** org resolved from
+`SEED_ORG_SLUG`, else `SEED_USER_EMAIL` (which falls back to
+`E2E_TEST_USER_EMAIL`). It can run against production, so it prints the resolved
+org and **refuses to write unless `SEED_DEMO_CONFIRM=yes`**. It's idempotent —
+it cleans existing demo rows first, then recreates them.
 
 ## 9. Running Tests
 

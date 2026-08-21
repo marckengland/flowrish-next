@@ -98,7 +98,7 @@ src/
 ├── stores/                 # Zustand stores (layout, filters, kanban)
 └── types/                  # TypeScript type definitions
 prisma/
-├── schema.prisma           # Database schema (28+ tenant-scoped models)
+├── schema.prisma           # Database schema (~40 models, 33 tenant-scoped)
 └── seed.ts                 # Seed script
 ```
 
