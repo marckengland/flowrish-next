@@ -370,10 +370,12 @@ Full-text search across Leads, Contacts, and Companies using PostgreSQL tsvector
 
 - Returns: executive summary, strategic goals, sales angles, challenges
 
-### Chatbot
+### Airish (AI chatbot assistant)
 
-- Accessible from every page via the sidebar
-- Ask questions about your pipeline, get suggestions
+- Open **Airish** from the button in the top bar (available on every dashboard page); it slides in as a side panel
+- Ask questions about your pipeline and get suggestions
+- Airish can propose actions (navigate, update a lead's status/tier, enroll a lead, draft a cadence, …). By default each action asks for confirmation before it runs
+- **Autopilot** — toggle it on and Airish executes proposed actions immediately without asking for per-action confirmation. Toggle it off to review each action again
 
 ---
 

@@ -370,6 +370,12 @@ Three tiers enforced in Next.js middleware:
 - **Auth:** 10 requests/minute per IP
 - **Write:** 30 requests/minute per IP
 
+Scope: rate limiting is applied **only to `/api/*` requests** — page navigation
+and static assets are never limited (so normal browsing can't return
+`RATE_LIMITED`). It is also **skipped entirely outside production** (`getRateLimiters()`
+returns `null` when `NODE_ENV !== 'production'`), so local dev and the e2e suite
+don't hit the limiter.
+
 ### Brute-Force Protection
 
 5 failed login attempts in 15 minutes → account lockout for full duration.

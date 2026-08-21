@@ -12,7 +12,7 @@ A modern, multi-tenant CRM built with Next.js 15 (App Router), Supabase Auth, Pr
 - **UI:** Tailwind CSS v4, Shadcn/ui, Lucide icons
 - **Rich Text Editor:** Tiptap v3 (email composition with formatting, links, colors)
 - **State:** TanStack Query v5 (server), Zustand v5 (client)
-- **Testing:** Vitest v3, fast-check v3 (property-based), Testing Library
+- **Testing:** Vitest v3, fast-check v3 (property-based), Testing Library (unit); Playwright (end-to-end)
 - **Deployment:** Vercel + Supabase Cloud
 
 ## Quick Start
@@ -50,11 +50,21 @@ Open [http://localhost:3000](http://localhost:3000).
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start Next.js dev server |
+| `npm run dev` | Start Next.js dev server (`:3000`) |
 | `npm run build` | Production build |
-| `npm run test` | Run all tests |
-| `npm run test:watch` | Run tests in watch mode |
+| `npm run start` | Serve the production build |
 | `npm run lint` | ESLint check |
+| `npm run typecheck:fast` | Type-check with no emit (`tsgo --noEmit`) |
+| `npm run test` | Run the unit/integration suite once |
+| `npm run test:watch` | Unit tests in watch mode |
+| `npm run test:e2e` | Playwright e2e against a local dev server (auto-started on `:3100`) |
+| `npm run test:e2e:ui` | Playwright e2e in interactive UI mode |
+| `npm run test:e2e:prod` | Playwright e2e against a deployed URL (read-only smoke) |
+| `npm run test:e2e:install` | Install the Chromium browser Playwright needs (first-time) |
+| `npm run seed:demo` | Seed demo data for the test org (`seed:demo:clean` to reset first) |
+| `npm run setup:storage` | Provision the Supabase storage bucket for attachments |
+
+See **[docs/TESTING.md](docs/TESTING.md)** for how the unit and e2e layers work, including `test:e2e` vs `test:e2e:prod`.
 
 ## Project Structure
 
@@ -106,7 +116,7 @@ prisma/
 - **Email Integration** — Gmail **and Microsoft 365 / Outlook** (Microsoft Graph) with OAuth, personalization tags, inbox sync, threaded replies, and rich HTML emails. Encrypted tokens; cadence email steps work with either provider automatically
 - **Calling** — Bring-your-own **click-to-call**: free `tel:` dialer + call logging out of the box, and optional **in-browser calling via Twilio** (per-org credentials, encrypted at rest; TwiML webhook signature verification). A provider comparison (Twilio/Telnyx/SignalWire/Plivo/Bandwidth) with self-serve setup guides lives in Settings
 - **Marketing landing page** — public `/` landing (auth-aware CTAs); the authenticated app lives under `/dashboard`
-- **AI Features** — Email generation, account research, and chatbot (Gemini/OpenAI)
+- **AI Features** — Email generation, account research, and **Airish**, the in-app AI chatbot assistant (Gemini/OpenAI)
 - **CSV Import/Export** — Bulk lead import with duplicate detection and field mapping
 - **Full-text Search** — PostgreSQL tsvector across leads, contacts, and companies
 - **Audit Logging** — Immutable trail of all CUD operations
@@ -159,6 +169,7 @@ All routes under `/api/admin/` require `admin:users` or `admin:settings` permiss
 - [Architecture](docs/ARCHITECTURE.md) — System design, multi-tenancy, RBAC, data flow
 - [User Manual](docs/USER_MANUAL.md) — Feature walkthrough and user flows
 - [Integrations Guide](docs/INTEGRATIONS.md) — Calling (Twilio), email (Gmail + Microsoft/Outlook), and CRM migration setup + how they work
+- [Testing Guide](docs/TESTING.md) — Unit (Vitest) and end-to-end (Playwright) testing, local vs. prod runs
 
 ## Deployment
 

@@ -183,13 +183,28 @@ Visit `http://localhost:3000`. You'll be redirected to the login page.
 
 ## 9. Running Tests
 
-```bash
-# Run all tests
-npm run test
+### Unit / integration (Vitest)
 
-# Watch mode
-npm run test:watch
+```bash
+npm run test          # run the whole suite once
+npm run test:watch    # re-run on change
 ```
+
+No database or network needed — these are fully mocked.
+
+### End-to-end (Playwright)
+
+```bash
+npm run test:e2e:install   # first time only — installs the Chromium browser
+npm run test:e2e           # local dev server, auto-started on :3100
+npm run test:e2e:prod      # against a deployed URL (read-only smoke)
+```
+
+Local e2e boots the real app and signs in through the `/auth/confirm` route, so
+it needs a **valid** `EMAIL_ENCRYPTION_KEY` (a placeholder makes that route 500
+and sign-in fails), plus `SUPABASE_SECRET_KEY` and `E2E_TEST_USER_EMAIL` for an
+existing user. See **[TESTING.md](TESTING.md)** for the full breakdown of how
+the suites work, `test:e2e` vs `test:e2e:prod`, and `@write` gating.
 
 ## 10. Production Deployment (Vercel)
 
@@ -216,9 +231,14 @@ The `vercel.json` configures:
 
 ### CI/CD
 
-The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push:
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
+- ESLint (`npm run lint`)
 - TypeScript strict check (`tsc --noEmit`)
-- Full test suite (`vitest --run`)
+- Full unit suite (`vitest --run`)
+
+Playwright e2e is **not** part of CI (it needs a live Supabase project and a
+seeded test user) — run it locally with `npm run test:e2e`. On merge to `main`,
+a separate job applies Prisma migrations when the `SUPABASE_DB_URL` secret is set.
 
 ## 11. Troubleshooting
 
@@ -248,6 +268,18 @@ The user has an account but no organization. Complete the onboarding form to cre
 
 ### Email threading not working in cadences
 Run the migration: `npx prisma migrate dev --name add_email_thread_id`. This adds the `emailThreadId` column to `CadenceEnrollment`.
+
+### Local `npm run test:e2e` fails at sign-in ("No Supabase auth cookie…")
+The `/auth/confirm` route is returning 500 because env validation failed —
+almost always a placeholder `EMAIL_ENCRYPTION_KEY`. Set a real 64-hex value
+(`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`),
+and make sure the test user exists in your Supabase project. See
+[TESTING.md](TESTING.md#troubleshooting).
+
+### `npm run test:e2e` uses the wrong server / stale code
+Local e2e owns port **`:3100`** and frees it before starting, so it never reuses
+a stale server. Keep your manual `npm run dev` on `:3000` (untouched); don't run
+your own server on `:3100`.
 
 
 ---
