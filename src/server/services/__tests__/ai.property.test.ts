@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import fc from 'fast-check'
 
+// Every test here is property-based (`fc.assert` with numRuns: 30). Each run
+// mocks the DB/fetch and round-trips JSON, costing ~1-3s locally — which
+// intermittently exceeds Vitest's 5s default on slower/variable CI runners
+// (the failures were timeouts, not assertion errors; there is no real delay in
+// the code under test). Raise the per-test timeout file-wide so any of these
+// property tests can complete their 30 runs under CI load.
+vi.setConfig({ testTimeout: 15_000 })
+
 /**
  * Property-based tests for AI service error handling and system prompt inclusion.
  *
