@@ -7,6 +7,7 @@ import { Loader2, Pause, Play, LogOut } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Table, TableHead, Th, TableBody, Tr, Td, TableState } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import {
   pauseEnrollment,
@@ -119,48 +120,35 @@ export function EnrollmentList({
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-md border bg-card">
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Lead
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Status
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Step
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Enrolled
-              </th>
-              <th scope="col" className="px-3 py-2 text-right font-medium">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="px-3 py-8 text-center text-sm text-muted-foreground"
-                >
-                  {initialEnrollments.length === 0
-                    ? 'No leads are enrolled yet.'
-                    : 'No enrollments match the current filter.'}
-                </td>
-              </tr>
-            ) : (
-              filtered.map((enrollment) => {
-                const pending = isPending && pendingId === enrollment.id
-                return (
-                  <tr
-                    key={enrollment.id}
-                    className="border-t transition-colors hover:bg-muted/30"
-                  >
-                    <td className="px-3 py-2">
+      <Table minWidth={720}>
+        <TableHead>
+          <Th>Lead</Th>
+          <Th>Status</Th>
+          <Th>Step</Th>
+          <Th>Enrolled</Th>
+          <Th align="right">Actions</Th>
+        </TableHead>
+        <TableBody>
+          {filtered.length === 0 ? (
+            <TableState
+              colSpan={5}
+              title={
+                initialEnrollments.length === 0
+                  ? 'No leads enrolled yet'
+                  : 'No enrollments match this filter'
+              }
+              description={
+                initialEnrollments.length === 0
+                  ? 'Enroll leads from the cadence to start working them.'
+                  : 'Try a different status filter.'
+              }
+            />
+          ) : (
+            filtered.map((enrollment) => {
+              const pending = isPending && pendingId === enrollment.id
+              return (
+                <Tr key={enrollment.id}>
+                    <Td>
                       {enrollment.lead ? (
                         <Link
                           href={`/leads/${enrollment.lead.id}`}
@@ -178,22 +166,22 @@ export function EnrollmentList({
                           {enrollment.lead.companyName}
                         </div>
                       ) : null}
-                    </td>
-                    <td className="px-3 py-2">
+                    </Td>
+                    <Td>
                       <StatusBadge status={enrollment.status} />
                       {enrollment.status === 'EXITED' && enrollment.exitReason ? (
                         <div className="text-xs text-muted-foreground">
                           {formatExitReason(enrollment.exitReason)}
                         </div>
                       ) : null}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground">
+                    </Td>
+                    <Td className="text-muted-foreground">
                       Step {enrollment.currentStepOrder}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground">
+                    </Td>
+                    <Td className="text-muted-foreground">
                       {formatRelative(enrollment.enrolledAt)}
-                    </td>
-                    <td className="px-3 py-2">
+                    </Td>
+                    <Td align="right">
                       <div className="flex justify-end gap-1">
                         {enrollment.status === 'ACTIVE' && (
                           <Button
@@ -244,14 +232,13 @@ export function EnrollmentList({
                           </Button>
                         )}
                       </div>
-                    </td>
-                  </tr>
+                    </Td>
+                  </Tr>
                 )
               })
             )}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
     </section>
   )
 }

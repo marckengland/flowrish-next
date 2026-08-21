@@ -19,6 +19,7 @@ import {
   Td,
   TableState,
 } from '@/components/ui/table'
+import { usePersistentState } from '@/hooks/use-persistent-state'
 import { sortByKey, type SortDir } from '@/lib/table-sort'
 import { toast } from '@/lib/toast'
 
@@ -76,9 +77,18 @@ export function CompanyTable({
 }: CompanyTableProps): React.JSX.Element {
   const [currentSearch, setCurrentSearch] = useState(search ?? '')
   const [page, setPage] = useState(initialPage)
-  const [pageSize, setPageSize] = useState(initialPageSize)
-  const [sortKey, setSortKey] = useState<CompanySortKey>('name')
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [pageSize, setPageSize] = usePersistentState(
+    'flowrish:companies:pageSize',
+    initialPageSize,
+  )
+  const [sortKey, setSortKey] = usePersistentState<CompanySortKey>(
+    'flowrish:companies:sortKey',
+    'name',
+  )
+  const [sortDir, setSortDir] = usePersistentState<SortDir>(
+    'flowrish:companies:sortDir',
+    'asc',
+  )
 
   const query = useCompaniesQuery({ search: currentSearch || undefined, page, pageSize })
   const companiesPage = query.data ?? initialData

@@ -6,6 +6,9 @@ import { ScrollText, Filter, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Badge, type BadgeProps } from '@/components/ui/badge'
+import { Pagination } from '@/components/ui/pagination'
+import { Table, TableHead, Th, SortableTh, TableBody, Tr, Td } from '@/components/ui/table'
+import { sortByKey, type SortDir } from '@/lib/table-sort'
 
 /**
  * Maps an audit action verb to a semantic Badge tone:
@@ -65,6 +68,19 @@ interface AuditFilters {
 
 const ENTITY_TYPES = ['Lead', 'Contact', 'Company', 'Task', 'Cadence', 'Pipeline']
 
+type AuditSortKey = 'action' | 'entity' | 'when'
+
+function auditSortValue(entry: AuditEntry, key: AuditSortKey): string {
+  switch (key) {
+    case 'action':
+      return entry.action
+    case 'entity':
+      return entry.entityType
+    case 'when':
+      return entry.createdAt
+  }
+}
+
 export function AuditLog(): React.JSX.Element {
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<AuditFilters>({
@@ -74,6 +90,18 @@ export function AuditLog(): React.JSX.Element {
     toDate: '',
   })
   const [showFilters, setShowFilters] = useState(false)
+  const [sortKey, setSortKey] = useState<AuditSortKey>('when')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  function toggleSort(key: string): void {
+    const next = key as AuditSortKey
+    if (next === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSortKey(next)
+    setSortDir(next === 'when' ? 'desc' : 'asc')
+  }
 
   const queryParams = new URLSearchParams()
   queryParams.set('page', String(page))
@@ -200,74 +228,47 @@ export function AuditLog(): React.JSX.Element {
         </div>
       ) : (
         <>
-          <div className="overflow-hidden rounded-lg border bg-card">
-            <table className="w-full border-collapse text-[13.5px]">
-              <thead>
-                <tr className="border-b bg-muted/40">
-                  <th className="eyebrow px-4 py-3 text-left">Action</th>
-                  <th className="eyebrow px-4 py-3 text-left">Entity</th>
-                  <th className="eyebrow px-4 py-3 text-left">Entity ID</th>
-                  <th className="eyebrow px-4 py-3 text-left">Actor</th>
-                  <th className="eyebrow px-4 py-3 text-right">When</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.entries.map((entry) => (
-                  <tr
-                    key={entry.id}
-                    className="border-b border-row-divider last:border-0 hover:bg-muted/30"
-                  >
-                    <td className="px-4 py-3">
-                      <Badge
-                        variant={actionVariant(entry.action)}
-                        size="sm"
-                        className="rounded-[5px] font-mono font-semibold"
-                      >
-                        {entry.action}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-foreground">{entry.entityType}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                      {entry.entityId.slice(0, 8)}...
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                      {entry.userId.slice(0, 8)}...
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-muted-foreground">
-                      {new Date(entry.createdAt).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table minWidth={640}>
+            <TableHead>
+              <SortableTh label="Action" sortKey="action" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+              <SortableTh label="Entity" sortKey="entity" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+              <Th>Entity ID</Th>
+              <Th>Actor</Th>
+              <SortableTh label="When" sortKey="when" activeKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+            </TableHead>
+            <TableBody>
+              {sortByKey(data.entries, (e) => auditSortValue(e, sortKey), sortDir).map((entry) => (
+                <Tr key={entry.id}>
+                  <Td>
+                    <Badge
+                      variant={actionVariant(entry.action)}
+                      size="sm"
+                      className="rounded-[5px] font-mono font-semibold"
+                    >
+                      {entry.action}
+                    </Badge>
+                  </Td>
+                  <Td className="text-foreground">{entry.entityType}</Td>
+                  <Td className="font-mono text-xs text-muted-foreground">
+                    {entry.entityId.slice(0, 8)}...
+                  </Td>
+                  <Td className="font-mono text-xs text-muted-foreground">
+                    {entry.userId.slice(0, 8)}...
+                  </Td>
+                  <Td align="right" className="font-mono text-muted-foreground">
+                    {new Date(entry.createdAt).toLocaleString()}
+                  </Td>
+                </Tr>
+              ))}
+            </TableBody>
+          </Table>
 
-          {/* Pagination */}
-          {data.pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">
-                Page {data.pagination.page} of {data.pagination.totalPages} ({data.pagination.total} entries)
-              </p>
-              <div className="flex gap-1">
-                <Button
-                  variant="outline"
-                  size="xs"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="xs"
-                  disabled={page >= data.pagination.totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            pagination={data.pagination}
+            onPageChange={setPage}
+            itemLabel="entries"
+            loading={isLoading}
+          />
         </>
       )}
     </div>

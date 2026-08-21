@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScoreBadge } from '@/components/scoring/score-badge'
 import { Pagination } from '@/components/ui/pagination'
 import { SortableTh, TableState } from '@/components/ui/table'
+import { usePersistentState } from '@/hooks/use-persistent-state'
 import { useFiltersStore } from '@/stores/filters'
 import { useLeadsQuery, type LeadListItem } from '@/hooks/use-leads'
 
@@ -64,10 +65,19 @@ export function LeadTable({
   pageSize: initialPageSize = 20,
 }: LeadTableProps): React.JSX.Element {
   const filters = useFiltersStore((s) => s.leads)
-  const [sortKey, setSortKey] = useState<SortKey>('createdAt')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [sortKey, setSortKey] = usePersistentState<SortKey>(
+    'flowrish:leads:sortKey',
+    'createdAt',
+  )
+  const [sortDir, setSortDir] = usePersistentState<SortDir>(
+    'flowrish:leads:sortDir',
+    'desc',
+  )
   const [page, setPage] = useState(initialPage)
-  const [pageSize, setPageSize] = useState(initialPageSize)
+  const [pageSize, setPageSize] = usePersistentState(
+    'flowrish:leads:pageSize',
+    initialPageSize,
+  )
 
   // Reset to the first page whenever the filter set changes, so the user
   // isn't stranded on a page number that no longer exists for the new query.

@@ -17,6 +17,8 @@ import {
   GripVertical,
   Handshake,
   Mail,
+  Maximize2,
+  Minimize2,
   Phone,
   Plus,
   Trash2,
@@ -427,6 +429,19 @@ export function CadenceCanvas({
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
+  // Fullscreen (immersive) canvas. The flowgram editor uses a large infinite
+  // dotted canvas, so a small boxed viewport leaves it looking sparse — going
+  // fullscreen gives the flow room to breathe. Escape exits.
+  const [fullscreen, setFullscreen] = useState(false)
+  useEffect(() => {
+    if (!fullscreen) return
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') setFullscreen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [fullscreen])
+
   function handleReorder(orderedStepIds: string[]): void {
     setError(null)
     startTransition(async () => {
@@ -498,7 +513,14 @@ export function CadenceCanvas({
         </p>
       ) : null}
 
-      <div className="relative h-[520px] w-full overflow-hidden rounded-lg border bg-card">
+      <div
+        className={cn(
+          'relative w-full overflow-hidden bg-card',
+          fullscreen
+            ? 'fixed inset-0 z-50 h-[100dvh] rounded-none border-0'
+            : 'h-[min(680px,calc(100dvh-240px))] min-h-[440px] rounded-lg border',
+        )}
+      >
         {/* The flowgram canvas captures wheel/pan and fills the viewport, so
             the page-level "Back to cadences" link can scroll out of reach.
             Pin an always-visible exit directly onto the diagram. */}
@@ -509,6 +531,29 @@ export function CadenceCanvas({
           <ChevronLeft className="size-4" aria-hidden="true" />
           <span>Back to cadences</span>
         </Link>
+
+        {/* Fullscreen toggle — the immersive view gives the flow room and
+            escapes the cramped boxed canvas. */}
+        <button
+          type="button"
+          onClick={() => setFullscreen((f) => !f)}
+          aria-label={fullscreen ? 'Exit fullscreen' : 'Open fullscreen'}
+          title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
+          className="absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-md border border-border bg-card/95 px-2.5 py-1.5 text-sm text-muted-foreground shadow-sm backdrop-blur transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          {fullscreen ? (
+            <>
+              <Minimize2 className="size-4" aria-hidden="true" />
+              <span>Exit</span>
+            </>
+          ) : (
+            <>
+              <Maximize2 className="size-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Fullscreen</span>
+            </>
+          )}
+        </button>
+
         {mounted ? (
           <CanvasContext.Provider
             value={{
@@ -521,7 +566,9 @@ export function CadenceCanvas({
             }}
           >
             <FlowCanvas
-              key={signature}
+              // Re-key on fullscreen change so flowgram re-inits and re-runs
+              // fitView against the new viewport size.
+              key={`${signature}:${fullscreen ? 'fs' : 'box'}`}
               steps={steps}
               readOnly={readOnly}
               onReorder={handleReorder}

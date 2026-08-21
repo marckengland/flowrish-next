@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -27,6 +27,8 @@ export interface LeadFiltersProps {
   assignees?: readonly FilterOption[]
   className?: string
 }
+
+const LEADS_FILTERS_KEY = 'flowrish:leads:filters'
 
 const STATUS_OPTIONS: readonly FilterOption[] = [
   { value: 'NEW', label: 'New' },
@@ -64,7 +66,37 @@ export function LeadFilters({
 }: LeadFiltersProps): React.JSX.Element {
   const leads = useFiltersStore((s) => s.leads)
   const setLeadFilter = useFiltersStore((s) => s.setLeadFilter)
+  const setLeadFilters = useFiltersStore((s) => s.setLeadFilters)
   const resetLeadFilters = useFiltersStore((s) => s.resetLeadFilters)
+
+  // Persist the active filter set to localStorage so it survives navigation
+  // and reloads. Loaded once after mount (SSR-safe — the server renders with
+  // no filters, the client hydrates them), then written on every change.
+  const filtersHydrated = useRef(false)
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LEADS_FILTERS_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, unknown>
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+          setLeadFilters(parsed)
+        }
+      }
+    } catch {
+      // Ignore malformed / unavailable storage.
+    } finally {
+      filtersHydrated.current = true
+    }
+  }, [setLeadFilters])
+
+  useEffect(() => {
+    if (!filtersHydrated.current) return
+    try {
+      window.localStorage.setItem(LEADS_FILTERS_KEY, JSON.stringify(leads))
+    } catch {
+      // Ignore quota / unavailable storage.
+    }
+  }, [leads])
 
   const searchId = useId()
   const stageId = useId()

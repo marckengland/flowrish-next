@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/pagination'
 import { Table, TableHead, Th, SortableTh, TableBody, Tr, TableState } from '@/components/ui/table'
+import { usePersistentState } from '@/hooks/use-persistent-state'
 import { sortByKey, type SortDir } from '@/lib/table-sort'
 import { toast } from '@/lib/toast'
 
@@ -73,9 +74,18 @@ export function ContactTable({
 }: ContactTableProps): React.JSX.Element {
   const [currentSearch, setCurrentSearch] = useState(search ?? '')
   const [page, setPage] = useState(initialPage)
-  const [pageSize, setPageSize] = useState(initialPageSize)
-  const [sortKey, setSortKey] = useState<ContactSortKey>('name')
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [pageSize, setPageSize] = usePersistentState(
+    'flowrish:contacts:pageSize',
+    initialPageSize,
+  )
+  const [sortKey, setSortKey] = usePersistentState<ContactSortKey>(
+    'flowrish:contacts:sortKey',
+    'name',
+  )
+  const [sortDir, setSortDir] = usePersistentState<SortDir>(
+    'flowrish:contacts:sortDir',
+    'asc',
+  )
 
   const query = useContactsQuery({ search: currentSearch || undefined, companyId, page, pageSize })
   const contactsPage = query.data ?? initialData
