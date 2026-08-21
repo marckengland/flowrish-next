@@ -272,7 +272,7 @@ export default async function RhythmPage(): Promise<React.JSX.Element> {
       <div className="grid gap-[18px] lg:grid-cols-[1.6fr_1fr]">
         <PriorityList actions={priorityActions} />
 
-        <aside className="flex flex-col gap-[18px]">
+        <aside className="flex flex-col gap-[18px] lg:sticky lg:top-6 lg:self-start">
           <div className="rounded-lg border border-brand/30 bg-brand-subtle p-[18px]">
             <div className="mb-2.5 flex items-center gap-2">
               <Bot className="size-4 text-brand-emphasis" aria-hidden="true" />

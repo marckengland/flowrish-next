@@ -526,7 +526,7 @@ export function CadenceCanvas({
             Pin an always-visible exit directly onto the diagram. */}
         <Link
           href="/cadences"
-          className="absolute left-3 top-3 z-10 inline-flex items-center gap-1 rounded-md border border-border bg-card/95 px-2.5 py-1.5 text-sm text-muted-foreground shadow-sm backdrop-blur transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="absolute left-3 top-3 z-20 inline-flex items-center gap-1 rounded-md border border-border bg-card/95 px-2.5 py-1.5 text-sm text-muted-foreground shadow-sm backdrop-blur transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           <ChevronLeft className="size-4" aria-hidden="true" />
           <span>Back to cadences</span>
@@ -539,7 +539,7 @@ export function CadenceCanvas({
           onClick={() => setFullscreen((f) => !f)}
           aria-label={fullscreen ? 'Exit fullscreen' : 'Open fullscreen'}
           title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
-          className="absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-md border border-border bg-card/95 px-2.5 py-1.5 text-sm text-muted-foreground shadow-sm backdrop-blur transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="absolute right-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-md border border-border bg-card/95 px-2.5 py-1.5 text-sm text-muted-foreground shadow-sm backdrop-blur transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           {fullscreen ? (
             <>

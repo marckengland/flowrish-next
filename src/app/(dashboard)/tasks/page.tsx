@@ -129,7 +129,7 @@ export default async function TasksPage(): Promise<React.JSX.Element> {
         {canWrite ? (
           <aside
             aria-label="Create task"
-            className="flex h-fit flex-col gap-4 rounded-lg border bg-card p-[18px]"
+            className="flex h-fit flex-col gap-4 rounded-lg border bg-card p-[18px] lg:sticky lg:top-6"
           >
             <header className="flex items-center gap-2">
               <Plus className="size-4 text-brand-emphasis" aria-hidden="true" />
@@ -150,7 +150,7 @@ export default async function TasksPage(): Promise<React.JSX.Element> {
         ) : (
           <aside
             aria-label="Create task"
-            className="flex h-fit flex-col gap-4 rounded-lg border bg-card p-[18px]"
+            className="flex h-fit flex-col gap-4 rounded-lg border bg-card p-[18px] lg:sticky lg:top-6"
           >
             <header className="flex items-center gap-2">
               <h2 className="text-sm font-semibold">New task</h2>

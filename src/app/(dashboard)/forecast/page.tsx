@@ -102,7 +102,7 @@ export default async function ForecastPage(): Promise<React.JSX.Element> {
 
       <section
         aria-labelledby="forecast-commit-heading"
-        className="grid gap-[18px] lg:grid-cols-[1.2fr_1fr]"
+        className="grid items-start gap-[18px] lg:grid-cols-[1.2fr_1fr]"
       >
         <h2 id="forecast-commit-heading" className="sr-only">
           Your commit and commit vs AI

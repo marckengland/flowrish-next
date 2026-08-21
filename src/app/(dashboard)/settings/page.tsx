@@ -61,7 +61,7 @@ export default function SettingsPage(): React.JSX.Element {
         {/* Left rail navigation */}
         <nav
           aria-label="Settings sections"
-          className="flex flex-row gap-1 overflow-x-auto lg:flex-col lg:gap-[3px] lg:overflow-x-visible"
+          className="flex flex-row gap-1 overflow-x-auto lg:sticky lg:top-6 lg:flex-col lg:gap-[3px] lg:overflow-x-visible"
         >
           {TABS.map((tab) => {
             const Icon = tab.icon

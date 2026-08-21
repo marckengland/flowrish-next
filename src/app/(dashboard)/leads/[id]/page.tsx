@@ -237,9 +237,32 @@ export default async function LeadDetailPage({
             }))}
             canWrite={canWrite}
           />
+
+          <section
+            aria-label="Conversation intelligence"
+            className="flex flex-col gap-3 rounded-lg border border-brand/30 bg-brand-subtle p-[18px]"
+          >
+            <h2 className="text-sm font-semibold text-brand-emphasis">
+              Conversation intelligence
+            </h2>
+            <ConversationIntelligence leadId={lead.id} canCoach={canCoach} />
+          </section>
+
+          {canWrite && (
+            <section
+              aria-label="AI Tools"
+              className="flex flex-col gap-3 rounded-lg border border-ai/30 bg-ai-subtle p-[18px]"
+            >
+              <h2 className="text-sm font-semibold text-ai">AI Tools</h2>
+              <EmailGenerator leadId={lead.id} />
+              {lead.companyId && (
+                <AccountResearch companyId={lead.companyId} />
+              )}
+            </section>
+          )}
         </div>
 
-        <aside className="flex flex-col gap-[18px]">
+        <aside className="flex flex-col gap-[18px] lg:sticky lg:top-6 lg:self-start">
           <LeadDealCard
             leadStatus={lead.leadStatus}
             tier={lead.tier}
@@ -279,32 +302,6 @@ export default async function LeadDetailPage({
               </p>
             )}
           </section>
-
-          <section
-            aria-label="Conversation intelligence"
-            className="flex flex-col gap-3 rounded-lg border border-brand/30 bg-brand-subtle p-[18px]"
-          >
-            <h2 className="text-sm font-semibold text-brand-emphasis">
-              Conversation intelligence
-            </h2>
-            <ConversationIntelligence
-              leadId={lead.id}
-              canCoach={canCoach}
-            />
-          </section>
-
-          {canWrite && (
-            <section
-              aria-label="AI Tools"
-              className="flex flex-col gap-3 rounded-lg border border-ai/30 bg-ai-subtle p-[18px]"
-            >
-              <h2 className="text-sm font-semibold text-ai">AI Tools</h2>
-              <EmailGenerator leadId={lead.id} />
-              {lead.companyId && (
-                <AccountResearch companyId={lead.companyId} />
-              )}
-            </section>
-          )}
 
           {canWrite && (
             <section
