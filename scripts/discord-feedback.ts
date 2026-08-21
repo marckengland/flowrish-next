@@ -296,6 +296,23 @@ async function runPull(client: Client): Promise<void> {
 
 // ─── Command: done ───────────────────────────────────────────────────────────
 
+/** Fetches every message in a thread, oldest → newest. */
+async function fetchAllThreadMessages(
+  thread: AnyThreadChannel,
+): Promise<Message[]> {
+  const collected: Message[] = []
+  let before: string | undefined
+  for (;;) {
+    const batch = await thread.messages.fetch({ limit: 100, before })
+    if (batch.size === 0) break
+    collected.push(...batch.values())
+    before = batch.last()?.id
+    if (batch.size < 100) break
+  }
+  collected.sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+  return collected
+}
+
 async function runDone(client: Client): Promise<void> {
   if (doneTargets.length === 0) {
     console.error('Usage: npm run discord:feedback -- done <threadId> [<threadId>…]')
@@ -314,14 +331,44 @@ async function runDone(client: Client): Promise<void> {
       const wasArchived = t.archived ?? false
       if (wasArchived) await t.setArchived(false).catch(() => {})
 
+      // React to every message in the thread — each one is a discrete
+      // feedback item — plus the starter message (parent), which keeps the
+      // `pull` skip check working since it looks at the starter's reaction.
+      const messages = await fetchAllThreadMessages(t)
       const starter = await t.fetchStarterMessage().catch(() => null)
-      const target = starter ?? (await t.messages.fetch({ limit: 1 })).first()
-      if (!target) {
-        console.error(`✗ ${id} — no message to react to`)
+
+      const seen = new Set<string>()
+      const targets: Message[] = []
+      if (starter) {
+        targets.push(starter)
+        seen.add(starter.id)
+      }
+      for (const m of messages) {
+        if (!seen.has(m.id)) {
+          targets.push(m)
+          seen.add(m.id)
+        }
+      }
+
+      if (targets.length === 0) {
+        console.error(`✗ ${id} — no messages to react to`)
         continue
       }
-      await target.react(DONE_EMOJI)
-      console.log(`✓ marked done: "${t.name}" (${id})`)
+
+      let reacted = 0
+      for (const m of targets) {
+        try {
+          await m.react(DONE_EMOJI)
+          reacted++
+        } catch (err) {
+          console.error(
+            `  · couldn't react to a message in "${t.name}": ${(err as Error).message}`,
+          )
+        }
+      }
+      console.log(
+        `✓ marked done: "${t.name}" (${id}) — reacted to ${reacted}/${targets.length} message(s)`,
+      )
 
       if (wasArchived) await t.setArchived(true).catch(() => {})
     } catch (err) {

@@ -16,6 +16,8 @@
     "test:e2e:prod": "node --env-file=.env node_modules/.bin/playwright test",
     "test:e2e:prod:write": "E2E_ALLOW_WRITES=1 node --env-file=.env node_modules/.bin/playwright test e2e/forms.spec.ts",
     "setup:storage": "tsx scripts/setup-supabase-storage.ts",
+    "seed:demo": "node --env-file=.env --import tsx prisma/seed-demo.ts",
+    "seed:demo:clean": "SEED_DEMO_CLEAN=1 node --env-file=.env --import tsx prisma/seed-demo.ts",
     "discord:feedback": "tsx scripts/discord-feedback.ts"
   },
   "dependencies": {
