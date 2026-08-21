@@ -8,6 +8,7 @@ import { useCompaniesQuery, useDeleteCompanyMutation, type CompanyListItem } fro
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
+import { Pagination } from '@/components/ui/pagination'
 import {
   Table,
   TableHead,
@@ -50,10 +51,11 @@ export interface CompanyTableProps {
 export function CompanyTable({
   initialData,
   search,
-  page = 1,
+  page: initialPage = 1,
   pageSize = 20,
 }: CompanyTableProps): React.JSX.Element {
   const [currentSearch, setCurrentSearch] = useState(search ?? '')
+  const [page, setPage] = useState(initialPage)
 
   const query = useCompaniesQuery({ search: currentSearch || undefined, page, pageSize })
   const companiesPage = query.data ?? initialData
@@ -95,7 +97,10 @@ export function CompanyTable({
           <Input
             type="search"
             value={currentSearch}
-            onChange={(e) => setCurrentSearch(e.target.value)}
+            onChange={(e) => {
+              setCurrentSearch(e.target.value)
+              setPage(1)
+            }}
             placeholder="Search companies…"
             aria-label="Search companies"
             className="pl-9"
@@ -192,12 +197,12 @@ export function CompanyTable({
       </Table>
 
       {companiesPage?.pagination && (
-        <p className="text-xs text-muted-foreground" aria-live="polite">
-          Showing {rows.length} of {companiesPage.pagination.total} companies
-          {companiesPage.pagination.totalPages > 1 && (
-            <> · Page {companiesPage.pagination.page} of {companiesPage.pagination.totalPages}</>
-          )}
-        </p>
+        <Pagination
+          pagination={companiesPage.pagination}
+          onPageChange={setPage}
+          itemLabel="companies"
+          loading={query.isFetching}
+        />
       )}
 
       <ConfirmDialog

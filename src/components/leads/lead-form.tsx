@@ -5,6 +5,7 @@ import { useActionState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field, SelectField } from '@/components/ui/field'
 import { createLead, updateLead } from '@/server/actions/leads'
+import { toast } from '@/lib/toast'
 
 /**
  * Minimal pipeline stage shape consumed by the form.
@@ -124,6 +125,7 @@ export function LeadForm({
         : await createLead(formData)
 
       if (result && 'data' in result && result.data) {
+        toast.success(isEditing ? 'Lead updated' : 'Lead created')
         onSuccess?.(result.data.id)
       }
       return result as ActionResult

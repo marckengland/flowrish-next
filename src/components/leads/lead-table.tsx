@@ -1,12 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Target } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { ScoreBadge } from '@/components/scoring/score-badge'
+import { Pagination } from '@/components/ui/pagination'
 import { TableState } from '@/components/ui/table'
 import { useFiltersStore } from '@/stores/filters'
 import { useLeadsQuery, type LeadListItem } from '@/hooks/use-leads'
@@ -59,12 +60,20 @@ export interface LeadTableProps {
  */
 export function LeadTable({
   initialData,
-  page = 1,
+  page: initialPage = 1,
   pageSize = 20,
 }: LeadTableProps): React.JSX.Element {
   const filters = useFiltersStore((s) => s.leads)
   const [sortKey, setSortKey] = useState<SortKey>('createdAt')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [page, setPage] = useState(initialPage)
+
+  // Reset to the first page whenever the filter set changes, so the user
+  // isn't stranded on a page number that no longer exists for the new query.
+  const filtersKey = JSON.stringify(filters)
+  useEffect(() => {
+    setPage(1)
+  }, [filtersKey])
 
   // Only seed the query with SSR data when the view matches what the server
   // pre-rendered (default filters, first page). For any other filter/page the
@@ -220,12 +229,12 @@ export function LeadTable({
       </div>
 
       {leadsPage?.pagination && (
-        <p className="eyebrow px-0.5" aria-live="polite">
-          Showing {sorted.length} of {leadsPage.pagination.total} leads
-          {leadsPage.pagination.totalPages > 1 && (
-            <> · Page {leadsPage.pagination.page} of {leadsPage.pagination.totalPages}</>
-          )}
-        </p>
+        <Pagination
+          pagination={leadsPage.pagination}
+          onPageChange={setPage}
+          itemLabel="leads"
+          loading={query.isFetching}
+        />
       )}
     </div>
   )

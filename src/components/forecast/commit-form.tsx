@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { inputBaseClass } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { submitForecast } from '@/server/actions/forecast'
+import { toast } from '@/lib/toast'
 
 export interface CommitFormProps {
   /** YYYY-MM period to pre-select (defaults to the current month). */
@@ -54,6 +55,7 @@ export function CommitForm({
     async (_prev, formData) => {
       const result = await submitForecast(formData)
       if (result && 'data' in result && result.data) {
+        toast.success('Forecast submitted')
         onSuccess?.(result.data.id)
       }
       return result as ActionResult

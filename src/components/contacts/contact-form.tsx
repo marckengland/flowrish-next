@@ -5,6 +5,7 @@ import { useActionState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field, SelectField } from '@/components/ui/field'
 import { createContact, updateContact } from '@/server/actions/contacts'
+import { toast } from '@/lib/toast'
 
 /**
  * Company option for the company select dropdown.
@@ -70,6 +71,7 @@ export function ContactForm({
         : await createContact(formData)
 
       if (result && 'data' in result && result.data) {
+        toast.success(isEditing ? 'Contact updated' : 'Contact created')
         onSuccess?.(result.data.id)
       }
       return result as ActionResult

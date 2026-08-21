@@ -5,6 +5,7 @@ import { useActionState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createTask, updateTask } from '@/server/actions/tasks'
+import { toast } from '@/lib/toast'
 
 /**
  * Minimal lead option shape consumed by the lead selector.
@@ -110,6 +111,7 @@ export function TaskForm({
         : await createTask(formData)
 
       if (result && 'data' in result && result.data && 'id' in result.data) {
+        toast.success(isEditing ? 'Task updated' : 'Task created')
         onSuccess?.(result.data.id as string)
       }
       return result as ActionResult

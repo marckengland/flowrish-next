@@ -8,6 +8,7 @@ import { useContactsQuery, useDeleteContactMutation, type ContactListItem } from
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
+import { Pagination } from '@/components/ui/pagination'
 import { Table, TableHead, Th, TableBody, Tr, TableState } from '@/components/ui/table'
 import { toast } from '@/lib/toast'
 
@@ -46,10 +47,11 @@ export function ContactTable({
   initialData,
   search,
   companyId,
-  page = 1,
+  page: initialPage = 1,
   pageSize = 20,
 }: ContactTableProps): React.JSX.Element {
   const [currentSearch, setCurrentSearch] = useState(search ?? '')
+  const [page, setPage] = useState(initialPage)
 
   const query = useContactsQuery({ search: currentSearch || undefined, companyId, page, pageSize })
   const contactsPage = query.data ?? initialData
@@ -86,7 +88,10 @@ export function ContactTable({
         <Input
           type="search"
           value={currentSearch}
-          onChange={(e) => setCurrentSearch(e.target.value)}
+          onChange={(e) => {
+            setCurrentSearch(e.target.value)
+            setPage(1)
+          }}
           placeholder="Search contacts…"
           aria-label="Search contacts"
           className="max-w-sm"
@@ -175,12 +180,12 @@ export function ContactTable({
         </Table>
 
       {contactsPage?.pagination && (
-        <p className="text-xs text-muted-foreground" aria-live="polite">
-          Showing {rows.length} of {contactsPage.pagination.total} contacts
-          {contactsPage.pagination.totalPages > 1 && (
-            <> · Page {contactsPage.pagination.page} of {contactsPage.pagination.totalPages}</>
-          )}
-        </p>
+        <Pagination
+          pagination={contactsPage.pagination}
+          onPageChange={setPage}
+          itemLabel="contacts"
+          loading={query.isFetching}
+        />
       )}
 
       <ConfirmDialog

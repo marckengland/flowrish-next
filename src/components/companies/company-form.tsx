@@ -5,6 +5,7 @@ import { useActionState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { createCompany, updateCompany } from '@/server/actions/contacts'
+import { toast } from '@/lib/toast'
 
 /**
  * Existing company shape accepted when the form is used in edit mode.
@@ -53,6 +54,7 @@ export function CompanyForm({
         : await createCompany(formData)
 
       if (result && 'data' in result && result.data) {
+        toast.success(isEditing ? 'Company updated' : 'Company created')
         onSuccess?.(result.data.id)
       }
       return result as ActionResult
