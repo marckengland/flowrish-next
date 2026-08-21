@@ -82,7 +82,11 @@ const TIER_OPTIONS = [
   { value: 'TIER_3', label: 'Tier 3' },
 ] as const
 
-type ActionResult = { error?: string; data?: { id: string } } | null
+type ActionResult = {
+  error?: string
+  fieldErrors?: Record<string, string>
+  data?: { id: string }
+} | null
 
 /**
  * Zod-validated create/edit form for leads.
@@ -150,6 +154,7 @@ export function LeadForm({
         <Field
           id="lead-first-name"
           name="firstName"
+          error={state?.fieldErrors?.firstName}
           label="First Name"
           required
           defaultValue={lead?.firstName ?? ''}
@@ -159,6 +164,7 @@ export function LeadForm({
         <Field
           id="lead-last-name"
           name="lastName"
+          error={state?.fieldErrors?.lastName}
           label="Last Name"
           required
           defaultValue={lead?.lastName ?? ''}
@@ -172,6 +178,7 @@ export function LeadForm({
         <Field
           id="lead-title"
           name="title"
+          error={state?.fieldErrors?.title}
           label="Title / Role"
           defaultValue={lead?.title ?? ''}
           placeholder="e.g. VP of Sales"
@@ -179,6 +186,7 @@ export function LeadForm({
         <Field
           id="lead-company-name"
           name="companyName"
+          error={state?.fieldErrors?.companyName}
           label="Company Name"
           defaultValue={lead?.companyName ?? ''}
           placeholder="Company name"
@@ -190,6 +198,7 @@ export function LeadForm({
         <SelectField
           id="lead-status"
           name="leadStatus"
+          error={state?.fieldErrors?.leadStatus}
           label="Lead Status"
           defaultValue={lead?.leadStatus ?? 'NEW'}
         >
@@ -202,6 +211,7 @@ export function LeadForm({
         <SelectField
           id="lead-tier"
           name="tier"
+          error={state?.fieldErrors?.tier}
           label="Tier"
           defaultValue={lead?.tier ?? ''}
         >
@@ -214,6 +224,7 @@ export function LeadForm({
         <SelectField
           id="lead-stage"
           name="stageId"
+          error={state?.fieldErrors?.stageId}
           label="Deal Stage"
           required
           defaultValue={defaultStageId}
@@ -237,6 +248,7 @@ export function LeadForm({
         <Field
           id="lead-deal-value"
           name="dealValue"
+          error={state?.fieldErrors?.dealValue}
           label="Deal Value"
           type="number"
           inputMode="decimal"
@@ -248,6 +260,7 @@ export function LeadForm({
         <Field
           id="lead-currency"
           name="currency"
+          error={state?.fieldErrors?.currency}
           label="Currency"
           maxLength={3}
           defaultValue={lead?.currency ?? 'USD'}
@@ -256,6 +269,7 @@ export function LeadForm({
         <Field
           id="lead-score"
           name="score"
+          error={state?.fieldErrors?.score}
           label="Score (0–100)"
           type="number"
           min={0}
@@ -270,6 +284,7 @@ export function LeadForm({
       <Field
         id="lead-linkedin"
         name="linkedinUrl"
+        error={state?.fieldErrors?.linkedinUrl}
         label="LinkedIn URL"
         type="url"
         defaultValue={lead?.linkedinUrl ?? ''}
@@ -281,6 +296,7 @@ export function LeadForm({
         <Field
           id="lead-email"
           name="email"
+          error={state?.fieldErrors?.email}
           label="Email"
           type="email"
           autoComplete="email"
@@ -290,6 +306,7 @@ export function LeadForm({
         <Field
           id="lead-alt-email"
           name="altEmail"
+          error={state?.fieldErrors?.altEmail}
           label="Alt Email"
           type="email"
           defaultValue={lead?.altEmail ?? ''}
@@ -298,6 +315,7 @@ export function LeadForm({
         <Field
           id="lead-phone"
           name="phone"
+          error={state?.fieldErrors?.phone}
           label="Phone"
           type="tel"
           autoComplete="tel"
@@ -311,6 +329,7 @@ export function LeadForm({
         <Field
           id="lead-country"
           name="country"
+          error={state?.fieldErrors?.country}
           label="Country"
           autoComplete="country-name"
           defaultValue={lead?.country ?? ''}
@@ -319,6 +338,7 @@ export function LeadForm({
         <Field
           id="lead-state"
           name="state"
+          error={state?.fieldErrors?.state}
           label="State / Region"
           autoComplete="address-level1"
           defaultValue={lead?.state ?? ''}
@@ -331,6 +351,7 @@ export function LeadForm({
         <Field
           id="lead-company-industry"
           name="companyIndustry"
+          error={state?.fieldErrors?.companyIndustry}
           label="Company Industry"
           defaultValue={lead?.companyIndustry ?? ''}
           placeholder="e.g. Software / SaaS"
@@ -338,6 +359,7 @@ export function LeadForm({
         <Field
           id="lead-company-website"
           name="companyWebsite"
+          error={state?.fieldErrors?.companyWebsite}
           label="Company Website"
           type="url"
           defaultValue={lead?.companyWebsite ?? ''}
@@ -346,6 +368,7 @@ export function LeadForm({
         <Field
           id="lead-company-linkedin"
           name="companyLinkedinUrl"
+          error={state?.fieldErrors?.companyLinkedinUrl}
           label="Company LinkedIn URL"
           type="url"
           defaultValue={lead?.companyLinkedinUrl ?? ''}

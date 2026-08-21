@@ -27,7 +27,11 @@ export interface CompanyFormProps {
   submitLabel?: string
 }
 
-type ActionResult = { error?: string; data?: { id: string } } | null
+type ActionResult = {
+  error?: string
+  fieldErrors?: Record<string, string>
+  data?: { id: string }
+} | null
 
 /**
  * Zod-validated create/edit form for companies.
@@ -70,6 +74,7 @@ export function CompanyForm({
       <Field
         id="company-name"
         name="name"
+        error={state?.fieldErrors?.name}
         label="Company Name"
         required
         defaultValue={company?.name ?? ''}
@@ -81,6 +86,7 @@ export function CompanyForm({
         <Field
           id="company-industry"
           name="industry"
+          error={state?.fieldErrors?.industry}
           label="Industry"
           defaultValue={company?.industry ?? ''}
           placeholder="e.g. Software / SaaS"
@@ -88,6 +94,7 @@ export function CompanyForm({
         <Field
           id="company-website"
           name="website"
+          error={state?.fieldErrors?.website}
           label="Website"
           type="url"
           defaultValue={company?.website ?? ''}

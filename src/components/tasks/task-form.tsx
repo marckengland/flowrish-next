@@ -69,7 +69,15 @@ const PRIORITY_OPTIONS = [
   { value: 'HIGH', label: 'High' },
 ] as const
 
-type ActionResult = { error?: string; data?: { id: string } | null } | null
+type ActionResult = {
+  error?: string
+  fieldErrors?: Record<string, string>
+  data?: { id: string } | null
+} | null
+
+/** Extra classes applied to a control when its field has a validation error. */
+const invalidRing =
+  'border-danger focus-visible:border-danger focus-visible:ring-danger/20'
 
 /**
  * Zod-validated create/edit form for tasks.
@@ -143,8 +151,14 @@ export function TaskForm({
           defaultValue={task?.title ?? ''}
           placeholder="e.g. Follow up on proposal"
           maxLength={500}
-          className={inputClass}
+          aria-invalid={state?.fieldErrors?.title ? true : undefined}
+          className={cn(inputClass, state?.fieldErrors?.title && invalidRing)}
         />
+        {state?.fieldErrors?.title ? (
+          <p role="alert" className="mt-1 text-xs text-danger-foreground">
+            {state.fieldErrors.title}
+          </p>
+        ) : null}
       </div>
 
       <div>
@@ -178,8 +192,14 @@ export function TaskForm({
             type="datetime-local"
             required
             defaultValue={defaultDueDate}
-            className={inputClass}
+            aria-invalid={state?.fieldErrors?.dueDate ? true : undefined}
+            className={cn(inputClass, state?.fieldErrors?.dueDate && invalidRing)}
           />
+          {state?.fieldErrors?.dueDate ? (
+            <p role="alert" className="mt-1 text-xs text-danger-foreground">
+              {state.fieldErrors.dueDate}
+            </p>
+          ) : null}
         </div>
 
         <div>
@@ -217,7 +237,8 @@ export function TaskForm({
             name="leadId"
             required
             defaultValue={defaultLead}
-            className={selectClass}
+            aria-invalid={state?.fieldErrors?.leadId ? true : undefined}
+            className={cn(selectClass, state?.fieldErrors?.leadId && invalidRing)}
           >
             {leads.length === 0 ? (
               <option value="" disabled>
@@ -231,6 +252,11 @@ export function TaskForm({
               ))
             )}
           </select>
+          {state?.fieldErrors?.leadId ? (
+            <p role="alert" className="mt-1 text-xs text-danger-foreground">
+              {state.fieldErrors.leadId}
+            </p>
+          ) : null}
         </div>
 
         <div>
@@ -245,7 +271,11 @@ export function TaskForm({
             name="assigneeId"
             required
             defaultValue={defaultAssignee}
-            className={selectClass}
+            aria-invalid={state?.fieldErrors?.assigneeId ? true : undefined}
+            className={cn(
+              selectClass,
+              state?.fieldErrors?.assigneeId && invalidRing,
+            )}
           >
             {assignees.length === 0 ? (
               <option value="" disabled>
@@ -259,6 +289,11 @@ export function TaskForm({
               ))
             )}
           </select>
+          {state?.fieldErrors?.assigneeId ? (
+            <p role="alert" className="mt-1 text-xs text-danger-foreground">
+              {state.fieldErrors.assigneeId}
+            </p>
+          ) : null}
         </div>
       </div>
 

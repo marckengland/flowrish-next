@@ -3,9 +3,8 @@
 import { useActionState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { inputBaseClass } from '@/components/ui/input'
+import { Field, SelectField } from '@/components/ui/field'
 import { createContact, updateContact } from '@/server/actions/contacts'
-import { cn } from '@/lib/utils'
 
 /**
  * Company option for the company select dropdown.
@@ -44,7 +43,11 @@ export interface ContactFormProps {
   submitLabel?: string
 }
 
-type ActionResult = { error?: string; data?: { id: string } } | null
+type ActionResult = {
+  error?: string
+  fieldErrors?: Record<string, string>
+  data?: { id: string }
+} | null
 
 /**
  * Zod-validated create/edit form for contacts.
@@ -89,6 +92,7 @@ export function ContactForm({
         <Field
           id="contact-first-name"
           name="firstName"
+          error={state?.fieldErrors?.firstName}
           label="First Name"
           required
           defaultValue={contact?.firstName ?? ''}
@@ -98,6 +102,7 @@ export function ContactForm({
         <Field
           id="contact-last-name"
           name="lastName"
+          error={state?.fieldErrors?.lastName}
           label="Last Name"
           required
           defaultValue={contact?.lastName ?? ''}
@@ -111,6 +116,7 @@ export function ContactForm({
         <Field
           id="contact-email"
           name="email"
+          error={state?.fieldErrors?.email}
           label="Email"
           type="email"
           autoComplete="email"
@@ -120,6 +126,7 @@ export function ContactForm({
         <Field
           id="contact-phone"
           name="phone"
+          error={state?.fieldErrors?.phone}
           label="Phone"
           type="tel"
           autoComplete="tel"
@@ -133,6 +140,7 @@ export function ContactForm({
         <Field
           id="contact-job-title"
           name="jobTitle"
+          error={state?.fieldErrors?.jobTitle}
           label="Job Title"
           defaultValue={contact?.jobTitle ?? ''}
           placeholder="e.g. VP of Sales"
@@ -140,6 +148,7 @@ export function ContactForm({
         <SelectField
           id="contact-company"
           name="companyId"
+          error={state?.fieldErrors?.companyId}
           label="Company"
           defaultValue={contact?.companyId ?? ''}
         >
@@ -156,6 +165,7 @@ export function ContactForm({
       <Field
         id="contact-linkedin"
         name="linkedinUrl"
+        error={state?.fieldErrors?.linkedinUrl}
         label="LinkedIn URL"
         type="url"
         defaultValue={contact?.linkedinUrl ?? ''}
@@ -167,6 +177,7 @@ export function ContactForm({
         <Field
           id="contact-country"
           name="country"
+          error={state?.fieldErrors?.country}
           label="Country"
           autoComplete="country-name"
           defaultValue={contact?.country ?? ''}
@@ -175,6 +186,7 @@ export function ContactForm({
         <Field
           id="contact-state"
           name="state"
+          error={state?.fieldErrors?.state}
           label="State / Region"
           autoComplete="address-level1"
           defaultValue={contact?.state ?? ''}
@@ -202,69 +214,4 @@ export function ContactForm({
   )
 }
 
-// ─── Private helpers ────────────────────────────────────────────────────────
 
-type FieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
-  id: string
-  name: string
-  label: string
-}
-
-function Field({
-  id,
-  name,
-  label,
-  required,
-  className,
-  ...rest
-}: FieldProps): React.JSX.Element {
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-foreground mb-1.5">
-        {label}
-        {required ? <span className="text-danger-foreground"> *</span> : null}
-      </label>
-      <input
-        id={id}
-        name={name}
-        required={required}
-        className={cn(inputBaseClass, className)}
-        {...rest}
-      />
-    </div>
-  )
-}
-
-type SelectFieldProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
-  id: string
-  name: string
-  label: string
-}
-
-function SelectField({
-  id,
-  name,
-  label,
-  required,
-  className,
-  children,
-  ...rest
-}: SelectFieldProps): React.JSX.Element {
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-foreground mb-1.5">
-        {label}
-        {required ? <span className="text-danger-foreground"> *</span> : null}
-      </label>
-      <select
-        id={id}
-        name={name}
-        required={required}
-        className={cn(inputBaseClass, className)}
-        {...rest}
-      >
-        {children}
-      </select>
-    </div>
-  )
-}

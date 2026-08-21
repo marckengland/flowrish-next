@@ -6,6 +6,7 @@ import { requirePermission } from '@/server/auth/permissions'
 import { createLead as createLeadService, updateLead as updateLeadService, softDeleteLead, convertToContact as convertToContactService } from '@/server/services/leads'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
+import { fieldErrorsFromZod } from '@/server/actions/field-errors'
 import { ZodError } from 'zod'
 
 /**
@@ -59,7 +60,10 @@ export async function createLead(formData: FormData) {
     return { data: lead }
   } catch (err: unknown) {
     if (err instanceof ZodError) {
-      return { error: err.errors[0]?.message ?? 'Validation failed' }
+      return {
+        error: err.errors[0]?.message ?? 'Validation failed',
+        fieldErrors: fieldErrorsFromZod(err),
+      }
     }
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }
@@ -109,7 +113,10 @@ export async function updateLead(formData: FormData) {
     return { data: lead }
   } catch (err: unknown) {
     if (err instanceof ZodError) {
-      return { error: err.errors[0]?.message ?? 'Validation failed' }
+      return {
+        error: err.errors[0]?.message ?? 'Validation failed',
+        fieldErrors: fieldErrorsFromZod(err),
+      }
     }
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }

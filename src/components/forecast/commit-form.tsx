@@ -3,6 +3,7 @@
 import { useActionState, useId } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { inputBaseClass } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { submitForecast } from '@/server/actions/forecast'
 
@@ -19,7 +20,11 @@ export interface CommitFormProps {
   onSuccess?: (submissionId: string) => void
 }
 
-type ActionResult = { error?: string; data?: { id: string } } | null
+type ActionResult = {
+  error?: string
+  fieldErrors?: Record<string, string>
+  data?: { id: string }
+} | null
 
 /**
  * Client form that submits a forecast commit via the
@@ -86,12 +91,23 @@ export function CommitForm({
             type="month"
             required
             defaultValue={resolvedPeriod}
-            className={inputClass}
+            aria-invalid={state?.fieldErrors?.period ? true : undefined}
+            className={cn(
+              inputBaseClass,
+              state?.fieldErrors?.period &&
+                'border-danger focus-visible:border-danger focus-visible:ring-danger/20',
+            )}
             disabled={!canSubmit}
           />
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            YYYY-MM format (e.g. 2026-05).
-          </p>
+          {state?.fieldErrors?.period ? (
+            <p role="alert" className="mt-1 text-[11px] text-danger-foreground">
+              {state.fieldErrors.period}
+            </p>
+          ) : (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              YYYY-MM format (e.g. 2026-05).
+            </p>
+          )}
         </div>
         <div>
           <label
@@ -115,12 +131,23 @@ export function CommitForm({
                 : ''
             }
             placeholder="0.00"
-            className={inputClass}
+            aria-invalid={state?.fieldErrors?.commitAmount ? true : undefined}
+            className={cn(
+              inputBaseClass,
+              state?.fieldErrors?.commitAmount &&
+                'border-danger focus-visible:border-danger focus-visible:ring-danger/20',
+            )}
             disabled={!canSubmit}
           />
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Must be non-negative.
-          </p>
+          {state?.fieldErrors?.commitAmount ? (
+            <p role="alert" className="mt-1 text-[11px] text-danger-foreground">
+              {state.fieldErrors.commitAmount}
+            </p>
+          ) : (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Must be non-negative.
+            </p>
+          )}
         </div>
       </div>
 
@@ -137,10 +164,7 @@ export function CommitForm({
           rows={3}
           defaultValue={defaultNotes ?? ''}
           placeholder="Optional context for this commit"
-          className={cn(
-            inputClass,
-            'h-auto min-h-[72px] py-2',
-          )}
+          className={cn(inputBaseClass, 'h-auto min-h-[72px] py-2')}
           disabled={!canSubmit}
         />
       </div>
@@ -169,9 +193,6 @@ export function CommitForm({
     </form>
   )
 }
-
-const inputClass =
-  'flex h-9 w-full rounded-[10px] border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50'
 
 function currentPeriod(): string {
   const now = new Date()

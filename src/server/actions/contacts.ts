@@ -13,6 +13,7 @@ import {
 } from '@/server/services/contacts'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
+import { fieldErrorsFromZod } from '@/server/actions/field-errors'
 import { ZodError } from 'zod'
 
 /**
@@ -62,7 +63,10 @@ export async function createContact(formData: FormData) {
     return { data: contact }
   } catch (err: unknown) {
     if (err instanceof ZodError) {
-      return { error: err.errors[0]?.message ?? 'Validation failed' }
+      return {
+        error: err.errors[0]?.message ?? 'Validation failed',
+        fieldErrors: fieldErrorsFromZod(err),
+      }
     }
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }
@@ -109,7 +113,10 @@ export async function updateContact(formData: FormData) {
     return { data: contact }
   } catch (err: unknown) {
     if (err instanceof ZodError) {
-      return { error: err.errors[0]?.message ?? 'Validation failed' }
+      return {
+        error: err.errors[0]?.message ?? 'Validation failed',
+        fieldErrors: fieldErrorsFromZod(err),
+      }
     }
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }
@@ -189,7 +196,10 @@ export async function createCompany(formData: FormData) {
     return { data: company }
   } catch (err: unknown) {
     if (err instanceof ZodError) {
-      return { error: err.errors[0]?.message ?? 'Validation failed' }
+      return {
+        error: err.errors[0]?.message ?? 'Validation failed',
+        fieldErrors: fieldErrorsFromZod(err),
+      }
     }
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }
@@ -236,7 +246,10 @@ export async function updateCompany(formData: FormData) {
     return { data: company }
   } catch (err: unknown) {
     if (err instanceof ZodError) {
-      return { error: err.errors[0]?.message ?? 'Validation failed' }
+      return {
+        error: err.errors[0]?.message ?? 'Validation failed',
+        fieldErrors: fieldErrorsFromZod(err),
+      }
     }
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }

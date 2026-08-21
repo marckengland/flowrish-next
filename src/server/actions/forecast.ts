@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { ZodError, z } from 'zod'
 
+import { fieldErrorsFromZod } from '@/server/actions/field-errors'
+
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { submitForecast as submitForecastService } from '@/server/services/forecast'
@@ -32,7 +34,7 @@ const submitFormSchema = z.object({
 
 export type SubmitForecastResult =
   | { data: { id: string } }
-  | { error: string }
+  | { error: string; fieldErrors?: Record<string, string> }
 
 /**
  * Submits (or updates) a forecast commit for the given period.
@@ -85,7 +87,10 @@ export async function submitForecast(
     return { data: result }
   } catch (err: unknown) {
     if (err instanceof ZodError) {
-      return { error: err.errors[0]?.message ?? 'Validation failed' }
+      return {
+        error: err.errors[0]?.message ?? 'Validation failed',
+        fieldErrors: fieldErrorsFromZod(err),
+      }
     }
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }

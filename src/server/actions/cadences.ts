@@ -19,6 +19,7 @@ import {
 } from '@/server/services/cadences'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
+import { fieldErrorsFromZod } from '@/server/actions/field-errors'
 import { ZodError } from 'zod'
 
 /**
@@ -71,7 +72,10 @@ export async function createCadence(formData: FormData) {
     return { data: cadence }
   } catch (err: unknown) {
     if (err instanceof ZodError) {
-      return { error: err.errors[0]?.message ?? 'Validation failed' }
+      return {
+        error: err.errors[0]?.message ?? 'Validation failed',
+        fieldErrors: fieldErrorsFromZod(err),
+      }
     }
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }
@@ -215,7 +219,10 @@ export async function addStep(formData: FormData) {
     return { data: step }
   } catch (err: unknown) {
     if (err instanceof ZodError) {
-      return { error: err.errors[0]?.message ?? 'Validation failed' }
+      return {
+        error: err.errors[0]?.message ?? 'Validation failed',
+        fieldErrors: fieldErrorsFromZod(err),
+      }
     }
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }
@@ -286,7 +293,10 @@ export async function updateStep(
     return { data: step }
   } catch (err: unknown) {
     if (err instanceof ZodError) {
-      return { error: err.errors[0]?.message ?? 'Validation failed' }
+      return {
+        error: err.errors[0]?.message ?? 'Validation failed',
+        fieldErrors: fieldErrorsFromZod(err),
+      }
     }
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }
