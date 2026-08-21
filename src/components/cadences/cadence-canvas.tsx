@@ -490,16 +490,6 @@ export function CadenceCanvas({
               : `${steps.length} step${steps.length === 1 ? '' : 's'} · drag to reorder, click a step to edit.`}
           </p>
         </div>
-        {/* The flowgram canvas captures wheel/pan, which can put the
-            page-level "Back to cadences" link out of reach. Keep an
-            always-visible exit inside the Flow view itself. */}
-        <Link
-          href="/cadences"
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
-        >
-          <ChevronLeft className="size-4" aria-hidden="true" />
-          <span>Back to cadences</span>
-        </Link>
       </header>
 
       {error ? (
@@ -508,7 +498,17 @@ export function CadenceCanvas({
         </p>
       ) : null}
 
-      <div className="h-[520px] w-full overflow-hidden rounded-lg border bg-card">
+      <div className="relative h-[520px] w-full overflow-hidden rounded-lg border bg-card">
+        {/* The flowgram canvas captures wheel/pan and fills the viewport, so
+            the page-level "Back to cadences" link can scroll out of reach.
+            Pin an always-visible exit directly onto the diagram. */}
+        <Link
+          href="/cadences"
+          className="absolute left-3 top-3 z-10 inline-flex items-center gap-1 rounded-md border border-border bg-card/95 px-2.5 py-1.5 text-sm text-muted-foreground shadow-sm backdrop-blur transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          <ChevronLeft className="size-4" aria-hidden="true" />
+          <span>Back to cadences</span>
+        </Link>
         {mounted ? (
           <CanvasContext.Provider
             value={{

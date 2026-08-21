@@ -19,8 +19,8 @@ import { cn } from '@/lib/utils'
 import { useLayoutStore } from '@/stores/layout'
 
 /**
- * Chatbot sidebar with full action loop, quick prompts, lightweight
- * markdown rendering, and an auto-confirm switch.
+ * Airish — the AI assistant sidebar with a full action loop, quick
+ * prompts, lightweight markdown rendering, and an Autopilot switch.
  *
  * Action flow:
  *   1. The user sends a message; `/api/ai/chat` returns the assistant's
@@ -32,14 +32,13 @@ import { useLayoutStore } from '@/stores/layout'
  *      the client posts to `/api/ai/chat/execute` which delegates to
  *      `executeChatAction` server-side. Auth + RBAC checks live in the
  *      route handler, never on the client.
- *   4. When the auto-confirm switch is on, mutating actions execute as
- *      soon as they arrive. Otherwise the user sees a confirm/cancel
- *      card. Navigate actions always require an explicit click (we
- *      don't redirect users mid-conversation).
+ *   4. When Autopilot is on, every action — including navigation —
+ *      executes the moment it arrives, with no confirmation step.
+ *      Otherwise the user sees a confirm/cancel card and navigation
+ *      waits for an explicit click.
  *
- * The auto-confirm toggle has a short label and a help tooltip so the
- * affordance is discoverable at a glance — that was a real gap in the
- * earlier port.
+ * The Autopilot toggle has a short label and a help tooltip so the
+ * affordance is discoverable at a glance.
  *
  * Validates: Requirements 8.3, 8.5
  */
@@ -399,11 +398,10 @@ export function ChatbotSidebar(): React.JSX.Element | null {
             actionStatus: action ? 'pending' : undefined,
           },
         ])
-        // Auto-confirm runs *non-navigate* actions only — taking a user
-        // off the current page mid-conversation without their explicit
-        // click is the kind of "AI did something I didn't ask for"
-        // moment that erodes trust.
-        if (action && autoConfirm && action.type !== 'navigate') {
+        // Autopilot runs every action the moment it arrives — including
+        // navigation — with no confirmation step. This is the explicit
+        // "hands-off" mode the user opts into via the toggle.
+        if (action && autoConfirm) {
           window.setTimeout(() => executeAction(assistantId, action), 0)
         }
       } catch {
@@ -437,7 +435,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
         className="fixed inset-0 z-40 bg-black/[0.28]"
       />
       <aside
-        aria-label="AI assistant"
+        aria-label="Airish assistant"
         role="complementary"
         className="fixed inset-y-0 right-0 z-50 flex w-[min(392px,calc(100vw-2rem))] flex-col border-l bg-card shadow-[-24px_0_60px_-24px_rgba(0,0,0,0.28)]"
       >
@@ -450,7 +448,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
             <Bot className="size-[17px]" />
           </span>
           <div className="leading-tight">
-            <p className="text-sm font-semibold">Ask Flowrish</p>
+            <p className="text-sm font-semibold">Airish</p>
             <p className="text-[11.5px] text-muted-foreground">
               Ask anything or request an action
             </p>
@@ -465,7 +463,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
             variant="ghost"
             size="icon-sm"
             onClick={() => setOpen(false)}
-            aria-label="Close AI assistant"
+            aria-label="Close Airish"
             title="Close"
           >
             <X className="size-4" aria-hidden="true" />
@@ -513,7 +511,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
         {autoConfirm && (
           <p className="mb-2 flex items-center gap-1.5 text-[10.5px] text-warning-foreground">
             <Zap className="size-3" aria-hidden="true" />
-            Auto-confirm is ON — actions run without asking
+            Autopilot is ON — actions run without asking
           </p>
         )}
         <label htmlFor="chatbot-input" className="sr-only">
@@ -527,7 +525,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={onTextareaKeyDown}
             rows={2}
-            placeholder="Ask the assistant…"
+            placeholder="Ask Airish…"
             disabled={pending}
             className="flex-1 resize-none rounded-[10px] border border-input bg-card px-3 py-2.5 text-sm shadow-sm transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50"
           />
@@ -565,16 +563,16 @@ function AutoConfirmToggle({
       className="flex select-none items-center gap-1.5 text-[11px] text-muted-foreground"
       title={
         value
-          ? 'Auto-confirm is ON: actions like creating leads run immediately without asking.'
-          : 'Auto-confirm is OFF: actions wait for your explicit confirm click.'
+          ? 'Autopilot is ON: every action (including navigation) runs immediately without asking.'
+          : 'Autopilot is OFF: actions wait for your explicit confirm click.'
       }
     >
-      <span>Auto-run</span>
+      <span>Autopilot</span>
       <button
         type="button"
         role="switch"
         aria-checked={value}
-        aria-label="Auto-run actions without confirmation"
+        aria-label="Autopilot: run actions without confirmation"
         onClick={() => onChange(!value)}
         className={cn(
           'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',

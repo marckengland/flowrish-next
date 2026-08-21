@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, Trash2, Users } from 'lucide-react'
 
@@ -9,8 +9,29 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/pagination'
-import { Table, TableHead, Th, TableBody, Tr, TableState } from '@/components/ui/table'
+import { Table, TableHead, Th, SortableTh, TableBody, Tr, TableState } from '@/components/ui/table'
+import { sortByKey, type SortDir } from '@/lib/table-sort'
 import { toast } from '@/lib/toast'
+
+type ContactSortKey = 'name' | 'role' | 'company' | 'email' | 'phone'
+
+function contactSortValue(
+  contact: ContactListItem,
+  key: ContactSortKey,
+): string | null | undefined {
+  switch (key) {
+    case 'name':
+      return `${contact.firstName} ${contact.lastName}`.trim()
+    case 'role':
+      return contact.jobTitle
+    case 'company':
+      return contact.company?.name
+    case 'email':
+      return contact.email
+    case 'phone':
+      return contact.phone
+  }
+}
 
 export interface ContactTableProps {
   /** Initial data rendered server-side for instant paint. */
@@ -48,14 +69,32 @@ export function ContactTable({
   search,
   companyId,
   page: initialPage = 1,
-  pageSize = 20,
+  pageSize: initialPageSize = 20,
 }: ContactTableProps): React.JSX.Element {
   const [currentSearch, setCurrentSearch] = useState(search ?? '')
   const [page, setPage] = useState(initialPage)
+  const [pageSize, setPageSize] = useState(initialPageSize)
+  const [sortKey, setSortKey] = useState<ContactSortKey>('name')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   const query = useContactsQuery({ search: currentSearch || undefined, companyId, page, pageSize })
   const contactsPage = query.data ?? initialData
-  const rows = contactsPage?.data ?? []
+  const rows = useMemo(() => contactsPage?.data ?? [], [contactsPage])
+
+  const sorted = useMemo(
+    () => sortByKey(rows, (c) => contactSortValue(c, sortKey), sortDir),
+    [rows, sortKey, sortDir],
+  )
+
+  function toggleSort(key: string): void {
+    const next = key as ContactSortKey
+    if (next === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSortKey(next)
+    setSortDir('asc')
+  }
 
   const deleteMutation = useDeleteContactMutation()
   const [confirmTarget, setConfirmTarget] = useState<{
@@ -106,11 +145,11 @@ export function ContactTable({
 
       <Table minWidth={720}>
         <TableHead>
-          <Th>Name</Th>
-          <Th>Role</Th>
-          <Th>Company</Th>
-          <Th>Email</Th>
-          <Th>Phone</Th>
+          <SortableTh label="Name" sortKey="name" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+          <SortableTh label="Role" sortKey="role" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+          <SortableTh label="Company" sortKey="company" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+          <SortableTh label="Email" sortKey="email" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+          <SortableTh label="Phone" sortKey="phone" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
           <Th align="right">
             <span className="sr-only">Actions</span>
           </Th>
@@ -135,7 +174,7 @@ export function ContactTable({
               }
             />
           ) : (
-            rows.map((contact) => {
+            sorted.map((contact) => {
               const fullName = `${contact.firstName} ${contact.lastName}`.trim()
               return (
                 <Tr key={contact.id} className="cursor-pointer">
@@ -183,6 +222,10 @@ export function ContactTable({
         <Pagination
           pagination={contactsPage.pagination}
           onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
           itemLabel="contacts"
           loading={query.isFetching}
         />

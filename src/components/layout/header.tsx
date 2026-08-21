@@ -50,7 +50,7 @@ function pageTitle(pathname: string): string {
  *
  * Design: mono breadcrumb `Org / Page`, a search field that routes to the
  * search screen, a notification bell, an (optional) theme toggle, and a
- * dark "Ask Flowrish" button that opens the AI assistant drawer.
+ * dark "Airish" button that opens the AI assistant drawer.
  *
  * Validates: Requirements 1.5, 26.4, 26.5
  */
@@ -111,15 +111,15 @@ export function Header({
           type="button"
           onClick={toggleChat}
           aria-pressed={chatOpen}
-          aria-label={chatOpen ? 'Hide AI assistant' : 'Open AI assistant'}
-          title={chatOpen ? 'Hide AI assistant' : 'Ask Flowrish'}
+          aria-label={chatOpen ? 'Hide Airish' : 'Open Airish'}
+          title={chatOpen ? 'Hide Airish' : 'Ask Airish'}
           className={cn(
             'flex h-[38px] items-center gap-[7px] rounded-[10px] px-3.5 text-[13px] font-semibold text-white transition-colors',
             'bg-[oklch(0.16_0_0)] hover:bg-[oklch(0.24_0_0)] dark:bg-white/10 dark:hover:bg-white/15',
           )}
         >
           <Bot className="size-[15px]" aria-hidden="true" />
-          <span className="hidden sm:inline">Ask Flowrish</span>
+          <span className="hidden sm:inline">Airish</span>
         </button>
       </div>
     </header>

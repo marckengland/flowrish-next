@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Target } from 'lucide-react'
+import { Loader2, Target } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { ScoreBadge } from '@/components/scoring/score-badge'
 import { Pagination } from '@/components/ui/pagination'
-import { TableState } from '@/components/ui/table'
+import { SortableTh, TableState } from '@/components/ui/table'
 import { useFiltersStore } from '@/stores/filters'
 import { useLeadsQuery, type LeadListItem } from '@/hooks/use-leads'
 
@@ -61,12 +61,13 @@ export interface LeadTableProps {
 export function LeadTable({
   initialData,
   page: initialPage = 1,
-  pageSize = 20,
+  pageSize: initialPageSize = 20,
 }: LeadTableProps): React.JSX.Element {
   const filters = useFiltersStore((s) => s.leads)
   const [sortKey, setSortKey] = useState<SortKey>('createdAt')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(initialPage)
+  const [pageSize, setPageSize] = useState(initialPageSize)
 
   // Reset to the first page whenever the filter set changes, so the user
   // isn't stranded on a page number that no longer exists for the new query.
@@ -92,13 +93,14 @@ export function LeadTable({
     return sortLeads(rows, sortKey, sortDir)
   }, [leadsPage, sortKey, sortDir])
 
-  function toggleSort(nextKey: SortKey): void {
-    if (nextKey === sortKey) {
+  function toggleSort(nextKey: string): void {
+    const key = nextKey as SortKey
+    if (key === sortKey) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
       return
     }
-    setSortKey(nextKey)
-    setSortDir(nextKey === 'createdAt' || nextKey === 'lastActivityAt' ? 'desc' : 'asc')
+    setSortKey(key)
+    setSortDir(key === 'createdAt' || key === 'lastActivityAt' ? 'desc' : 'asc')
   }
 
   return (
@@ -119,14 +121,14 @@ export function LeadTable({
         <table className="w-full min-w-[860px] text-sm">
           <thead className="border-b bg-muted/40 text-left">
             <tr>
-              <SortableHeader
+              <SortableTh
                 label="Name"
                 sortKey="name"
                 activeKey={sortKey}
                 dir={sortDir}
                 onSort={toggleSort}
               />
-              <SortableHeader
+              <SortableTh
                 label="Company"
                 sortKey="companyName"
                 activeKey={sortKey}
@@ -136,7 +138,7 @@ export function LeadTable({
               <th scope="col" className="eyebrow px-4 py-3">
                 Stage
               </th>
-              <SortableHeader
+              <SortableTh
                 label="Deal value"
                 sortKey="dealValue"
                 activeKey={sortKey}
@@ -144,7 +146,7 @@ export function LeadTable({
                 onSort={toggleSort}
                 align="right"
               />
-              <SortableHeader
+              <SortableTh
                 label="Score"
                 sortKey="score"
                 activeKey={sortKey}
@@ -152,7 +154,7 @@ export function LeadTable({
                 onSort={toggleSort}
                 align="right"
               />
-              <SortableHeader
+              <SortableTh
                 label="Last activity"
                 sortKey="lastActivityAt"
                 activeKey={sortKey}
@@ -232,61 +234,15 @@ export function LeadTable({
         <Pagination
           pagination={leadsPage.pagination}
           onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
           itemLabel="leads"
           loading={query.isFetching}
         />
       )}
     </div>
-  )
-}
-
-function SortableHeader({
-  label,
-  sortKey,
-  activeKey,
-  dir,
-  onSort,
-  align = 'left',
-}: {
-  label: string
-  sortKey: SortKey
-  activeKey: SortKey
-  dir: SortDir
-  onSort: (key: SortKey) => void
-  align?: 'left' | 'right'
-}): React.JSX.Element {
-  const active = activeKey === sortKey
-  const ariaSort = active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'
-  return (
-    <th
-      scope="col"
-      aria-sort={ariaSort}
-      className={cn(
-        'eyebrow px-4 py-3',
-        align === 'right' ? 'text-right' : 'text-left',
-      )}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className={cn(
-          'inline-flex items-center gap-1 rounded-sm uppercase outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40',
-          active && 'text-foreground',
-          align === 'right' && 'ml-auto',
-        )}
-      >
-        <span>{label}</span>
-        {active ? (
-          dir === 'asc' ? (
-            <ArrowUp className="size-3" aria-hidden="true" />
-          ) : (
-            <ArrowDown className="size-3" aria-hidden="true" />
-          )
-        ) : (
-          <ArrowUpDown className="size-3 opacity-60" aria-hidden="true" />
-        )}
-      </button>
-    </th>
   )
 }
 

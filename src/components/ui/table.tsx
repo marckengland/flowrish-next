@@ -1,4 +1,7 @@
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
+
 import { cn } from '@/lib/utils'
+import type { SortDir } from '@/lib/table-sort'
 
 /**
  * Shared data-table primitives.
@@ -66,6 +69,58 @@ export function Th({
       {...props}
     >
       {children}
+    </th>
+  )
+}
+
+/**
+ * A header cell whose label is a sort toggle. Reports `aria-sort` and shows an
+ * up/down/neutral affordance. Sorting itself is owned by the parent table
+ * (client-side, on the current page) via `onSort` + the shared `sortByKey`.
+ */
+export function SortableTh({
+  label,
+  sortKey,
+  activeKey,
+  dir,
+  onSort,
+  align = 'left',
+}: {
+  label: string
+  sortKey: string
+  activeKey: string
+  dir: SortDir
+  onSort: (key: string) => void
+  align?: 'left' | 'right'
+}): React.JSX.Element {
+  const active = activeKey === sortKey
+  const ariaSort = active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'
+  return (
+    <th
+      scope="col"
+      aria-sort={ariaSort}
+      className={cn('eyebrow px-4 py-3', align === 'right' && 'text-right')}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          'inline-flex items-center gap-1 rounded-sm uppercase outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40',
+          active && 'text-foreground',
+          align === 'right' && 'ml-auto',
+        )}
+      >
+        <span>{label}</span>
+        {active ? (
+          dir === 'asc' ? (
+            <ArrowUp className="size-3" aria-hidden="true" />
+          ) : (
+            <ArrowDown className="size-3" aria-hidden="true" />
+          )
+        ) : (
+          <ArrowUpDown className="size-3 opacity-60" aria-hidden="true" />
+        )}
+      </button>
     </th>
   )
 }

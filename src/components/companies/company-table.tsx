@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Building2, Loader2, Search, Trash2 } from 'lucide-react'
 
@@ -13,12 +13,32 @@ import {
   Table,
   TableHead,
   Th,
+  SortableTh,
   TableBody,
   Tr,
   Td,
   TableState,
 } from '@/components/ui/table'
+import { sortByKey, type SortDir } from '@/lib/table-sort'
 import { toast } from '@/lib/toast'
+
+type CompanySortKey = 'name' | 'industry' | 'contacts' | 'leads'
+
+function companySortValue(
+  company: CompanyListItem,
+  key: CompanySortKey,
+): string | number | null | undefined {
+  switch (key) {
+    case 'name':
+      return company.name
+    case 'industry':
+      return company.industry
+    case 'contacts':
+      return company._count.contacts
+    case 'leads':
+      return company._count.leads
+  }
+}
 
 export interface CompanyTableProps {
   /** Initial data rendered server-side for instant paint. */
@@ -52,14 +72,32 @@ export function CompanyTable({
   initialData,
   search,
   page: initialPage = 1,
-  pageSize = 20,
+  pageSize: initialPageSize = 20,
 }: CompanyTableProps): React.JSX.Element {
   const [currentSearch, setCurrentSearch] = useState(search ?? '')
   const [page, setPage] = useState(initialPage)
+  const [pageSize, setPageSize] = useState(initialPageSize)
+  const [sortKey, setSortKey] = useState<CompanySortKey>('name')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   const query = useCompaniesQuery({ search: currentSearch || undefined, page, pageSize })
   const companiesPage = query.data ?? initialData
-  const rows = companiesPage?.data ?? []
+  const rows = useMemo(() => companiesPage?.data ?? [], [companiesPage])
+
+  const sorted = useMemo(
+    () => sortByKey(rows, (c) => companySortValue(c, sortKey), sortDir),
+    [rows, sortKey, sortDir],
+  )
+
+  function toggleSort(key: string): void {
+    const next = key as CompanySortKey
+    if (next === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSortKey(next)
+    setSortDir('asc')
+  }
 
   const deleteMutation = useDeleteCompanyMutation()
   const [confirmTarget, setConfirmTarget] = useState<{
@@ -116,11 +154,11 @@ export function CompanyTable({
 
       <Table minWidth={600}>
         <TableHead>
-          <Th>Name</Th>
-          <Th>Industry</Th>
+          <SortableTh label="Name" sortKey="name" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+          <SortableTh label="Industry" sortKey="industry" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
           <Th>Website</Th>
-          <Th align="right">Contacts</Th>
-          <Th align="right">Leads</Th>
+          <SortableTh label="Contacts" sortKey="contacts" activeKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+          <SortableTh label="Leads" sortKey="leads" activeKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
           <Th>
             <span className="sr-only">Actions</span>
           </Th>
@@ -145,7 +183,7 @@ export function CompanyTable({
               }
             />
           ) : (
-            rows.map((company) => (
+            sorted.map((company) => (
               <Tr key={company.id} className="cursor-pointer">
                 <Td className="font-semibold text-foreground">
                   <Link
@@ -200,6 +238,10 @@ export function CompanyTable({
         <Pagination
           pagination={companiesPage.pagination}
           onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
           itemLabel="companies"
           loading={query.isFetching}
         />
