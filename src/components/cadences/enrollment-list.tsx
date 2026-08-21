@@ -178,7 +178,7 @@ export function EnrollmentList({
                     <Td className="text-muted-foreground">
                       Step {enrollment.currentStepOrder}
                     </Td>
-                    <Td className="text-muted-foreground">
+                    <Td className="text-muted-foreground" suppressHydrationWarning>
                       {formatRelative(enrollment.enrolledAt)}
                     </Td>
                     <Td align="right">

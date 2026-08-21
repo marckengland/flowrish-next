@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   LayoutDashboard,
   GitBranchPlus,
@@ -26,6 +26,7 @@ import {
 
 import { cn } from '@/lib/utils'
 import { createSupabaseBrowser } from '@/lib/supabase/client'
+import { useFocusTrap } from '@/hooks/use-focus-trap'
 import { useLayoutStore } from '@/stores/layout'
 import type { Permission } from '@/types/permissions'
 
@@ -174,6 +175,11 @@ export function Sidebar({
   const [avatarFailed, setAvatarFailed] = useState(false)
   const mobileNavOpen = useLayoutStore((s) => s.mobileNavOpen)
   const setMobileNavOpen = useLayoutStore((s) => s.setMobileNavOpen)
+  const asideRef = useRef<HTMLElement>(null)
+
+  // Trap focus inside the drawer while it's open on mobile (parity with the
+  // Dialog primitive): focus moves in, Tab loops, focus restores on close.
+  useFocusTrap(mobileNavOpen, asideRef)
 
   // Close the mobile drawer on route change and on Escape.
   useEffect(() => {
@@ -231,10 +237,12 @@ export function Sidebar({
       ) : null}
 
       <aside
+        ref={asideRef}
+        tabIndex={-1}
         aria-label="Primary navigation"
         className={cn(
           // Off-canvas drawer on mobile; static rail from lg up.
-          'fixed inset-y-0 left-0 z-50 flex h-full w-[264px] flex-col bg-sidebar px-3 py-3.5 text-sidebar-foreground transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-[238px] lg:shrink-0 lg:translate-x-0 lg:shadow-none',
+          'fixed inset-y-0 left-0 z-50 flex h-full w-[264px] flex-col bg-sidebar px-3 py-3.5 text-sidebar-foreground outline-none transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-[238px] lg:shrink-0 lg:translate-x-0 lg:shadow-none',
           mobileNavOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full',
         )}
       >

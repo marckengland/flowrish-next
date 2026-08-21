@@ -227,7 +227,10 @@ export function LeadTable({
                   <td className="px-4 py-3 text-right">
                     <ScoreBadge score={lead.score} size="md" />
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
+                  <td
+                    className="px-4 py-3 text-muted-foreground"
+                    suppressHydrationWarning
+                  >
                     {formatRelative(lead.lastActivityAt)}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">

@@ -140,6 +140,7 @@ export function AuditLogTable({
           <time
             dateTime={entry.createdAt}
             className="shrink-0 text-[11px] text-muted-foreground"
+            suppressHydrationWarning
           >
             {new Date(entry.createdAt).toLocaleString()}
           </time>

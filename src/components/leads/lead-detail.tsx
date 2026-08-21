@@ -129,7 +129,13 @@ export function LeadDetail({
         <Field label="Phone" value={lead.phone} />
         <Field
           label="Last activity"
-          value={formatRelative(lead.lastActivityAt ?? null)}
+          value={
+            lead.lastActivityAt ? (
+              <span suppressHydrationWarning>
+                {formatRelative(lead.lastActivityAt)}
+              </span>
+            ) : null
+          }
         />
         <Field
           label="Assignee"

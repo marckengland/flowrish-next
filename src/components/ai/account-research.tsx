@@ -365,7 +365,7 @@ export function AccountResearch({
                   <span className="font-medium uppercase tracking-wide">
                     {insight.kind}
                   </span>
-                  <time dateTime={insight.createdAt}>
+                  <time dateTime={insight.createdAt} suppressHydrationWarning>
                     {new Date(insight.createdAt).toLocaleDateString()}
                   </time>
                 </div>

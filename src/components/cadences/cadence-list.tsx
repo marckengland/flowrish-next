@@ -327,7 +327,10 @@ export function CadenceList({
                   <td className="px-4 py-3 text-right tabular-nums">
                     {cadence.completionRate.toFixed(1)}%
                   </td>
-                  <td className="px-4 py-3 text-right text-muted-foreground">
+                  <td
+                    className="px-4 py-3 text-right text-muted-foreground"
+                    suppressHydrationWarning
+                  >
                     {new Date(cadence.createdAt).toLocaleDateString()}
                   </td>
                 </tr>

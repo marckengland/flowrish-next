@@ -247,7 +247,9 @@ export function GmailConnect({
             )}
             {state.lastSyncAt ? (
               <p className="text-[11px] text-muted-foreground">
-                Last sync: {formatRelative(state.lastSyncAt)}
+                <span suppressHydrationWarning>
+                  Last sync: {formatRelative(state.lastSyncAt)}
+                </span>
               </p>
             ) : null}
           </div>

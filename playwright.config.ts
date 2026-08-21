@@ -1,6 +1,21 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
+ * Load `.env` into the Playwright *runner* process. The webServer child
+ * (`npm run dev`) loads `.env` itself, but the test runner does not — so specs
+ * like `auth.setup.ts` that read Supabase creds from `process.env` would see
+ * `undefined` under a plain `playwright test`. Guarded with try/catch so CI
+ * environments that inject env vars directly (no `.env` file) keep working.
+ */
+try {
+  ;(process as unknown as { loadEnvFile?: (path: string) => void }).loadEnvFile?.(
+    '.env',
+  )
+} catch {
+  // No .env file present — rely on the ambient environment.
+}
+
+/**
  * Playwright config for end-to-end smoke tests.
  *
  * Runs in two phases:

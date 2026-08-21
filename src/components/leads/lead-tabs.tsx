@@ -528,6 +528,7 @@ function TasksTab({
                     {task.priority}
                   </span>
                   <span
+                    suppressHydrationWarning
                     className={cn(
                       isOverdue ? 'font-medium text-danger-foreground' : null,
                     )}

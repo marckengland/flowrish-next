@@ -255,7 +255,11 @@ export function AuditLog(): React.JSX.Element {
                   <Td className="font-mono text-xs text-muted-foreground">
                     {entry.userId.slice(0, 8)}...
                   </Td>
-                  <Td align="right" className="font-mono text-muted-foreground">
+                  <Td
+                    align="right"
+                    className="font-mono text-muted-foreground"
+                    suppressHydrationWarning
+                  >
                     {new Date(entry.createdAt).toLocaleString()}
                   </Td>
                 </Tr>

@@ -148,7 +148,10 @@ export function DeletionRequests(): React.JSX.Element {
                       {request.entityType}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p
+                    className="text-xs text-muted-foreground"
+                    suppressHydrationWarning
+                  >
                     Requested by {request.requestedBy.name}
                     {' · '}
                     {new Date(request.createdAt).toLocaleString()}

@@ -36,6 +36,16 @@ let cachedLimiters: RateLimiterSet | null | undefined
 function getRateLimiters(): RateLimiterSet | null {
   if (cachedLimiters !== undefined) return cachedLimiters
 
+  // Rate limiting is a production safeguard. Skip it outside production so
+  // local development — and the e2e smoke suite, which hits many routes in
+  // parallel from a single localhost IP — don't trip the sliding-window
+  // limit. Deployed environments (NODE_ENV=production) still enforce it, and
+  // the `test:e2e:prod` profile serializes requests to respect the limiter.
+  if (process.env.NODE_ENV !== 'production') {
+    cachedLimiters = null
+    return null
+  }
+
   const url = process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) {
