@@ -134,7 +134,7 @@ export function TaskForm({
           htmlFor="task-title"
           className="block text-sm font-medium text-foreground mb-1.5"
         >
-          Title <span className="text-destructive">*</span>
+          Title <span className="text-danger-foreground">*</span>
         </label>
         <input
           id="task-title"
@@ -170,7 +170,7 @@ export function TaskForm({
             htmlFor="task-due-date"
             className="block text-sm font-medium text-foreground mb-1.5"
           >
-            Due date <span className="text-destructive">*</span>
+            Due date <span className="text-danger-foreground">*</span>
           </label>
           <input
             id="task-due-date"
@@ -210,7 +210,7 @@ export function TaskForm({
             htmlFor="task-lead"
             className="block text-sm font-medium text-foreground mb-1.5"
           >
-            Lead <span className="text-destructive">*</span>
+            Lead <span className="text-danger-foreground">*</span>
           </label>
           <select
             id="task-lead"
@@ -238,7 +238,7 @@ export function TaskForm({
             htmlFor="task-assignee"
             className="block text-sm font-medium text-foreground mb-1.5"
           >
-            Assignee <span className="text-destructive">*</span>
+            Assignee <span className="text-danger-foreground">*</span>
           </label>
           <select
             id="task-assignee"
@@ -263,7 +263,7 @@ export function TaskForm({
       </div>
 
       {state?.error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {state.error}
         </p>
       ) : null}

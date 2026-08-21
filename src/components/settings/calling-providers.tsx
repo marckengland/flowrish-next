@@ -244,7 +244,7 @@ export function CallingProviders(): React.JSX.Element {
       </div>
 
       {saveError && (
-        <p role="alert" className="text-[13px] text-destructive">
+        <p role="alert" className="text-[13px] text-danger-foreground">
           {saveError}
         </p>
       )}

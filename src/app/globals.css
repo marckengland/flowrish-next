@@ -92,7 +92,7 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.2 0 0);
 
-  --destructive: oklch(0.55 0.19 27);
+  --destructive: var(--danger);
 
   --border: oklch(0.92 0 0); /* hairline */
   --row-divider: oklch(0.96 0 0); /* table row separators */
@@ -161,7 +161,7 @@
   --accent: oklch(0.24 0 0);
   --accent-foreground: oklch(0.985 0 0);
 
-  --destructive: oklch(0.62 0.19 27);
+  --destructive: var(--danger);
 
   --border: oklch(1 0 0 / 10%);
   --row-divider: oklch(1 0 0 / 6%);

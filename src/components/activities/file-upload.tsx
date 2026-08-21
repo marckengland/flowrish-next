@@ -130,7 +130,7 @@ export function FileUpload({
             <button
               type="button"
               onClick={clearSelection}
-              className="text-muted-foreground hover:text-destructive"
+              className="text-muted-foreground hover:text-danger-foreground"
               aria-label={`Remove ${selected.name}`}
               disabled={pending}
             >
@@ -145,7 +145,7 @@ export function FileUpload({
       </div>
 
       {error ? (
-        <p role="alert" className="text-xs text-destructive">
+        <p role="alert" className="text-xs text-danger-foreground">
           {error}
         </p>
       ) : null}

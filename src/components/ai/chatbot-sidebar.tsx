@@ -690,7 +690,7 @@ function Turn({
   if (turn.role === 'error') {
     return (
       <div role="alert" className="flex justify-start">
-        <div className="max-w-[85%] rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-[13px] text-destructive">
+        <div className="max-w-[85%] rounded-xl border border-danger/30 bg-danger-subtle px-3 py-2.5 text-[13px] text-danger-foreground">
           <p>{turn.content}</p>
         </div>
       </div>

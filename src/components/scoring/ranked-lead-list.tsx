@@ -48,7 +48,7 @@ export function RankedLeadList(): React.JSX.Element {
 
   if (isError) {
     return (
-      <p role="alert" className="px-4 py-3 text-sm text-destructive">
+      <p role="alert" className="px-4 py-3 text-sm text-danger-foreground">
         {error instanceof Error
           ? error.message
           : 'Failed to load ranked leads.'}

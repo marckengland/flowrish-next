@@ -180,7 +180,7 @@ export function MicrosoftConnect({
             <span>{disconnecting ? 'Disconnecting…' : 'Disconnect'}</span>
           </Button>
         </div>
-        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm text-danger-foreground">{error}</p> : null}
       </div>
     )
   }
@@ -214,7 +214,7 @@ export function MicrosoftConnect({
           </Button>
         </div>
       </div>
-      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+      {error ? <p role="alert" className="text-sm text-danger-foreground">{error}</p> : null}
     </div>
   )
 }

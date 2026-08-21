@@ -162,7 +162,7 @@ export function ContactTable({
                         onClick={() => handleDelete(contact.id, fullName)}
                         disabled={deleteMutation.isPending}
                         aria-label={`Delete ${fullName}`}
-                        className="relative z-10 text-muted-foreground hover:text-destructive"
+                        className="relative z-10 text-muted-foreground hover:text-danger-foreground"
                       >
                         <Trash2 className="size-4" aria-hidden="true" />
                       </Button>

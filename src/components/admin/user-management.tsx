@@ -258,7 +258,7 @@ export function UserManagement(): React.JSX.Element {
           </div>
 
           {inviteMutation.isError && (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-danger-foreground" role="alert">
               {inviteMutation.error.message}
             </p>
           )}
@@ -437,12 +437,12 @@ export function UserManagement(): React.JSX.Element {
           )}
         </p>
         {confirmAction?.type === 'remove' && removeMutation.error && (
-          <p role="alert" className="mt-2 text-sm text-destructive">
+          <p role="alert" className="mt-2 text-sm text-danger-foreground">
             {removeMutation.error.message}
           </p>
         )}
         {confirmAction?.type === 'leave' && leaveMutation.error && (
-          <p role="alert" className="mt-2 text-sm text-destructive">
+          <p role="alert" className="mt-2 text-sm text-danger-foreground">
             {leaveMutation.error.message}
           </p>
         )}

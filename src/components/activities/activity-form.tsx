@@ -222,7 +222,7 @@ export function ActivityForm({
       </div>
 
       {mutation.isError ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {mutation.error instanceof Error
             ? mutation.error.message
             : 'Failed to log activity.'}

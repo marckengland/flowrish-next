@@ -170,7 +170,7 @@ export default function LoginPage() {
             </p>
           )}
           {error && (
-            <p role="alert" className="mt-4 text-center text-sm text-destructive">
+            <p role="alert" className="mt-4 text-center text-sm text-danger-foreground">
               {error}
             </p>
           )}

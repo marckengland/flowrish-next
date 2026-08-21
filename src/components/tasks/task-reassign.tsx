@@ -173,7 +173,7 @@ export function TaskReassign({
           ))}
         </select>
         {error ? (
-          <p role="alert" className="text-xs text-destructive">
+          <p role="alert" className="text-xs text-danger-foreground">
             {error}
           </p>
         ) : null}

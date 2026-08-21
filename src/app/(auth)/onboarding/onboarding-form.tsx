@@ -108,7 +108,7 @@ export function OnboardingForm() {
           </div>
 
           {createState?.error && (
-            <p className="text-sm text-destructive">{createState.error}</p>
+            <p className="text-sm text-danger-foreground">{createState.error}</p>
           )}
 
           <Button
@@ -145,7 +145,7 @@ export function OnboardingForm() {
           </div>
 
           {joinState?.error && (
-            <p className="text-sm text-destructive">{joinState.error}</p>
+            <p className="text-sm text-danger-foreground">{joinState.error}</p>
           )}
 
           <Button

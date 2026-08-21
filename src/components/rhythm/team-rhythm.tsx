@@ -102,7 +102,7 @@ export function TeamRhythm({ reps }: TeamRhythmProps): React.JSX.Element {
                   <span>{rep.openActionCount} open</span>
                   <span
                     className={
-                      rep.overdueCount > 0 ? 'text-destructive' : undefined
+                      rep.overdueCount > 0 ? 'text-danger-foreground' : undefined
                     }
                   >
                     {rep.overdueCount} overdue
@@ -135,7 +135,7 @@ export function TeamRhythm({ reps }: TeamRhythmProps): React.JSX.Element {
                         {action.isOverdue ? (
                           <>
                             <span aria-hidden="true"> · </span>
-                            <span className="text-destructive">Overdue</span>
+                            <span className="text-danger-foreground">Overdue</span>
                           </>
                         ) : null}
                       </span>

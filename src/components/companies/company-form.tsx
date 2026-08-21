@@ -96,7 +96,7 @@ export function CompanyForm({
       </div>
 
       {state?.error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {state.error}
         </p>
       ) : null}

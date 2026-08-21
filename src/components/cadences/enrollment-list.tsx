@@ -114,7 +114,7 @@ export function EnrollmentList({
       </div>
 
       {actionError ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {actionError}
         </p>
       ) : null}

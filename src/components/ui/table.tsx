@@ -152,7 +152,7 @@ export function TableState({
           <span
             className={cn(
               'text-sm',
-              tone === 'error' ? 'text-destructive' : 'text-muted-foreground',
+              tone === 'error' ? 'text-danger-foreground' : 'text-muted-foreground',
             )}
           >
             {children}

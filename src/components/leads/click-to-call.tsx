@@ -295,7 +295,7 @@ export function ClickToCall({
           </div>
 
           {(mutation.isError || dialer.error) && (
-            <p role="alert" className="text-xs text-destructive">
+            <p role="alert" className="text-xs text-danger-foreground">
               {dialer.error ??
                 (mutation.error instanceof Error
                   ? mutation.error.message

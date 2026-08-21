@@ -266,7 +266,7 @@ export function TwilioCredentialsForm(): React.JSX.Element {
               </p>
             </div>
 
-            {error && <p className="text-[13px] text-destructive">{error}</p>}
+            {error && <p className="text-[13px] text-danger-foreground">{error}</p>}
             {saved && (
               <p className="text-[13px] text-brand-emphasis">
                 Saved. Reps can now call from the browser on lead pages.

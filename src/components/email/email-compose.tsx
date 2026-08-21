@@ -438,7 +438,7 @@ export function EmailCompose({
           {leadEmail ? (
             <span className="ml-1 text-muted-foreground">&lt;{leadEmail}&gt;</span>
           ) : (
-            <span className="ml-1 text-destructive">(no email)</span>
+            <span className="ml-1 text-danger-foreground">(no email)</span>
           )}
         </span>
       </div>
@@ -524,7 +524,7 @@ export function EmailCompose({
                 key={`${att.file.name}-${i}`}
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-full border bg-card px-2 py-0.5 text-xs',
-                  att.status === 'failed' && 'border-destructive/40 text-destructive',
+                  att.status === 'failed' && 'border-danger/40 text-danger-foreground',
                   att.status === 'uploaded' && 'border-brand/40 text-brand-emphasis',
                 )}
                 title={att.error}
@@ -543,7 +543,7 @@ export function EmailCompose({
                 <button
                   type="button"
                   onClick={() => removeAttachment(i)}
-                  className="text-muted-foreground hover:text-destructive"
+                  className="text-muted-foreground hover:text-danger-foreground"
                   aria-label={`Remove ${att.file.name}`}
                   disabled={isPending}
                 >
@@ -556,7 +556,7 @@ export function EmailCompose({
       </div>
 
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {error}
         </p>
       ) : null}
@@ -576,7 +576,7 @@ export function EmailCompose({
             Test sent to {testStatus.recipient}
           </span>
         ) : testStatus.kind === 'error' ? (
-          <span role="alert" className="mr-auto text-xs text-destructive">
+          <span role="alert" className="mr-auto text-xs text-danger-foreground">
             {testStatus.message}
           </span>
         ) : null}

@@ -228,7 +228,7 @@ export function AiPromptConfig(): React.JSX.Element {
           </div>
 
           {createMutation.isError && (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-danger-foreground" role="alert">
               {createMutation.error.message}
             </p>
           )}
@@ -299,7 +299,7 @@ export function AiPromptConfig(): React.JSX.Element {
                     onClick={() => deleteMutation.mutate(prompt.id)}
                     aria-label="Delete prompt"
                   >
-                    <Trash2 className="size-3.5 text-destructive" aria-hidden="true" />
+                    <Trash2 className="size-3.5 text-danger-foreground" aria-hidden="true" />
                   </Button>
                 </div>
               </div>

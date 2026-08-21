@@ -381,7 +381,7 @@ export function ImportWizard({
       {error && (
         <div
           role="alert"
-          className="mb-4 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+          className="mb-4 flex items-start gap-2 rounded-md border border-danger/30 bg-danger-subtle p-3 text-sm text-danger-foreground"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <span>{error}</span>
@@ -828,7 +828,7 @@ function ResultStep({
       {/* Error details */}
       {hasErrors && (
         <details className="rounded-md border">
-          <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-destructive">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-danger-foreground">
             {result.errors.length} row{result.errors.length !== 1 ? 's' : ''}{' '}
             skipped — click to see details
           </summary>

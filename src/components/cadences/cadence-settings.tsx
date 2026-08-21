@@ -97,7 +97,7 @@ export function CadenceSettings({
   return (
     <section aria-label="Cadence settings" className="flex flex-col gap-4">
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {error}
         </p>
       ) : null}
@@ -164,8 +164,8 @@ export function CadenceSettings({
         </div>
       </div>
 
-      <div className="rounded-md border border-destructive/30 bg-card p-4">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-destructive">
+      <div className="rounded-md border border-danger/30 bg-card p-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-danger-foreground">
           <AlertTriangle className="size-4" aria-hidden="true" />
           Danger zone
         </h3>

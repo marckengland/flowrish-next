@@ -117,7 +117,7 @@ export function DuplicateCheck({ leadId, leadEmail, companyName }: DuplicateChec
       )}
 
       {error && (
-        <p className="text-xs text-destructive" role="alert">
+        <p className="text-xs text-danger-foreground" role="alert">
           {error}
         </p>
       )}

@@ -147,7 +147,7 @@ export function LeadDiscovery(): React.JSX.Element {
       <div className="grid grid-cols-1 gap-3 rounded-lg border bg-card p-4 sm:grid-cols-[2fr_1fr_1fr_auto]">
         <div>
           <label htmlFor="ld-location" className="mb-1 block text-xs font-medium">
-            Location <span className="text-destructive">*</span>
+            Location <span className="text-danger-foreground">*</span>
           </label>
           <input
             id="ld-location"
@@ -202,7 +202,7 @@ export function LeadDiscovery(): React.JSX.Element {
       </div>
 
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {error}
         </p>
       ) : null}

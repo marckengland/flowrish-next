@@ -307,7 +307,7 @@ function RoleCard({
               </Button>
             )}
             {deleteError && (
-              <p className="text-xs text-destructive">{deleteError}</p>
+              <p className="text-xs text-danger-foreground">{deleteError}</p>
             )}
           </div>
         </div>
@@ -402,7 +402,7 @@ function CreateRoleForm({
         ))}
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-sm text-danger-foreground">{error}</p>}
 
       <Button type="submit" disabled={isPending || !name.trim()}>
         {isPending ? 'Creating...' : 'Create Role'}

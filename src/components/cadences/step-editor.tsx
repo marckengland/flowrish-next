@@ -676,7 +676,7 @@ export function StepEditor({
                       ) : testStatus.kind === 'error' ? (
                         <span
                           role="alert"
-                          className="text-xs text-destructive"
+                          className="text-xs text-danger-foreground"
                         >
                           {testStatus.message}
                         </span>
@@ -788,13 +788,13 @@ export function StepEditor({
           )}
 
           {error ? (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-danger-foreground">
               {error}
             </p>
           ) : null}
 
           {confirmDelete && step ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger-foreground">
               <span className="flex-1">
                 Permanently remove this step? Remaining steps will be renumbered
                 automatically.
@@ -993,7 +993,7 @@ function AttachmentSection({
               <button
                 type="button"
                 onClick={() => void onDelete(att.id)}
-                className="ml-2 shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                className="ml-2 shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-danger-subtle hover:text-danger-foreground"
                 title={`Remove ${att.fileName}`}
                 aria-label={`Remove ${att.fileName}`}
               >
@@ -1090,7 +1090,7 @@ function PendingAttachmentSection({
               <button
                 type="button"
                 onClick={() => onRemove(i)}
-                className="ml-2 shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                className="ml-2 shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-danger-subtle hover:text-danger-foreground"
                 title={`Remove ${file.name}`}
                 aria-label={`Remove ${file.name}`}
               >

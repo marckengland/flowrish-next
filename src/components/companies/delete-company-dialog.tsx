@@ -80,9 +80,9 @@ export function DeleteCompanyDialog({
         <span className="flex items-center gap-2">
           <span
             aria-hidden="true"
-            className="flex size-8 items-center justify-center rounded-full bg-destructive/10"
+            className="flex size-8 items-center justify-center rounded-full bg-danger-subtle"
           >
-            <AlertTriangle className="size-4 text-destructive" />
+            <AlertTriangle className="size-4 text-danger-foreground" />
           </span>
           Delete company
         </span>
@@ -143,7 +143,7 @@ export function DeleteCompanyDialog({
         ) : null}
 
         {error ? (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-danger-foreground">
             {error}
           </p>
         ) : null}

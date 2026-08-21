@@ -154,7 +154,7 @@ export function TeamManagement(): React.JSX.Element {
           </div>
 
           {createMutation.isError && (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-danger-foreground" role="alert">
               {createMutation.error.message}
             </p>
           )}

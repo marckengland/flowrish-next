@@ -153,7 +153,7 @@ export function SearchResults({
       <div
         role="alert"
         className={cn(
-          'rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive',
+          'rounded-md border border-danger/30 bg-danger-subtle p-4 text-sm text-danger-foreground',
           className,
         )}
       >

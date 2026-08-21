@@ -218,7 +218,7 @@ function CanvasNode(): React.JSX.Element | null {
             <button
               type="button"
               aria-label={`Delete step ${step.stepOrder}`}
-              className="text-muted-foreground/60 hover:text-destructive"
+              className="text-muted-foreground/60 hover:text-danger-foreground"
               onClick={(e) => {
                 e.stopPropagation()
                 onDelete(step.id)
@@ -503,7 +503,7 @@ export function CadenceCanvas({
       </header>
 
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {error}
         </p>
       ) : null}

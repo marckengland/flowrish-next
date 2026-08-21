@@ -88,7 +88,7 @@ export function AuditLogTable({
 
   if (isError) {
     return (
-      <p className={cn('text-sm text-destructive', className)} role="alert">
+      <p className={cn('text-sm text-danger-foreground', className)} role="alert">
         {error instanceof Error ? error.message : 'Failed to load audit history.'}
       </p>
     )

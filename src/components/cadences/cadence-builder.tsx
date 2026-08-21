@@ -191,7 +191,7 @@ export function CadenceBuilder({
       </header>
 
       {reorderError ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {reorderError}
         </p>
       ) : null}

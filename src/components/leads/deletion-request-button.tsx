@@ -113,7 +113,7 @@ export function DeletionRequestButton({ leadId, leadName }: DeletionRequestButto
             </Button>
           </div>
           {error && (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-danger-foreground" role="alert">
               {error}
             </p>
           )}

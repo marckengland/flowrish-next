@@ -357,7 +357,7 @@ function ContactsTab({
       )}
 
       {error ? (
-        <p role="alert" className="text-xs text-destructive">
+        <p role="alert" className="text-xs text-danger-foreground">
           {error}
         </p>
       ) : null}
@@ -388,7 +388,7 @@ function ContactsTab({
                   type="button"
                   onClick={() => unlink(contact.id)}
                   disabled={pending}
-                  className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  className="rounded p-1 text-muted-foreground transition-colors hover:bg-danger-subtle hover:text-danger-foreground"
                   aria-label={`Unlink ${contact.firstName} ${contact.lastName}`}
                   title="Unlink"
                 >
@@ -481,7 +481,7 @@ function TasksTab({
   return (
     <div className="flex flex-col gap-2">
       {error ? (
-        <p role="alert" className="text-xs text-destructive">
+        <p role="alert" className="text-xs text-danger-foreground">
           {error}
         </p>
       ) : null}
@@ -619,7 +619,7 @@ function EmailsTab({
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading email threads…</p>
       ) : isError ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {error instanceof Error
             ? error.message
             : 'Failed to load email threads.'}

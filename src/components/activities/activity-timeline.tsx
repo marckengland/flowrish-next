@@ -60,7 +60,7 @@ export function ActivityTimeline({
 
   if (query.isError) {
     return (
-      <div role="alert" className="rounded-lg border bg-card p-4 text-sm text-destructive">
+      <div role="alert" className="rounded-lg border bg-card p-4 text-sm text-danger-foreground">
         Couldn&apos;t load activities.{' '}
         {query.error instanceof Error ? query.error.message : ''}
       </div>

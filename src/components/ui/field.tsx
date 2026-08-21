@@ -18,10 +18,10 @@ import { inputBaseClass } from '@/components/ui/input'
  */
 
 const labelClass = 'mb-1.5 block text-sm font-medium text-foreground'
-const errorClass = 'mt-1 text-xs text-destructive'
+const errorClass = 'mt-1 text-xs text-danger-foreground'
 const hintClass = 'mt-1 text-xs text-muted-foreground'
 const invalidClass =
-  'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20'
+  'border-danger focus-visible:border-danger focus-visible:ring-danger/20'
 
 function FieldLabel({
   htmlFor,
@@ -35,7 +35,7 @@ function FieldLabel({
   return (
     <label htmlFor={htmlFor} className={labelClass}>
       {children}
-      {required ? <span className="text-destructive"> *</span> : null}
+      {required ? <span className="text-danger-foreground"> *</span> : null}
     </label>
   )
 }

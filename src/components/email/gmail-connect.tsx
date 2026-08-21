@@ -264,7 +264,7 @@ export function GmailConnect({
         </div>
 
         {confirmingDisconnect ? (
-          <div className="flex flex-col gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-4">
+          <div className="flex flex-col gap-3 rounded-md border border-danger/40 bg-danger-subtle p-4">
             <div>
               <h4 className="text-sm font-semibold text-foreground">
                 Disconnect Gmail?
@@ -275,28 +275,28 @@ export function GmailConnect({
             </div>
             <ul className="space-y-1.5 text-xs text-foreground">
               <li className="flex gap-2">
-                <span aria-hidden className="text-destructive">✕</span>
+                <span aria-hidden className="text-danger-foreground">✕</span>
                 <span>
                   Your refresh token is revoked at Google so it can&apos;t be
                   used again, even if a copy leaked.
                 </span>
               </li>
               <li className="flex gap-2">
-                <span aria-hidden className="text-destructive">✕</span>
+                <span aria-hidden className="text-danger-foreground">✕</span>
                 <span>
                   Your encrypted tokens and the EmailAccount record are
                   deleted from this app.
                 </span>
               </li>
               <li className="flex gap-2">
-                <span aria-hidden className="text-destructive">✕</span>
+                <span aria-hidden className="text-danger-foreground">✕</span>
                 <span>
                   Outbound email, Send-test-email, and inbox sync stop
                   working from your account until you reconnect.
                 </span>
               </li>
               <li className="flex gap-2">
-                <span aria-hidden className="text-destructive">✕</span>
+                <span aria-hidden className="text-danger-foreground">✕</span>
                 <span>
                   Cadence steps that were going to send from your Gmail
                   will fail their next attempt.
@@ -366,7 +366,7 @@ export function GmailConnect({
         ) : null}
 
         {error ? (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-danger-foreground">
             {error}
           </p>
         ) : null}
@@ -410,7 +410,7 @@ export function GmailConnect({
       </div>
 
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {error}
         </p>
       ) : null}

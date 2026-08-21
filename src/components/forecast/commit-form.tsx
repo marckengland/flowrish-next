@@ -78,7 +78,7 @@ export function CommitForm({
             htmlFor={periodId}
             className="block text-sm font-medium text-foreground mb-1.5"
           >
-            Period <span className="text-destructive">*</span>
+            Period <span className="text-danger-foreground">*</span>
           </label>
           <input
             id={periodId}
@@ -98,7 +98,7 @@ export function CommitForm({
             htmlFor={amountId}
             className="block text-sm font-medium text-foreground mb-1.5"
           >
-            Commit amount <span className="text-destructive">*</span>
+            Commit amount <span className="text-danger-foreground">*</span>
           </label>
           <input
             id={amountId}
@@ -146,7 +146,7 @@ export function CommitForm({
       </div>
 
       {state?.error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {state.error}
         </p>
       ) : null}

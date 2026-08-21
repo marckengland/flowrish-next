@@ -183,7 +183,7 @@ export function ContactForm({
       </div>
 
       {state?.error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger-foreground">
           {state.error}
         </p>
       ) : null}
@@ -222,7 +222,7 @@ function Field({
     <div>
       <label htmlFor={id} className="block text-sm font-medium text-foreground mb-1.5">
         {label}
-        {required ? <span className="text-destructive"> *</span> : null}
+        {required ? <span className="text-danger-foreground"> *</span> : null}
       </label>
       <input
         id={id}
@@ -254,7 +254,7 @@ function SelectField({
     <div>
       <label htmlFor={id} className="block text-sm font-medium text-foreground mb-1.5">
         {label}
-        {required ? <span className="text-destructive"> *</span> : null}
+        {required ? <span className="text-danger-foreground"> *</span> : null}
       </label>
       <select
         id={id}

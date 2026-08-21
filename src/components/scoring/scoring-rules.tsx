@@ -210,7 +210,7 @@ export function ScoringRules(): React.JSX.Element {
           </div>
 
           {createMutation.isError && (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-danger-foreground" role="alert">
               {createMutation.error.message}
             </p>
           )}
@@ -267,7 +267,7 @@ export function ScoringRules(): React.JSX.Element {
                   onClick={() => deleteMutation.mutate(rule.id)}
                   aria-label="Delete rule"
                 >
-                  <Trash2 className="size-3.5 text-destructive" aria-hidden="true" />
+                  <Trash2 className="size-3.5 text-danger-foreground" aria-hidden="true" />
                 </Button>
               </div>
             </div>
