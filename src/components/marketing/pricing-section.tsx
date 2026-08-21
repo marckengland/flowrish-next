@@ -32,11 +32,8 @@ export function PricingSection({
 
   return (
     <section id="pricing" className="scroll-mt-20 px-6 py-14 sm:px-14">
-      <div className="mb-10 flex flex-wrap items-end justify-between gap-5">
+      <div className="reveal mb-10 flex flex-wrap items-end justify-between gap-5">
         <div>
-          <div className="mb-3.5 font-mono text-[12px] tracking-[0.08em] text-muted-foreground">
-            03 — PRICING
-          </div>
           <h2 className="max-w-[560px] text-[42px] font-bold leading-[1.05] tracking-[-0.03em]">
             <span className="whitespace-nowrap">Priced per seat.</span>{' '}
             <span className="whitespace-nowrap">No admin tax.</span>
@@ -72,7 +69,7 @@ export function PricingSection({
         </div>
       </div>
 
-      <div className="grid items-start gap-5 lg:grid-cols-3">
+      <div className="reveal grid items-start gap-5 lg:grid-cols-3">
         {tiers.map((tier) => (
           <div
             key={tier.name}
@@ -108,7 +105,7 @@ export function PricingSection({
             <Link
               href={tier.slug === 'enterprise' ? talkToSalesHref : getStartedHref}
               className={cn(
-                'mb-[22px] flex h-[42px] items-center justify-center rounded-[10px] text-[14px] font-semibold transition-colors',
+                'mb-[22px] flex h-[42px] items-center justify-center rounded-[10px] text-[14px] font-semibold transition-[background-color,transform] active:translate-y-px',
                 tier.featured
                   ? 'bg-brand text-brand-foreground hover:bg-brand-hover'
                   : 'border border-border hover:bg-muted',

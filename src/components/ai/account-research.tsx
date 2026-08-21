@@ -5,6 +5,8 @@ import {
   Building2,
   Cpu,
   ExternalLink,
+  Lightbulb,
+  Send,
   Sparkles,
   Target,
   TriangleAlert,
@@ -17,10 +19,13 @@ import { Button } from '@/components/ui/button'
  */
 interface AccountResearch {
   executiveSummary: string
+  websiteSummary: string
   strategicGoals: string
   salesAngles: string[]
   challenges: string[]
   aiReadiness: string
+  solutionFit: string
+  outreachAngle: string
   sources: string[]
 }
 
@@ -88,6 +93,7 @@ export function AccountResearch({
         }
         setResearch({
           executiveSummary: json.data.executiveSummary ?? '',
+          websiteSummary: json.data.websiteSummary ?? '',
           strategicGoals: json.data.strategicGoals ?? '',
           salesAngles: Array.isArray(json.data.salesAngles)
             ? json.data.salesAngles
@@ -96,6 +102,8 @@ export function AccountResearch({
             ? json.data.challenges
             : [],
           aiReadiness: json.data.aiReadiness ?? '',
+          solutionFit: json.data.solutionFit ?? '',
+          outreachAngle: json.data.outreachAngle ?? '',
           sources: Array.isArray(json.data.sources) ? json.data.sources : [],
         })
       } catch {
@@ -155,6 +163,12 @@ export function AccountResearch({
             label="Executive summary"
             value={research.executiveSummary}
           />
+          {research.websiteSummary ? (
+            <ResearchField
+              label="What they do (from their website)"
+              value={research.websiteSummary}
+            />
+          ) : null}
           <ResearchField
             label="Strategic goals"
             value={research.strategicGoals}
@@ -187,6 +201,30 @@ export function AccountResearch({
               </h3>
               <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
                 {research.aiReadiness}
+              </p>
+            </div>
+          ) : null}
+
+          {research.solutionFit ? (
+            <div className="rounded-lg border border-brand/30 bg-brand-subtle/40 p-3">
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-emphasis">
+                <Lightbulb className="size-3.5" aria-hidden="true" />
+                Solution fit (business evaluation)
+              </h3>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                {research.solutionFit}
+              </p>
+            </div>
+          ) : null}
+
+          {research.outreachAngle ? (
+            <div>
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Send className="size-3.5" aria-hidden="true" />
+                Suggested outreach angle
+              </h3>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                {research.outreachAngle}
               </p>
             </div>
           ) : null}

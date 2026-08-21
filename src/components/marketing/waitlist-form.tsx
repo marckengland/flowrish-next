@@ -64,7 +64,7 @@ export function WaitlistForm({
         }`}
       >
         <Check className="size-[18px] shrink-0 text-brand" aria-hidden="true" />
-        You&apos;re on the list — we&apos;ll email you when a spot opens.
+        You&apos;re on the list. We&apos;ll email you when a spot opens.
       </div>
     )
   }

@@ -18,6 +18,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // `server-only` exists only in Next's build graph; stub it so server
+      // modules that import it can be unit-tested under Vitest.
+      'server-only': path.resolve(__dirname, './src/test-stubs/server-only.ts'),
     },
   },
 })

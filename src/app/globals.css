@@ -229,3 +229,51 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+@layer utilities {
+  /*
+   * Motion layer for the marketing page. JS-free: hero elements animate on
+   * load, section content animates as it scrolls into view via CSS
+   * scroll-driven animations. Everything degrades to fully-visible when the
+   * feature is unsupported (Safari/Firefox today) or the user prefers reduced
+   * motion, so content is never hidden by a broken animation.
+   */
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    /* On-load entrance for above-the-fold (hero) elements. */
+    .rise {
+      animation: rise-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .rise-1 {
+      animation-delay: 0.06s;
+    }
+    .rise-2 {
+      animation-delay: 0.14s;
+    }
+    .rise-3 {
+      animation-delay: 0.22s;
+    }
+    .rise-4 {
+      animation-delay: 0.3s;
+    }
+
+    /* Scroll-triggered reveal for below-the-fold content. */
+    @supports (animation-timeline: view()) {
+      .reveal {
+        animation: rise-in linear both;
+        animation-timeline: view();
+        animation-range: entry 4% cover 26%;
+      }
+    }
+  }
+}

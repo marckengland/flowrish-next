@@ -72,7 +72,7 @@ export function DashboardMockup(): React.JSX.Element {
               <span className="text-[12px] font-semibold">Top priorities</span>
               <span className="text-[10px] text-muted-foreground">View all</span>
             </div>
-            <MockRow score="92" tone="danger" title="Call about renewal — 3 days left" meta="Acme Corp · Overdue Jul 24" />
+            <MockRow score="92" tone="danger" title="Call about renewal, 3 days left" meta="Acme Corp · Overdue Jul 24" />
             <MockRow score="64" tone="warning" title="Send proposal follow-up" meta="Globex Inc · Due Jul 27" />
             <MockRow score="31" tone="neutral" title="Log discovery-call notes" meta="Initech · Due Jul 29" last />
           </div>

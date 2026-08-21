@@ -1,6 +1,7 @@
 import { createTenantPrisma } from '@/server/db/middleware'
 import { env } from '@/lib/env'
 import { AppError } from '@/lib/errors'
+import { fetchSiteText } from '@/lib/web/fetch-site'
 
 /**
  * AI Service for email generation, account research, and chatbot.
@@ -29,6 +30,22 @@ export interface AccountResearch {
    * gauging openness to modernization conversations.
    */
   aiReadiness: string
+  /**
+   * Summary of what the company does, grounded in their actual website
+   * content when it could be fetched (empty otherwise).
+   */
+  websiteSummary: string
+  /**
+   * Background-check / business evaluation: whether and how this company
+   * would benefit from tech/software solutions, with the specific
+   * problem → solution reasoning.
+   */
+  solutionFit: string
+  /**
+   * A concrete opening outreach angle — a problem-probing question to
+   * ask them plus the solution to offer in reply.
+   */
+  outreachAngle: string
   /**
    * Sources the model cites for the research. Each entry is either a
    * URL (rendered as a link) or a free-form descriptor.
@@ -386,21 +403,37 @@ export async function researchAccount(
       throw new AppError('COMPANY_NOT_FOUND', 'Company not found', 404)
     }
 
+    // Ground the research in the company's ACTUAL website content when we
+    // can fetch it safely (SSRF-guarded). Best-effort: if the site is
+    // unreachable/blocked, research still runs on name + industry alone.
+    let siteExcerpt: string | null = null
+    if (company.website) {
+      const text = await fetchSiteText(company.website)
+      if (text) siteExcerpt = text.slice(0, 4000)
+    }
+
     // Build the user prompt with company context
     const userPrompt = [
-      'Research the following company and provide sales intelligence:',
+      'Research the following company and provide sales intelligence and a',
+      'business-fit evaluation for a tech/software solutions vendor.',
       '',
       `Company Name: ${company.name}`,
       company.website ? `Website: ${company.website}` : '',
       company.industry ? `Industry: ${company.industry}` : '',
+      siteExcerpt
+        ? `\nWebsite content (excerpt — base your evaluation on this real text):\n"""\n${siteExcerpt}\n"""`
+        : '\n(Website content could not be fetched — reason from general knowledge.)',
       '',
       'Provide your analysis in JSON format:',
       '{',
       '  "executiveSummary": "High-level overview of the company...",',
+      '  "websiteSummary": "What the company actually does, grounded in the website text above (empty if none)",',
       '  "strategicGoals": "Their likely strategic priorities...",',
       '  "salesAngles": ["Angle 1", "Angle 2", "Angle 3"],',
       '  "challenges": ["Challenge 1", "Challenge 2"],',
       '  "aiReadiness": "Short note on AI / tech adoption posture",',
+      '  "solutionFit": "Whether and HOW they would benefit from tech/software solutions — name the specific business problem and the type of solution that addresses it",',
+      '  "outreachAngle": "A concrete first-touch outreach angle: one problem-probing question to ask them, plus the solution to offer once they respond",',
       '  "sources": ["https://example.com", "Industry report 2024"]',
       '}',
     ]
@@ -425,10 +458,13 @@ export async function researchAccount(
       const parsed = JSON.parse(jsonMatch[0]) as AccountResearch
       return {
         executiveSummary: parsed.executiveSummary ?? '',
+        websiteSummary: parsed.websiteSummary ?? '',
         strategicGoals: parsed.strategicGoals ?? '',
         salesAngles: Array.isArray(parsed.salesAngles) ? parsed.salesAngles : [],
         challenges: Array.isArray(parsed.challenges) ? parsed.challenges : [],
         aiReadiness: parsed.aiReadiness ?? '',
+        solutionFit: parsed.solutionFit ?? '',
+        outreachAngle: parsed.outreachAngle ?? '',
         sources: Array.isArray(parsed.sources) ? parsed.sources : [],
       }
     }
@@ -436,10 +472,13 @@ export async function researchAccount(
     // Fallback: use raw response as executive summary
     return {
       executiveSummary: raw,
+      websiteSummary: '',
       strategicGoals: '',
       salesAngles: [],
       challenges: [],
       aiReadiness: '',
+      solutionFit: '',
+      outreachAngle: '',
       sources: [],
     }
   } catch (error) {
