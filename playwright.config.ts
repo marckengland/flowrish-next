@@ -7,12 +7,27 @@ import { defineConfig, devices } from '@playwright/test'
  * `undefined` under a plain `playwright test`. Guarded with try/catch so CI
  * environments that inject env vars directly (no `.env` file) keep working.
  */
+// Capture whether the *ambient* environment already selected a deployed
+// target BEFORE we read `.env`. The `test:e2e:prod` script injects
+// `PLAYWRIGHT_BASE_URL` via `node --env-file=.env …`, so it's present here;
+// the plain `test:e2e` run has no ambient value.
+const ambientBaseUrl = process.env.PLAYWRIGHT_BASE_URL
+
 try {
   ;(process as unknown as { loadEnvFile?: (path: string) => void }).loadEnvFile?.(
     '.env',
   )
 } catch {
   // No .env file present — rely on the ambient environment.
+}
+
+// `.env` may define `PLAYWRIGHT_BASE_URL` for the prod script's benefit, but a
+// value that only appeared because we just loaded `.env` must NOT silently
+// redirect the default local `test:e2e` run at production. Only an ambient
+// value (set by the prod script or an explicit `PLAYWRIGHT_BASE_URL=… npx
+// playwright test`) counts as opting into a deployed target.
+if (!ambientBaseUrl && process.env.PLAYWRIGHT_BASE_URL) {
+  delete process.env.PLAYWRIGHT_BASE_URL
 }
 
 /**

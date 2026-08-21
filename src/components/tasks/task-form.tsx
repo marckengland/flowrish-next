@@ -1,10 +1,12 @@
 'use client'
 
 import { useActionState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createTask, updateTask } from '@/server/actions/tasks'
+import { tasksKeys } from '@/hooks/use-tasks'
 import { toast } from '@/lib/toast'
 
 /**
@@ -103,6 +105,7 @@ export function TaskForm({
   submitLabel,
 }: TaskFormProps): React.JSX.Element {
   const isEditing = Boolean(task?.id)
+  const queryClient = useQueryClient()
 
   const [state, formAction, pending] = useActionState<ActionResult, FormData>(
     async (_prev, formData) => {
@@ -112,6 +115,10 @@ export function TaskForm({
 
       if (result && 'data' in result && result.data && 'id' in result.data) {
         toast.success(isEditing ? 'Task updated' : 'Task created')
+        // The task list is TanStack-Query-driven and seeded with SSR data;
+        // the server action's revalidatePath won't refresh it, so invalidate
+        // the cache here to surface the new/updated task immediately.
+        queryClient.invalidateQueries({ queryKey: tasksKeys.all })
         onSuccess?.(result.data.id as string)
       }
       return result as ActionResult

@@ -48,7 +48,10 @@ export const stepCreateSchema = z.object({
    */
   startNewThread: z
     .union([z.boolean(), z.string()])
-    .optional()
+    // `.nullish()` (null | undefined) because HTML forms omit unchecked
+    // checkboxes entirely, so `FormData.get('startNewThread')` is `null`
+    // — which must be treated the same as "not set" rather than rejected.
+    .nullish()
     .transform((v) => v === true || v === 'true' || v === 'on'),
 })
 

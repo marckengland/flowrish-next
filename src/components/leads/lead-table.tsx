@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Loader2, Target } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { rowNavClick } from '@/lib/row-navigation'
 import { Badge } from '@/components/ui/badge'
 import { ScoreBadge } from '@/components/scoring/score-badge'
 import { Pagination } from '@/components/ui/pagination'
@@ -64,6 +66,7 @@ export function LeadTable({
   page: initialPage = 1,
   pageSize: initialPageSize = 20,
 }: LeadTableProps): React.JSX.Element {
+  const router = useRouter()
   const filters = useFiltersStore((s) => s.leads)
   const [sortKey, setSortKey] = usePersistentState<SortKey>(
     'flowrish:leads:sortKey',
@@ -193,13 +196,14 @@ export function LeadTable({
               sorted.map((lead) => (
                 <tr
                   key={lead.id}
-                  className="relative cursor-pointer transition-colors hover:bg-background focus-within:bg-background"
+                  onClick={rowNavClick((href) => router.push(href), `/leads/${lead.id}`)}
+                  className="cursor-pointer transition-colors hover:bg-background focus-within:bg-background"
                 >
                   <td className="px-4 py-3 font-semibold">
                     <Link
                       href={`/leads/${lead.id}`}
                       aria-label={`Open ${fullName(lead)}`}
-                      className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
+                      className="text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
                     >
                       {fullName(lead)}
                     </Link>

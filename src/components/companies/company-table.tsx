@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Building2, Loader2, Search, Trash2 } from 'lucide-react'
+
+import { rowNavClick } from '@/lib/row-navigation'
 
 import { useCompaniesQuery, useDeleteCompanyMutation, type CompanyListItem } from '@/hooks/use-companies'
 import { Button } from '@/components/ui/button'
@@ -75,6 +78,7 @@ export function CompanyTable({
   page: initialPage = 1,
   pageSize: initialPageSize = 20,
 }: CompanyTableProps): React.JSX.Element {
+  const router = useRouter()
   const [currentSearch, setCurrentSearch] = useState(search ?? '')
   const [page, setPage] = useState(initialPage)
   const [pageSize, setPageSize] = usePersistentState(
@@ -194,12 +198,16 @@ export function CompanyTable({
             />
           ) : (
             sorted.map((company) => (
-              <Tr key={company.id} className="cursor-pointer">
+              <Tr
+                key={company.id}
+                onClick={rowNavClick((href) => router.push(href), `/companies/${company.id}`)}
+                className="cursor-pointer"
+              >
                 <Td className="font-semibold text-foreground">
                   <Link
                     href={`/companies/${company.id}`}
                     aria-label={`Open ${company.name}`}
-                    className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
+                    className="text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
                   >
                     {company.name}
                   </Link>
@@ -213,7 +221,7 @@ export function CompanyTable({
                       href={company.website}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="relative z-10 text-brand-emphasis hover:underline"
+                      className="text-brand-emphasis hover:underline"
                     >
                       {safeHostname(company.website)}
                     </a>
@@ -234,7 +242,6 @@ export function CompanyTable({
                     onClick={() => handleDelete(company.id, company.name)}
                     disabled={deleteMutation.isPending}
                     aria-label={`Delete ${company.name}`}
-                    className="relative z-10"
                   >
                     <Trash2 className="size-4 text-muted-foreground" aria-hidden="true" />
                   </Button>

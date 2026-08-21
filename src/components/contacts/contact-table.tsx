@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Loader2, Trash2, Users } from 'lucide-react'
+
+import { rowNavClick } from '@/lib/row-navigation'
 
 import { useContactsQuery, useDeleteContactMutation, type ContactListItem } from '@/hooks/use-contacts'
 import { Button } from '@/components/ui/button'
@@ -60,8 +63,8 @@ export interface ContactTableProps {
  *
  * - Fetches data via TanStack Query (`useContactsQuery`)
  * - Supports search filtering
- * - Each row links to contact detail via a stretched cell link; the delete
- *   control sits above the overlay so it stays clickable.
+ * - Each row navigates to contact detail via a row click; the name is a real
+ *   link and interactive controls (delete) are excluded from the row handler.
  *
  * Validates: Requirement 19.1
  */
@@ -72,6 +75,7 @@ export function ContactTable({
   page: initialPage = 1,
   pageSize: initialPageSize = 20,
 }: ContactTableProps): React.JSX.Element {
+  const router = useRouter()
   const [currentSearch, setCurrentSearch] = useState(search ?? '')
   const [page, setPage] = useState(initialPage)
   const [pageSize, setPageSize] = usePersistentState(
@@ -187,12 +191,16 @@ export function ContactTable({
             sorted.map((contact) => {
               const fullName = `${contact.firstName} ${contact.lastName}`.trim()
               return (
-                <Tr key={contact.id} className="cursor-pointer">
+                <Tr
+                key={contact.id}
+                onClick={rowNavClick((href) => router.push(href), `/contacts/${contact.id}`)}
+                className="cursor-pointer"
+              >
                     <td className="px-4 py-3 font-semibold">
                       <Link
                         href={`/contacts/${contact.id}`}
                         aria-label={`Open ${fullName}`}
-                        className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
+                        className="text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
                       >
                         {fullName}
                       </Link>

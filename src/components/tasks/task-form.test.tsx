@@ -1,5 +1,6 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -43,8 +44,13 @@ function mount(ui: React.JSX.Element): {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
+  // TaskForm calls useQueryClient (to invalidate the tasks list after a
+  // successful mutation), so it must render under a provider.
+  const queryClient = new QueryClient()
   act(() => {
-    root.render(ui)
+    root.render(
+      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+    )
   })
   return {
     container,
