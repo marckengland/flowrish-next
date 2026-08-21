@@ -5,7 +5,8 @@ import {
   ArrowRight,
   Calendar,
   GitBranchPlus,
-  Zap,
+  Mail,
+  Workflow,
   TrendingUp,
   Bot,
   Check,
@@ -16,6 +17,7 @@ import type { Metadata } from 'next'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { siteConfig } from '@/lib/site'
 import { DashboardMockup } from '@/components/marketing/dashboard-mockup'
+import { CadenceFlow } from '@/components/marketing/cadence-flow'
 import { PricingSection } from '@/components/marketing/pricing-section'
 import { WaitlistForm } from '@/components/marketing/waitlist-form'
 import { isWaitlistEnabled } from '@/lib/waitlist'
@@ -243,6 +245,41 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
             </div>
           </div>
 
+          {/* featured: Cadence flow (visual left / text right, zigzag) */}
+          <div className="reveal mb-5 grid items-center gap-10 py-4 lg:grid-cols-2">
+            <div className="lg:order-2">
+              <div className="mb-4 inline-flex items-center gap-2.5 text-[14px] font-semibold text-brand-emphasis">
+                <span className="flex size-8 items-center justify-center rounded-lg bg-brand-subtle text-brand-emphasis">
+                  <Workflow className="size-[18px]" aria-hidden="true" />
+                </span>
+                Cadences
+              </div>
+              <h3 className="mb-3.5 text-[30px] font-bold leading-[1.1] tracking-[-0.02em]">
+                Design the whole sequence, then let it run.
+              </h3>
+              <p className="mb-[18px] text-[16px] leading-[1.55] text-muted-foreground">
+                Map every touch on a visual flow: email, LinkedIn, calls and
+                tasks, with the timing between them. Enroll a lead and Flowrish
+                works the steps on schedule.
+              </p>
+              <ul className="flex flex-col gap-2.5 text-[15px] text-foreground/80">
+                {[
+                  'Email, LinkedIn, call and task steps',
+                  'Per-step delays with send-time windows',
+                  'Follow-ups threaded into Gmail automatically',
+                ].map((f) => (
+                  <li key={f} className="flex items-center gap-2.5">
+                    <Check className="size-[17px] shrink-0 text-brand" aria-hidden="true" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="lg:order-1">
+              <CadenceFlow />
+            </div>
+          </div>
+
           {/* 2x2 feature grid */}
           <div className="reveal grid gap-5 lg:grid-cols-2">
             <FeatureCard
@@ -252,10 +289,10 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
               body="Drag deals across stages on a kanban board. Values, scores and owners update everywhere, instantly."
             />
             <FeatureCard
-              icon={<Zap className="size-[17px]" aria-hidden="true" />}
-              label="Cadences"
-              title="Follow-ups that send themselves"
-              body="Build multi-step sequences once. Flowrish schedules the tasks, threads the emails and never lets a lead go cold."
+              icon={<Mail className="size-[17px]" aria-hidden="true" />}
+              label="Email & calls"
+              title="Every conversation, logged"
+              body="Two-way Gmail sync keeps threads on the deal and click-to-call captures calls, so activity logs itself."
             />
             <FeatureCard
               icon={<TrendingUp className="size-[17px]" aria-hidden="true" />}
