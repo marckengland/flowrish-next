@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import {
+  BookmarkPlus,
   Building2,
   Cpu,
   ExternalLink,
@@ -32,6 +33,13 @@ interface AccountResearch {
 interface ResearchResponse {
   data?: AccountResearch
   error?: { code?: string; message?: string }
+}
+
+interface SavedInsight {
+  id: string
+  summary: string | null
+  kind: string
+  createdAt: string
 }
 
 export interface AccountResearchProps {
@@ -65,6 +73,66 @@ export function AccountResearch({
   const [research, setResearch] = useState<AccountResearch | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+
+  const [savedInsights, setSavedInsights] = useState<SavedInsight[]>([])
+  const [saving, startSaving] = useTransition()
+  const [saveMsg, setSaveMsg] = useState<string | null>(null)
+
+  // Load any previously-saved insights for this company.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/insights?entityType=COMPANY&entityId=${encodeURIComponent(companyId)}`,
+          { credentials: 'same-origin' },
+        )
+        if (!res.ok) return
+        const body = (await res.json()) as { data?: SavedInsight[] }
+        if (!cancelled && Array.isArray(body.data)) setSavedInsights(body.data)
+      } catch {
+        // non-fatal
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [companyId])
+
+  function saveResearch(): void {
+    if (!research || saving) return
+    setSaveMsg(null)
+    startSaving(async () => {
+      try {
+        const res = await fetch('/api/insights', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            entityType: 'COMPANY',
+            entityId: companyId,
+            kind: 'research',
+            summary: research.executiveSummary?.slice(0, 2000) ?? null,
+            data: research,
+            sources: research.sources,
+            source: 'ai',
+          }),
+        })
+        const body = (await res.json().catch(() => ({}))) as {
+          data?: SavedInsight
+          error?: { message?: string }
+        }
+        if (!res.ok || !body.data) {
+          setSaveMsg(body.error?.message ?? 'Could not save.')
+          return
+        }
+        setSavedInsights((prev) => [body.data as SavedInsight, ...prev])
+        setSaveMsg('Saved to this company.')
+      } catch {
+        setSaveMsg('Could not save.')
+      }
+    })
+  }
 
   function fetchResearch(): void {
     if (pending) return
@@ -159,6 +227,21 @@ export function AccountResearch({
 
       {hasResult && research ? (
         <div className="space-y-4" data-testid="account-research-result">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">
+              {saveMsg ?? 'Save this to keep it on the company record.'}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={saveResearch}
+              disabled={saving}
+            >
+              <BookmarkPlus className="size-3.5" aria-hidden="true" />
+              {saving ? 'Saving…' : 'Save to record'}
+            </Button>
+          </div>
           <ResearchField
             label="Executive summary"
             value={research.executiveSummary}
@@ -264,6 +347,37 @@ export function AccountResearch({
           No research yet. Click <strong>Research account</strong> to ask the
           AI for a briefing on this company.
         </p>
+      ) : null}
+
+      {savedInsights.length > 0 ? (
+        <div className="border-t pt-3">
+          <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <BookmarkPlus className="size-3.5" aria-hidden="true" />
+            Saved insights ({savedInsights.length})
+          </h3>
+          <ul className="mt-2 space-y-2">
+            {savedInsights.map((insight) => (
+              <li
+                key={insight.id}
+                className="rounded-md border bg-muted/20 px-3 py-2 text-xs"
+              >
+                <div className="flex items-center justify-between gap-2 text-muted-foreground">
+                  <span className="font-medium uppercase tracking-wide">
+                    {insight.kind}
+                  </span>
+                  <time dateTime={insight.createdAt}>
+                    {new Date(insight.createdAt).toLocaleDateString()}
+                  </time>
+                </div>
+                {insight.summary ? (
+                  <p className="mt-1 line-clamp-3 text-foreground">
+                    {insight.summary}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
     </section>
   )

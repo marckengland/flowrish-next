@@ -412,29 +412,33 @@ export async function researchAccount(
       if (text) siteExcerpt = text.slice(0, 4000)
     }
 
-    // Build the user prompt with company context
+    // Build the user prompt with company context. The format lock + grounding
+    // + citation guard are tuned for the Gemini backend, which otherwise
+    // drifts from strict JSON and fabricates source URLs.
     const userPrompt = [
-      'Research the following company and provide sales intelligence and a',
-      'business-fit evaluation for a tech/software solutions vendor.',
+      'You are a B2B sales-intelligence analyst evaluating whether a company is a',
+      'good fit for a tech/software solutions vendor. Be specific and concrete.',
       '',
-      `Company Name: ${company.name}`,
-      company.website ? `Website: ${company.website}` : '',
-      company.industry ? `Industry: ${company.industry}` : '',
+      'Company:',
+      `- Name: ${company.name}`,
+      company.website ? `- Website: ${company.website}` : '',
+      company.industry ? `- Industry: ${company.industry}` : '',
       siteExcerpt
-        ? `\nWebsite content (excerpt — base your evaluation on this real text):\n"""\n${siteExcerpt}\n"""`
-        : '\n(Website content could not be fetched — reason from general knowledge.)',
+        ? `\nWebsite content (excerpt). Ground "websiteSummary" and "solutionFit" in THIS text; do not assert facts it does not support:\n"""\n${siteExcerpt}\n"""`
+        : '\nNo website content was available. Reason only from well-known public knowledge; if unsure, keep fields brief and do not invent specifics.',
       '',
-      'Provide your analysis in JSON format:',
+      'Return ONLY a single valid JSON object — no markdown code fences, no text',
+      'before or after — with exactly these keys:',
       '{',
-      '  "executiveSummary": "High-level overview of the company...",',
-      '  "websiteSummary": "What the company actually does, grounded in the website text above (empty if none)",',
-      '  "strategicGoals": "Their likely strategic priorities...",',
-      '  "salesAngles": ["Angle 1", "Angle 2", "Angle 3"],',
-      '  "challenges": ["Challenge 1", "Challenge 2"],',
-      '  "aiReadiness": "Short note on AI / tech adoption posture",',
-      '  "solutionFit": "Whether and HOW they would benefit from tech/software solutions — name the specific business problem and the type of solution that addresses it",',
-      '  "outreachAngle": "A concrete first-touch outreach angle: one problem-probing question to ask them, plus the solution to offer once they respond",',
-      '  "sources": ["https://example.com", "Industry report 2024"]',
+      '  "executiveSummary": "2-3 sentence overview",',
+      '  "websiteSummary": "What the company does, grounded in the website text above; empty string if none was provided",',
+      '  "strategicGoals": "Their likely strategic priorities",',
+      '  "salesAngles": ["angle", "..."],',
+      '  "challenges": ["challenge", "..."],',
+      '  "aiReadiness": "Short note on their AI / tech adoption posture",',
+      '  "solutionFit": "Whether and HOW they would benefit from tech/software solutions — name the specific business problem and the solution that addresses it",',
+      '  "outreachAngle": "One problem-probing question to ask them, plus the solution to offer once they respond",',
+      '  "sources": ["only URLs or sources you are confident actually exist — never fabricate citations; use [] if none"]',
       '}',
     ]
       .filter(Boolean)
@@ -513,12 +517,10 @@ const CHAT_ACTION_HINT = [
   '  - update_lead_status: { "leadId": "<uuid>", "leadStatus": "Active" }',
   '  - update_lead_tier: { "leadId": "<uuid>", "tier": "Tier 1" }',
   '  - enroll_in_cadence: { "cadenceId": "<uuid>", "leadId": "<uuid>" }',
-  '  - create_cadence: { "name": "SMB Outbound", "steps": [ '
-    + '{ "actionType": "EMAIL", "delayHours": 0, "subject": "Quick question", "body": "Hi {FirstName}…" }, '
-    + '{ "actionType": "CALL", "delayHours": 48, "taskTitle": "Call the prospect" } ] }.'
-    + ' Use create_cadence when the user wants to build an outreach sequence/flow. '
-    + 'actionType is one of EMAIL, CALL, LINKEDIN, MANUAL_TASK; delayHours is the wait '
-    + 'before each step. The cadence is created as a DRAFT for the user to review and activate.',
+  '  - create_cadence: build a multi-step outreach sequence. Propose this ONLY when the user asks to create, build, or design a cadence / sequence / flow — otherwise omit it. Params:',
+  '      { "name": "<cadence name>", "steps": [ { "actionType": "EMAIL"|"CALL"|"LINKEDIN"|"MANUAL_TASK", "delayHours": <integer wait BEFORE this step, 0 = immediately>, "subject": "<EMAIL only>", "body": "<EMAIL only, HTML allowed>", "taskTitle": "<CALL/LINKEDIN/MANUAL_TASK>", "taskDescription": "<optional>" } ] }',
+  '      Rules: include at least one step, in execution order; EMAIL steps use subject+body, all other types use taskTitle (+ optional taskDescription); the cadence is created as a DRAFT for the user to review and activate. Example:',
+  '      { "name": "SMB Outbound", "steps": [ {"actionType":"EMAIL","delayHours":0,"subject":"Quick question about {Company}","body":"Hi {FirstName}, …"}, {"actionType":"CALL","delayHours":48,"taskTitle":"Call the prospect"} ] }',
   'Never propose destructive actions. Always explain in plain text BEFORE the action block.',
   'Omit the block entirely when the user is just asking a question.)',
 ].join('\n')

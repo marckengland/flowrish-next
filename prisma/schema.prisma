@@ -103,6 +103,7 @@ model Organization {
   fieldMappings       FieldMapping[]
   stageTransitions    StageTransition[]
   cadenceEnrollments  CadenceEnrollment[]
+  insights            Insight[]
   stepExecutionLogs   StepExecutionLog[]
   voiceConfig         VoiceConfig?
 }
@@ -785,6 +786,37 @@ model AssignmentRule {
 
   @@unique([organizationId, priority])
   @@index([organizationId])
+}
+
+/**
+ * Saved AI/enrichment output ("Insights") attached to a Lead, Company, or
+ * Contact. Persists the structured result of account research / background
+ * checks / lead-gen enrichment so it's available as a reference on the
+ * record and reusable by email generation, cadences, and the assistant.
+ * Polymorphic by (entityType, entityId); tenant-scoped by organizationId.
+ */
+model Insight {
+  id         String  @id @default(uuid())
+  entityType String // "LEAD" | "COMPANY" | "CONTACT"
+  entityId   String
+  kind       String  @default("research") // research | background | leadgen
+  summary    String?
+  /** Full structured payload (e.g. the AccountResearch object). */
+  data       Json
+  /** Source URLs / citations backing the insight. */
+  sources    String[] @default([])
+  /** Where it came from: ai | exa | osm | apollo | manual. */
+  source      String @default("ai")
+  createdById String
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, entityType, entityId])
 }
 
 // ─── Forecast Models ─────────────────────────────────────────────────────────
