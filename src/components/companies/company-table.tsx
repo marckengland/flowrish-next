@@ -207,13 +207,13 @@ export function CompanyTable({
                 <Td className="text-muted-foreground">
                   {company.industry ?? '—'}
                 </Td>
-                <Td className="relative z-10">
+                <Td>
                   {company.website ? (
                     <a
                       href={company.website}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-brand-emphasis hover:underline"
+                      className="relative z-10 text-brand-emphasis hover:underline"
                     >
                       {safeHostname(company.website)}
                     </a>
@@ -227,13 +227,14 @@ export function CompanyTable({
                 <Td align="right" className="tnum text-muted-foreground">
                   {company._count.leads}
                 </Td>
-                <Td align="right" className="relative z-10">
+                <Td align="right">
                   <Button
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => handleDelete(company.id, company.name)}
                     disabled={deleteMutation.isPending}
                     aria-label={`Delete ${company.name}`}
+                    className="relative z-10"
                   >
                     <Trash2 className="size-4 text-muted-foreground" aria-hidden="true" />
                   </Button>

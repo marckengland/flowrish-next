@@ -16,6 +16,13 @@ try {
 }
 
 /**
+ * Dedicated port for the Playwright-managed local dev server. Kept off the
+ * default :3000 so a fresh server (with up-to-date middleware) is always
+ * started for the test run, independent of any dev server the user is running.
+ */
+const LOCAL_E2E_PORT = 3100
+
+/**
  * Playwright config for end-to-end smoke tests.
  *
  * Runs in two phases:
@@ -61,7 +68,7 @@ export default defineConfig({
   grepInvert: isProd && !process.env.E2E_ALLOW_WRITES ? /@write/ : undefined,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${LOCAL_E2E_PORT}`,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -89,9 +96,18 @@ export default defineConfig({
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
     : {
-        command: 'npm run dev',
-        url: 'http://localhost:3000',
-        reuseExistingServer: !process.env.CI,
+        // Run the e2e dev server on a *dedicated* port that Playwright owns
+        // exclusively. Two traps this avoids:
+        //   1. Reusing a long-lived `next dev` whose middleware is stale (Next
+        //      does not hot-reload middleware) — caused phantom 429s from
+        //      rate-limit fixes that never loaded.
+        //   2. `next dev` silently auto-incrementing to :3101 when :3100 is
+        //      taken by an orphaned run, so Playwright's health check would
+        //      connect to the *stale* server on :3100.
+        // We free the port first, then bind it fresh, and never reuse.
+        command: `lsof -ti tcp:${LOCAL_E2E_PORT} | xargs kill -9 2>/dev/null; npm run dev -- --port ${LOCAL_E2E_PORT}`,
+        url: `http://localhost:${LOCAL_E2E_PORT}`,
+        reuseExistingServer: false,
         timeout: 120_000,
       },
 })

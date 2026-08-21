@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Users, UserPlus, Mail, Trash2, LogOut } from 'lucide-react'
 
@@ -67,15 +67,23 @@ export function UserManagement(): React.JSX.Element {
   const [confirmTransferOpen, setConfirmTransferOpen] = useState(false)
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
 
-  // Get current user's email to identify self in the list
-  if (!currentUserEmail) {
-    import('@/lib/supabase/client').then(({ createSupabaseBrowser }) => {
+  // Get current user's email to identify self in the list. Runs strictly
+  // after mount (never during render) so a cached supabase chunk can't
+  // resolve its `.then` mid-hydration and force React to discard the
+  // server HTML — which surfaced as an intermittent hydration mismatch
+  // (React #418) on this page.
+  useEffect(() => {
+    let cancelled = false
+    void import('@/lib/supabase/client').then(({ createSupabaseBrowser }) => {
       const supabase = createSupabaseBrowser()
-      supabase.auth.getUser().then(({ data }) => {
-        if (data.user?.email) setCurrentUserEmail(data.user.email)
+      void supabase.auth.getUser().then(({ data }) => {
+        if (!cancelled && data.user?.email) setCurrentUserEmail(data.user.email)
       })
     })
-  }
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const { data: members, isLoading } = useQuery<OrgMember[]>({
     queryKey: ['org-members'],
