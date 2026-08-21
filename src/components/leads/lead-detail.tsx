@@ -127,15 +127,6 @@ export function LeadDetail({
       <dl className="grid grid-cols-1 gap-x-[18px] gap-y-4 text-sm sm:grid-cols-2">
         <Field label="Email" value={lead.email} />
         <Field label="Phone" value={lead.phone} />
-        <Field label="Stage" value={lead.stage?.name} />
-        <Field label="Status" value={prettyStatus(lead.leadStatus)} />
-        <Field label="Tier" value={prettyTier(lead.tier)} />
-        <Field
-          label="Deal value"
-          value={formatCurrency(lead.dealValue, lead.currency ?? 'USD')}
-          numeric
-        />
-        <Field label="Lead score" value={lead.score != null ? String(lead.score) : null} />
         <Field
           label="Last activity"
           value={formatRelative(lead.lastActivityAt ?? null)}
@@ -217,43 +208,6 @@ function initials(lead: {
 function fullName(lead: { firstName?: string | null; lastName?: string | null }): string {
   const parts = [lead.firstName, lead.lastName].filter(Boolean) as string[]
   return parts.join(' ').trim() || 'Unnamed lead'
-}
-
-function prettyStatus(status: string | null | undefined): string | null {
-  if (!status) return null
-  return status.charAt(0) + status.slice(1).toLowerCase()
-}
-
-function prettyTier(tier: string | null | undefined): string | null {
-  if (!tier) return null
-  switch (tier) {
-    case 'TIER_1':
-      return 'Tier 1'
-    case 'TIER_2':
-      return 'Tier 2'
-    case 'TIER_3':
-      return 'Tier 3'
-    default:
-      return tier
-  }
-}
-
-function formatCurrency(
-  value: string | number | null | undefined,
-  currency: string,
-): string | null {
-  if (value === null || value === undefined || value === '') return null
-  const n = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(n)) return null
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: currency || 'USD',
-      maximumFractionDigits: 0,
-    }).format(n)
-  } catch {
-    return `${currency} ${n}`
-  }
 }
 
 function formatRelative(iso: string | null): string | null {

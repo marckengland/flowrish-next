@@ -41,6 +41,7 @@ export const leadCreateSchema = z.object({
   companyName: nullableSanitizedString,
   companyIndustry: nullableSanitizedString,
   companyWebsite: z.string().url('Invalid company website URL').optional().or(z.literal('')),
+  companyLinkedinUrl: z.string().url('Invalid company LinkedIn URL').optional().or(z.literal('')),
 })
 
 export type LeadCreateInput = z.infer<typeof leadCreateSchema>
@@ -69,6 +70,7 @@ export const leadUpdateSchema = z.object({
   companyName: nullableSanitizedString,
   companyIndustry: nullableSanitizedString,
   companyWebsite: z.string().url('Invalid company website URL').optional().or(z.literal('')),
+  companyLinkedinUrl: z.string().url('Invalid company LinkedIn URL').optional().or(z.literal('')),
 })
 
 export type LeadUpdateInput = z.infer<typeof leadUpdateSchema>

@@ -37,8 +37,9 @@ export function PricingSection({
           <div className="mb-3.5 font-mono text-[12px] tracking-[0.08em] text-muted-foreground">
             03 — PRICING
           </div>
-          <h2 className="max-w-[520px] text-[42px] font-bold leading-[1.05] tracking-[-0.03em]">
-            Priced per seat. No admin tax.
+          <h2 className="max-w-[560px] text-[42px] font-bold leading-[1.05] tracking-[-0.03em]">
+            <span className="whitespace-nowrap">Priced per seat.</span>{' '}
+            <span className="whitespace-nowrap">No admin tax.</span>
           </h2>
         </div>
         <div className="inline-flex items-center gap-1 rounded-[11px] bg-muted p-1">

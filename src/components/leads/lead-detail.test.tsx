@@ -99,8 +99,11 @@ describe('LeadDetail', () => {
     expect(text).toContain('+1 555 123 4567')
     expect(text).toContain('Qualified')
     expect(text).toContain('Grace Hopper')
-    // Currency-formatted deal value should appear in the panel.
-    expect(text).toMatch(/\$15,000/)
+    // Location fields remain in the read-only panel. Commercial fields
+    // (deal value, status, tier, score) now live in the Deal card on the
+    // lead detail page's right column (see LeadDealCard).
+    expect(text).toContain('UK')
+    expect(text).toContain('London')
     unmount()
   })
 

@@ -55,26 +55,58 @@ setup('authenticate as test user', async ({ page, request, baseURL }) => {
   }
 
   const payload = (await response.json()) as {
-    properties?: { action_link?: string }
+    properties?: { action_link?: string; hashed_token?: string }
     action_link?: string
+    hashed_token?: string
   }
+
+  // Prefer the `hashed_token`: our own `/auth/confirm` route expects a
+  // `token_hash` query param and calls `supabase.auth.verifyOtp(...)`,
+  // which sets the session cookies on OUR domain. Driving that route
+  // directly avoids Supabase's `/auth/v1/verify` redirect (which depends
+  // on the project's redirect allow-list and, when it isn't matched,
+  // silently lands on the site's home page with no session).
+  const hashedToken =
+    payload.properties?.hashed_token ?? payload.hashed_token
   const actionLink = payload.properties?.action_link ?? payload.action_link
-  if (!actionLink) {
+
+  if (hashedToken) {
+    const confirmUrl = new URL('/auth/confirm', baseURL)
+    confirmUrl.searchParams.set('token_hash', hashedToken)
+    confirmUrl.searchParams.set('type', 'magiclink')
+    confirmUrl.searchParams.set('next', '/dashboard')
+    await page.goto(confirmUrl.toString())
+  } else if (actionLink) {
+    await page.goto(actionLink)
+  } else {
     throw new Error(
-      `No action_link in Supabase generate_link response: ${JSON.stringify(payload)}`,
+      `No hashed_token/action_link in generate_link response: ${JSON.stringify(payload)}`,
     )
   }
 
-  // Follow the magic link. The /auth/confirm route handler runs server-
-  // side, sets cookies, and 302s us back to `next` (default '/').
-  await page.goto(actionLink)
-
-  // We should land somewhere inside the dashboard once auth completes.
-  // Onboarding is also acceptable (first-time user).
+  // Land inside the app (dashboard or onboarding), never back on /login.
   await page.waitForURL(/\/(?!login)/, { timeout: 30_000 })
-  await expect(page).not.toHaveURL(/\/login/)
+  await expect(page, 'magic link confirmation bounced back to /login').not.toHaveURL(
+    /\/login/,
+  )
 
-  // Persist the storage state so chromium project can reuse it.
+  // Hard-assert a real session exists. Without this, a misconfigured
+  // redirect can leave us on a public page with NO auth cookie while the
+  // "not on /login" check above still passes — exactly the false-positive
+  // that hid a broken login. A Supabase session cookie is named
+  // `sb-<project-ref>-auth-token` (it may be chunked with a `.0`/`.1`
+  // suffix), so match the prefix.
+  const cookies = await page.context().cookies()
+  const authCookie = cookies.find((c) => /^sb-.*-auth-token/.test(c.name))
+  expect(
+    authCookie,
+    'No Supabase auth cookie after confirming the magic link. The test user '
+      + 'likely does not exist in this Supabase project, or the confirm flow '
+      + 'failed. Cookies seen: '
+      + cookies.map((c) => c.name).join(', '),
+  ).toBeTruthy()
+
+  // Persist the storage state so the chromium project can reuse it.
   mkdirSync(path.dirname(STORAGE_STATE), { recursive: true })
   await page.context().storageState({ path: STORAGE_STATE })
 })

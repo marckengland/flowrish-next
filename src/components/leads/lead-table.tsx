@@ -65,7 +65,16 @@ export function LeadTable({
   const [sortKey, setSortKey] = useState<SortKey>('createdAt')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const query = useLeadsQuery({ filters, page, pageSize })
+  // Only seed the query with SSR data when the view matches what the server
+  // pre-rendered (default filters, first page). For any other filter/page the
+  // seed wouldn't match the query key and would show wrong rows.
+  const isDefaultView =
+    Object.keys(filters).length === 0 && page === 1 && pageSize === 20
+
+  const query = useLeadsQuery(
+    { filters, page, pageSize },
+    isDefaultView ? initialData : undefined,
+  )
   const leadsPage = query.data ?? initialData
 
   const sorted = useMemo(() => {

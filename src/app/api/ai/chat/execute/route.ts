@@ -87,6 +87,26 @@ const enrollInCadenceActionSchema = z.object({
   }),
 })
 
+const createCadenceActionSchema = z.object({
+  type: z.literal('create_cadence'),
+  description: z.string(),
+  params: z.object({
+    name: z.string().min(1),
+    steps: z
+      .array(
+        z.object({
+          actionType: z.enum(['EMAIL', 'CALL', 'LINKEDIN', 'MANUAL_TASK']),
+          delayHours: z.number().int().min(0).optional(),
+          subject: z.string().optional(),
+          body: z.string().optional(),
+          taskTitle: z.string().optional(),
+          taskDescription: z.string().optional(),
+        }),
+      )
+      .min(1, 'A cadence needs at least one step'),
+  }),
+})
+
 const actionSchema = z.discriminatedUnion('type', [
   navigateActionSchema,
   createLeadActionSchema,
@@ -94,6 +114,7 @@ const actionSchema = z.discriminatedUnion('type', [
   updateLeadStatusActionSchema,
   updateLeadTierActionSchema,
   enrollInCadenceActionSchema,
+  createCadenceActionSchema,
 ])
 
 const bodySchema = z.object({ action: actionSchema })
@@ -105,6 +126,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { action } = bodySchema.parse(body)
+
+    // Creating a cadence is more privileged than the lead/task actions,
+    // so require the same permission the manual cadence builder does.
+    if (action.type === 'create_cadence') {
+      requirePermission(session.dbUser, 'cadences:manage')
+    }
 
     const result = await executeChatAction(
       action as ChatAction,

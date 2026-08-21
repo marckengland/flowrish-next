@@ -3,6 +3,7 @@ import {
   sanitizedString,
   optionalSanitizedString,
   nullableSanitizedString,
+  safeFileName,
   safeJsonBody,
   paginationSchema,
   hasPrototypePollution,
@@ -14,9 +15,13 @@ describe('sanitizedString', () => {
     expect(result).toBe('helloworld')
   })
 
-  it('rejects path traversal sequences', () => {
-    expect(() => sanitizedString.parse('../etc/passwd')).toThrow('Path traversal detected')
-    expect(() => sanitizedString.parse('foo/../../bar')).toThrow('Path traversal detected')
+  it('accepts text containing dot sequences (ellipses are legitimate prose)', () => {
+    // These are free-text fields (names, subjects, bodies, notes). `..`
+    // and `...` are normal writing, not path traversal. Traversal is
+    // guarded by safeFileName at the upload boundary instead.
+    expect(sanitizedString.parse('Wait.. then follow up')).toBe('Wait.. then follow up')
+    expect(sanitizedString.parse('Hmm... let me think')).toBe('Hmm... let me think')
+    expect(sanitizedString.parse('../etc/passwd')).toBe('../etc/passwd')
   })
 
   it('rejects strings exceeding 10000 characters', () => {
@@ -46,8 +51,8 @@ describe('optionalSanitizedString', () => {
     expect(result).toBe('testvalue')
   })
 
-  it('rejects path traversal when present', () => {
-    expect(() => optionalSanitizedString.parse('../secret')).toThrow('Path traversal detected')
+  it('accepts text containing dot sequences', () => {
+    expect(optionalSanitizedString.parse('a.. b')).toBe('a.. b')
   })
 })
 
@@ -65,6 +70,35 @@ describe('nullableSanitizedString', () => {
   it('strips null bytes when present', () => {
     const result = nullableSanitizedString.parse('data\0here')
     expect(result).toBe('datahere')
+  })
+})
+
+describe('safeFileName', () => {
+  it('accepts normal filenames', () => {
+    expect(safeFileName.parse('proposal.pdf')).toBe('proposal.pdf')
+    expect(safeFileName.parse('Q3 Report (final).docx')).toBe('Q3 Report (final).docx')
+  })
+
+  it('strips null bytes', () => {
+    expect(safeFileName.parse('re\0port.pdf')).toBe('report.pdf')
+  })
+
+  it('rejects path traversal sequences', () => {
+    expect(() => safeFileName.parse('../etc/passwd')).toThrow('path traversal')
+    expect(() => safeFileName.parse('..')).toThrow('path traversal')
+  })
+
+  it('rejects path separators', () => {
+    expect(() => safeFileName.parse('folder/file.pdf')).toThrow('path separators')
+    expect(() => safeFileName.parse('folder\\file.pdf')).toThrow('path separators')
+  })
+
+  it('rejects empty or whitespace-only names', () => {
+    expect(() => safeFileName.parse('   ')).toThrow('Filename is required')
+  })
+
+  it('rejects filenames over 255 characters', () => {
+    expect(() => safeFileName.parse('a'.repeat(256))).toThrow('Filename too long')
   })
 })
 

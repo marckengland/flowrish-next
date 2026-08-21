@@ -34,8 +34,9 @@ describe('cadenceCreateSchema', () => {
     expect(result.name).toBe('TestCadence')
   })
 
-  it('rejects path traversal in name', () => {
-    expect(() => cadenceCreateSchema.parse({ name: '../secret' })).toThrow()
+  it('accepts dot sequences in name (prose, not a filesystem path)', () => {
+    // Regression guard: a cadence named "Q3.. Outbound" must be allowed.
+    expect(() => cadenceCreateSchema.parse({ name: 'Q3.. Outbound' })).not.toThrow()
   })
 })
 

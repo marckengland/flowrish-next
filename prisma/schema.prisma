@@ -256,11 +256,12 @@ model Lead {
   linkedinUrl     String?
   country         String?
   state           String?
-  companyName     String?
-  companyIndustry String?
-  companyWebsite  String?
-  lastActivityAt  DateTime?
-  deletedAt       DateTime?
+  companyName       String?
+  companyIndustry   String?
+  companyWebsite    String?
+  companyLinkedinUrl String?
+  lastActivityAt    DateTime?
+  deletedAt         DateTime?
 
   stageId        String
   stage          Stage    @relation(fields: [stageId], references: [id])

@@ -15,6 +15,7 @@ import { AppError } from '@/lib/errors'
 import { ClickToCall } from '@/components/leads/click-to-call'
 import { LeadConvert } from '@/components/leads/lead-convert'
 import { LeadDetail } from '@/components/leads/lead-detail'
+import { LeadDealCard } from '@/components/leads/lead-deal-card'
 import { LeadStageTransition } from '@/components/leads/lead-stage-transition'
 import { LeadTabs } from '@/components/leads/lead-tabs'
 import { DuplicateCheck } from '@/components/leads/duplicate-check'
@@ -159,6 +160,7 @@ export default async function LeadDetailPage({
     companyName: lead.companyName,
     companyIndustry: lead.companyIndustry,
     companyWebsite: lead.companyWebsite,
+    companyLinkedinUrl: lead.companyLinkedinUrl,
   }
 
   const initialActivities: ActivityItem[] = activities.map(toActivityItem)
@@ -238,6 +240,15 @@ export default async function LeadDetailPage({
         </div>
 
         <aside className="flex flex-col gap-[18px]">
+          <LeadDealCard
+            leadStatus={lead.leadStatus}
+            tier={lead.tier}
+            stageName={lead.stage?.name}
+            dealValue={lead.dealValue === null ? null : String(lead.dealValue)}
+            currency={lead.currency}
+            score={lead.score}
+          />
+
           <section
             aria-label="Call lead"
             className="flex flex-col gap-3 rounded-lg border bg-card p-[18px]"

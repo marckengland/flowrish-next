@@ -91,6 +91,24 @@ export type ChatAction =
       description: string
       params: { cadenceId: string; leadId: string }
     }
+  | {
+      type: 'create_cadence'
+      description: string
+      params: {
+        name: string
+        steps: Array<{
+          actionType: 'EMAIL' | 'CALL' | 'LINKEDIN' | 'MANUAL_TASK'
+          /** Wait before this step, in hours (0 = immediately). */
+          delayHours?: number
+          /** EMAIL steps: subject + body. */
+          subject?: string
+          body?: string
+          /** CALL / LINKEDIN / MANUAL_TASK steps: task title + description. */
+          taskTitle?: string
+          taskDescription?: string
+        }>
+      }
+    }
 
 /**
  * Backward-compatible alias for the navigate variant. Older callers
@@ -448,7 +466,7 @@ const CHAT_ACTION_HINT = [
   '(Optional: if the user wants you to perform an action in the app,',
   'append a final block in the exact form `[ACTION]{...JSON...}[/ACTION]`.',
   'Available action types: navigate, create_lead, create_task,',
-  'update_lead_status, update_lead_tier, enroll_in_cadence.',
+  'update_lead_status, update_lead_tier, enroll_in_cadence, create_cadence.',
   'Examples of params:',
   '  - navigate: { "path": "/leads" }',
   '  - create_lead: { "firstName": "Ada", "lastName": "Lovelace", "companyName": "Acme" }',
@@ -456,6 +474,12 @@ const CHAT_ACTION_HINT = [
   '  - update_lead_status: { "leadId": "<uuid>", "leadStatus": "Active" }',
   '  - update_lead_tier: { "leadId": "<uuid>", "tier": "Tier 1" }',
   '  - enroll_in_cadence: { "cadenceId": "<uuid>", "leadId": "<uuid>" }',
+  '  - create_cadence: { "name": "SMB Outbound", "steps": [ '
+    + '{ "actionType": "EMAIL", "delayHours": 0, "subject": "Quick question", "body": "Hi {FirstName}…" }, '
+    + '{ "actionType": "CALL", "delayHours": 48, "taskTitle": "Call the prospect" } ] }.'
+    + ' Use create_cadence when the user wants to build an outreach sequence/flow. '
+    + 'actionType is one of EMAIL, CALL, LINKEDIN, MANUAL_TASK; delayHours is the wait '
+    + 'before each step. The cadence is created as a DRAFT for the user to review and activate.',
   'Never propose destructive actions. Always explain in plain text BEFORE the action block.',
   'Omit the block entirely when the user is just asking a question.)',
 ].join('\n')
@@ -659,6 +683,49 @@ function sanitizeChatAction(input: unknown): ChatAction | null {
         description,
         params: { cadenceId, leadId },
       }
+    }
+    case 'create_cadence': {
+      const name = stringOrNull(params.name)
+      if (!name) return null
+      if (!Array.isArray(params.steps) || params.steps.length === 0) return null
+
+      const validActionTypes = ['EMAIL', 'CALL', 'LINKEDIN', 'MANUAL_TASK']
+      const steps: Extract<
+        ChatAction,
+        { type: 'create_cadence' }
+      >['params']['steps'] = []
+
+      for (const raw of params.steps) {
+        if (!raw || typeof raw !== 'object') return null
+        const s = raw as Record<string, unknown>
+        const actionType = s.actionType
+        if (
+          typeof actionType !== 'string'
+          || !validActionTypes.includes(actionType)
+        ) {
+          return null
+        }
+        const delayHours =
+          typeof s.delayHours === 'number'
+            ? Math.max(0, Math.trunc(s.delayHours))
+            : typeof s.delayHours === 'string'
+              ? Math.max(0, Math.trunc(Number(s.delayHours) || 0))
+              : undefined
+        steps.push({
+          actionType: actionType as
+            | 'EMAIL'
+            | 'CALL'
+            | 'LINKEDIN'
+            | 'MANUAL_TASK',
+          delayHours,
+          subject: stringOrUndef(s.subject),
+          body: stringOrUndef(s.body),
+          taskTitle: stringOrUndef(s.taskTitle),
+          taskDescription: stringOrUndef(s.taskDescription),
+        })
+      }
+
+      return { type: 'create_cadence', description, params: { name, steps } }
     }
     default:
       return null
@@ -1164,6 +1231,47 @@ export async function executeChatAction(
             enrollmentId: enrollment.id,
             cadenceId: action.params.cadenceId,
             path: `/cadences/${action.params.cadenceId}`,
+          },
+        }
+      }
+
+      case 'create_cadence': {
+        // Reuse the same services the manual builder uses so tenant
+        // scoping, validation, and contiguous step ordering stay
+        // identical. The cadence is created as DRAFT (createCadence
+        // always starts DRAFT) so the user reviews/activates it.
+        const { createCadence, addStep } = await import(
+          '@/server/services/cadences'
+        )
+        const cadence = (await createCadence(
+          { name: action.params.name },
+          userId,
+          orgId,
+        )) as { id: string }
+
+        for (let i = 0; i < action.params.steps.length; i++) {
+          const step = action.params.steps[i]
+          await addStep(
+            cadence.id,
+            {
+              actionType: step.actionType,
+              stepOrder: i + 1, // service recomputes; satisfies the schema
+              delayHours: step.delayHours ?? 0,
+              subject: step.subject ?? null,
+              body: step.body ?? null,
+              taskTitle: step.taskTitle ?? null,
+              taskDescription: step.taskDescription ?? null,
+            },
+            orgId,
+          )
+        }
+
+        return {
+          success: true,
+          message: `Cadence "${action.params.name}" created as a draft with ${action.params.steps.length} step${action.params.steps.length === 1 ? '' : 's'}. Review and activate it when ready.`,
+          data: {
+            cadenceId: cadence.id,
+            path: `/cadences/${cadence.id}`,
           },
         }
       }

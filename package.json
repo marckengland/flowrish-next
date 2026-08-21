@@ -13,7 +13,10 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:install": "playwright install --with-deps chromium",
-    "setup:storage": "tsx scripts/setup-supabase-storage.ts"
+    "test:e2e:prod": "node --env-file=.env node_modules/.bin/playwright test",
+    "test:e2e:prod:write": "E2E_ALLOW_WRITES=1 node --env-file=.env node_modules/.bin/playwright test e2e/forms.spec.ts",
+    "setup:storage": "tsx scripts/setup-supabase-storage.ts",
+    "discord:feedback": "tsx scripts/discord-feedback.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.4.1",
@@ -35,6 +38,7 @@
     "@upstash/redis": "1.38.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
+    "discord.js": "^14.27.0",
     "inngest": "4.4.0",
     "lucide-react": "1.14.0",
     "next": "15.5.18",

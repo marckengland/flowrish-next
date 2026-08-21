@@ -9,8 +9,10 @@ import {
   useState,
   useTransition,
 } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
+  ChevronLeft,
   ClipboardList,
   GripVertical,
   Handshake,
@@ -479,7 +481,7 @@ export function CadenceCanvas({
 
   return (
     <section aria-label="Cadence flow" className="flex flex-col gap-3">
-      <header className="flex items-center justify-between">
+      <header className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Flow</h2>
           <p className="text-sm text-muted-foreground">
@@ -488,6 +490,16 @@ export function CadenceCanvas({
               : `${steps.length} step${steps.length === 1 ? '' : 's'} · drag to reorder, click a step to edit.`}
           </p>
         </div>
+        {/* The flowgram canvas captures wheel/pan, which can put the
+            page-level "Back to cadences" link out of reach. Keep an
+            always-visible exit inside the Flow view itself. */}
+        <Link
+          href="/cadences"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+        >
+          <ChevronLeft className="size-4" aria-hidden="true" />
+          <span>Back to cadences</span>
+        </Link>
       </header>
 
       {error ? (

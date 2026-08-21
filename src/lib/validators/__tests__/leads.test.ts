@@ -78,8 +78,12 @@ describe('leadCreateSchema', () => {
     expect(result.firstName).toBe('John')
   })
 
-  it('rejects path traversal in firstName', () => {
-    expect(() => leadCreateSchema.parse({ ...validLead, firstName: '../admin' })).toThrow()
+  it('accepts dot sequences in firstName (prose, not a filesystem path)', () => {
+    // Regression guard for the old over-strict `..` rejection that broke
+    // legitimate input. Name fields are not paths.
+    expect(() =>
+      leadCreateSchema.parse({ ...validLead, firstName: 'J.. Doe' }),
+    ).not.toThrow()
   })
 
   it('rejects invalid leadStatus', () => {

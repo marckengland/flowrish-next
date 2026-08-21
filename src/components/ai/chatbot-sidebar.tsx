@@ -53,6 +53,7 @@ type ChatActionType =
   | 'update_lead_status'
   | 'update_lead_tier'
   | 'enroll_in_cadence'
+  | 'create_cadence'
 
 interface NavigateAction {
   type: 'navigate'
@@ -107,6 +108,22 @@ interface EnrollInCadenceAction {
   params: { cadenceId: string; leadId: string }
 }
 
+interface CreateCadenceAction {
+  type: 'create_cadence'
+  description: string
+  params: {
+    name: string
+    steps: Array<{
+      actionType: 'EMAIL' | 'CALL' | 'LINKEDIN' | 'MANUAL_TASK'
+      delayHours?: number
+      subject?: string
+      body?: string
+      taskTitle?: string
+      taskDescription?: string
+    }>
+  }
+}
+
 type ChatAction =
   | NavigateAction
   | CreateLeadAction
@@ -114,6 +131,7 @@ type ChatAction =
   | UpdateLeadStatusAction
   | UpdateLeadTierAction
   | EnrollInCadenceAction
+  | CreateCadenceAction
 
 interface ChatTurn {
   id: string
@@ -158,6 +176,7 @@ const ACTION_LABELS: Record<ChatActionType, string> = {
   update_lead_status: 'Update lead status',
   update_lead_tier: 'Update lead tier',
   enroll_in_cadence: 'Enroll in cadence',
+  create_cadence: 'Create cadence',
 }
 
 export function ChatbotSidebar(): React.JSX.Element | null {
@@ -602,6 +621,12 @@ function sanitizeAction(action: ChatAction | null): ChatAction | null {
       return action.params?.leadId && action.params?.tier ? action : null
     case 'enroll_in_cadence':
       return action.params?.cadenceId && action.params?.leadId ? action : null
+    case 'create_cadence':
+      return action.params?.name
+        && Array.isArray(action.params?.steps)
+        && action.params.steps.length > 0
+        ? action
+        : null
     default:
       return null
   }

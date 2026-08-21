@@ -43,6 +43,7 @@ export interface LeadFormValues {
   companyName?: string | null
   companyIndustry?: string | null
   companyWebsite?: string | null
+  companyLinkedinUrl?: string | null
 }
 
 export interface LeadFormProps {
@@ -341,6 +342,14 @@ export function LeadForm({
           type="url"
           defaultValue={lead?.companyWebsite ?? ''}
           placeholder="https://example.com"
+        />
+        <Field
+          id="lead-company-linkedin"
+          name="companyLinkedinUrl"
+          label="Company LinkedIn URL"
+          type="url"
+          defaultValue={lead?.companyLinkedinUrl ?? ''}
+          placeholder="https://linkedin.com/company/..."
         />
       </div>
 

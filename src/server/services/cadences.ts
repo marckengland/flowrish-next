@@ -1560,6 +1560,223 @@ export async function uploadCadenceStepAttachment(
   }
 }
 
+export interface AttachmentMeta {
+  fileName: string
+  mimeType: string
+  size: number
+}
+
+export interface AttachmentUploadUrl {
+  attachmentId: string
+  /** Storage bucket the client must upload to. */
+  bucket: string
+  /** Object path within the bucket, passed to `uploadToSignedUrl`. */
+  path: string
+  /** Signed upload token, passed to `uploadToSignedUrl`. */
+  token: string
+}
+
+/**
+ * Validates file metadata + step state and returns a resolved tenant db
+ * handle. Shared by the direct-upload signed-URL and finalize paths.
+ */
+async function assertStepAcceptsAttachment(
+  cadenceId: string,
+  stepId: string,
+  meta: AttachmentMeta,
+  orgId: string,
+): Promise<ReturnType<typeof createTenantPrisma>> {
+  if (!cadenceId) throw new AppError('VALIDATION_ERROR', 'Cadence ID is required', 400)
+  if (!stepId) throw new AppError('VALIDATION_ERROR', 'Step ID is required', 400)
+  if (!orgId) throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
+
+  const { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES } = await import(
+    '@/server/services/files'
+  )
+
+  if (meta.size <= 0) throw new AppError('FILE_EMPTY', 'File is empty', 400)
+  if (meta.size > MAX_FILE_SIZE_BYTES) {
+    throw new AppError(
+      'FILE_TOO_LARGE',
+      `File exceeds the maximum size of 25 MB (got ${meta.size} bytes)`,
+      400,
+    )
+  }
+  if (!ALLOWED_MIME_TYPES.has(meta.mimeType)) {
+    throw new AppError(
+      'UNSUPPORTED_FILE_TYPE',
+      `MIME type "${meta.mimeType}" is not allowed`,
+      400,
+    )
+  }
+  if (!meta.fileName || meta.fileName.trim().length === 0) {
+    throw new AppError('INVALID_FILE_NAME', 'File name is required', 400)
+  }
+
+  const db = createTenantPrisma(orgId)
+  const cadence = await db.cadence.findFirst({ where: { id: cadenceId } })
+  if (!cadence) throw new AppError('NOT_FOUND', 'Cadence not found', 404)
+  if (cadence.status === 'ARCHIVED') {
+    throw new AppError(
+      'INVALID_STATE',
+      'Cannot modify steps on an archived cadence',
+      400,
+    )
+  }
+  const step = await db.cadenceStep.findFirst({
+    where: { id: stepId, cadenceId },
+    select: { id: true },
+  })
+  if (!step) throw new AppError('NOT_FOUND', 'Step not found', 404)
+
+  return db
+}
+
+/**
+ * Deterministic storage path for a step attachment. Both the signed-URL
+ * and finalize steps compute it the same way from the pre-allocated id +
+ * file name, so the client can never point the DB row at a different blob.
+ */
+function attachmentStoragePath(
+  orgId: string,
+  stepId: string,
+  attachmentId: string,
+  fileName: string,
+): string {
+  return `cadences/${orgId}/${stepId}/${attachmentId}-${sanitizeAttachmentFileName(fileName)}`
+}
+
+/**
+ * Issues a short-lived signed upload URL so the browser can send the file
+ * bytes straight to Supabase Storage, bypassing the serverless request-body
+ * cap (which rejected multi-MB uploads with HTTP 413 even though the app
+ * allows up to 25 MB). Pair with `finalizeCadenceStepAttachment`.
+ *
+ * Validates: Requirements 6.10, 13.4
+ */
+export async function createCadenceStepAttachmentUploadUrl(
+  cadenceId: string,
+  stepId: string,
+  meta: AttachmentMeta,
+  orgId: string,
+): Promise<AttachmentUploadUrl> {
+  const db = await assertStepAcceptsAttachment(cadenceId, stepId, meta, orgId)
+  void db
+
+  const { FILE_ATTACHMENTS_BUCKET } = await import('@/server/services/files')
+  const { createSupabaseAdmin } = await import('@/lib/supabase/admin')
+
+  const attachmentId = crypto.randomUUID()
+  const storagePath = attachmentStoragePath(orgId, stepId, attachmentId, meta.fileName)
+
+  const supabase = createSupabaseAdmin()
+  const { data, error } = await supabase.storage
+    .from(FILE_ATTACHMENTS_BUCKET)
+    .createSignedUploadUrl(storagePath)
+
+  if (error || !data) {
+    const friendly = isBucketMissing(error?.message ?? '')
+      ? `Storage bucket "${FILE_ATTACHMENTS_BUCKET}" not found. Run "npm run setup:storage" to create it (one-time setup), or create it manually in Supabase Dashboard → Storage → New bucket.`
+      : `Failed to prepare upload: ${error?.message ?? 'unknown error'}`
+    throw new AppError('STORAGE_UPLOAD_FAILED', friendly, 500)
+  }
+
+  return {
+    attachmentId,
+    bucket: FILE_ATTACHMENTS_BUCKET,
+    path: data.path,
+    token: data.token,
+  }
+}
+
+/**
+ * Records the DB row for a file the client already uploaded via a signed
+ * URL. Reconstructs the storage path deterministically and verifies the
+ * object exists before inserting, so a row can't reference a missing blob.
+ *
+ * Validates: Requirements 6.10, 13.4
+ */
+export async function finalizeCadenceStepAttachment(
+  cadenceId: string,
+  stepId: string,
+  input: AttachmentMeta & { attachmentId: string },
+  userId: string,
+  orgId: string,
+): Promise<CadenceStepAttachmentSummary> {
+  if (!userId) throw new AppError('VALIDATION_ERROR', 'User ID is required', 400)
+  if (!input.attachmentId) {
+    throw new AppError('VALIDATION_ERROR', 'Attachment ID is required', 400)
+  }
+
+  const db = await assertStepAcceptsAttachment(cadenceId, stepId, input, orgId)
+
+  const { FILE_ATTACHMENTS_BUCKET } = await import('@/server/services/files')
+  const { createSupabaseAdmin } = await import('@/lib/supabase/admin')
+
+  const safeName = sanitizeAttachmentFileName(input.fileName)
+  const storagePath = attachmentStoragePath(
+    orgId,
+    stepId,
+    input.attachmentId,
+    input.fileName,
+  )
+
+  const supabase = createSupabaseAdmin()
+
+  // Confirm the client actually completed the upload to the expected path.
+  const folder = `cadences/${orgId}/${stepId}`
+  const { data: listed, error: listError } = await supabase.storage
+    .from(FILE_ATTACHMENTS_BUCKET)
+    .list(folder, { search: `${input.attachmentId}-` })
+  if (listError) {
+    throw new AppError(
+      'STORAGE_UPLOAD_FAILED',
+      `Failed to verify upload: ${listError.message}`,
+      500,
+    )
+  }
+  const uploaded = (listed ?? []).some((o) => o.name === `${input.attachmentId}-${safeName}`)
+  if (!uploaded) {
+    throw new AppError(
+      'UPLOAD_NOT_FOUND',
+      'Upload did not complete. Please try attaching the file again.',
+      400,
+    )
+  }
+
+  let row
+  try {
+    row = await db.cadenceStepAttachment.create({
+      data: tenantData({
+        id: input.attachmentId,
+        stepId,
+        fileName: input.fileName,
+        fileSize: input.size,
+        mimeType: input.mimeType,
+        storagePath,
+        uploadedById: userId,
+      }),
+    })
+  } catch (error) {
+    // Roll back the storage upload if the DB write fails.
+    await supabase.storage
+      .from(FILE_ATTACHMENTS_BUCKET)
+      .remove([storagePath])
+      .catch(() => {})
+    throw error
+  }
+
+  return {
+    id: row.id,
+    stepId: row.stepId,
+    fileName: row.fileName,
+    fileSize: row.fileSize,
+    mimeType: row.mimeType,
+    uploadedById: row.uploadedById,
+    createdAt: row.createdAt.toISOString(),
+  }
+}
+
 /**
  * Removes a cadence step attachment from both Supabase Storage and the
  * database. Storage cleanup is best-effort — if the DB row is gone but

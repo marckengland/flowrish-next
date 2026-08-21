@@ -23,13 +23,18 @@ export function hasPrototypePollution(obj: unknown): boolean {
 }
 
 /**
- * Sanitized string schema that strips null bytes and detects path traversal sequences.
- * Use this for all user-provided string inputs.
+ * Sanitized string schema for arbitrary user-provided text.
+ *
+ * Strips null bytes and caps length. It deliberately does NOT reject the
+ * `..` sequence: these validators back free-text fields (names, subjects,
+ * email bodies, notes, descriptions) where `..`/`...` (ellipses) are
+ * completely legitimate. Path-traversal protection only makes sense for
+ * values used as filesystem paths — see {@link safeFileName}, which is
+ * applied at the file-upload boundary instead.
  */
 export const sanitizedString = z
   .string()
   .transform(s => s.replace(/\0/g, '')) // Strip null bytes
-  .refine(s => !s.includes('..'), { message: 'Path traversal detected' })
   .refine(s => s.length <= 10000, { message: 'String too long' })
 
 /**
@@ -39,7 +44,6 @@ export const optionalSanitizedString = z
   .string()
   .optional()
   .transform(s => (s ? s.replace(/\0/g, '') : s))
-  .refine(s => s === undefined || !s.includes('..'), { message: 'Path traversal detected' })
   .refine(s => s === undefined || s.length <= 10000, { message: 'String too long' })
 
 /**
@@ -53,11 +57,26 @@ export const nullableSanitizedString = z
     if (s === null || s === undefined) return s
     return s.replace(/\0/g, '')
   })
-  .refine(s => s === null || s === undefined || !s.includes('..'), {
-    message: 'Path traversal detected',
-  })
   .refine(s => s === null || s === undefined || s.length <= 10000, {
     message: 'String too long',
+  })
+
+/**
+ * Filename validator for uploaded files. This is where path-traversal
+ * protection actually belongs — the value is used to build a storage
+ * path (e.g. `cadences/{orgId}/{stepId}/{id}-{filename}`), so it must not
+ * contain traversal sequences or path separators.
+ *
+ * Rejects: null bytes, `..` sequences, and `/` or `\` separators.
+ */
+export const safeFileName = z
+  .string()
+  .transform(s => s.replace(/\0/g, ''))
+  .refine(s => s.trim().length > 0, { message: 'Filename is required' })
+  .refine(s => s.length <= 255, { message: 'Filename too long' })
+  .refine(s => !s.includes('..'), { message: 'Invalid filename: path traversal detected' })
+  .refine(s => !s.includes('/') && !s.includes('\\'), {
+    message: 'Invalid filename: path separators are not allowed',
   })
 
 /**

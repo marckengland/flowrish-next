@@ -52,3 +52,6 @@ next-env.d.ts
 /playwright-report/
 /playwright/.cache/
 /e2e/.auth/
+
+# discord feedback tool — pulled transcripts + downloaded screenshots
+/.kiro-discord-feedback/

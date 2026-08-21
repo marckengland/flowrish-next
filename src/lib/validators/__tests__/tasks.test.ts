@@ -76,8 +76,11 @@ describe('taskCreateSchema', () => {
     expect(result.title).toBe('Followup')
   })
 
-  it('rejects path traversal in title', () => {
-    expect(() => taskCreateSchema.parse({ ...validTask, title: '../admin' })).toThrow()
+  it('accepts dot sequences in title (prose, not a filesystem path)', () => {
+    // Regression guard: ellipses like "Follow up..." are valid task titles.
+    expect(() =>
+      taskCreateSchema.parse({ ...validTask, title: 'Follow up.. next week' }),
+    ).not.toThrow()
   })
 })
 

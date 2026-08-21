@@ -14,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
+import { Input, inputBaseClass } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { createCadence } from '@/server/actions/cadences'
 import type {
@@ -74,6 +74,7 @@ export function CadenceList({
   initialData,
   canManage,
 }: CadenceListProps): React.JSX.Element {
+  const router = useRouter()
   const [filter, setFilter] = useState<StatusFilter>('ALL')
   const [creating, setCreating] = useState(false)
   const [search, setSearch] = useState('')
@@ -162,19 +163,32 @@ export function CadenceList({
         <label htmlFor="cadence-search" className="sr-only">
           Search cadences
         </label>
-        <div className="relative max-w-sm flex-1">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            id="cadence-search"
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search cadences…"
-            className="pl-9"
-          />
+        <div className="flex flex-1 flex-wrap items-center gap-2">
+          <div className="relative max-w-sm flex-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              id="cadence-search"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search cadences…"
+              className="pl-9"
+            />
+          </div>
+          <select
+            aria-label="Filter by status"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as StatusFilter)}
+            className={cn(inputBaseClass, 'h-9 w-auto min-w-[150px]')}
+          >
+            <option value="ALL">All statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="DRAFT">Draft</option>
+            <option value="ARCHIVED">Archived</option>
+          </select>
         </div>
         <div className="flex items-center gap-2">
           {filter !== 'ALL' && (
@@ -281,13 +295,18 @@ export function CadenceList({
               {filtered.map((cadence) => (
                 <tr
                   key={cadence.id}
-                  className="relative cursor-pointer transition-colors hover:bg-background focus-within:bg-background"
+                  onClick={() => router.push(`/cadences/${cadence.id}`)}
+                  className="cursor-pointer transition-colors hover:bg-background focus-within:bg-background"
                 >
                   <td className="px-4 py-3">
                     <Link
                       href={`/cadences/${cadence.id}`}
                       aria-label={`Open cadence ${cadence.name}`}
-                      className="font-medium text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
+                      // Stop the row handler from double-firing; the row's
+                      // onClick already navigates. The real <Link> stays for
+                      // keyboard, right-click, and open-in-new-tab.
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-medium text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
                     >
                       {cadence.name}
                     </Link>

@@ -26,11 +26,48 @@ export interface LeadFilters {
 }
 
 /**
+ * Finds or creates a Company row for the given free-text company fields and
+ * returns its id, so a lead can be linked via `Lead.companyId`.
+ *
+ * Without this, company data entered on the lead form is only stored as
+ * scalar text on the Lead row and never shows up on the Companies page.
+ * Matches by name within the tenant (case-insensitive); creates the company
+ * when none exists yet, backfilling industry/website.
+ */
+async function resolveCompanyId(
+  db: ReturnType<typeof createTenantPrisma>,
+  data: {
+    companyName?: string | null
+    companyIndustry?: string | null
+    companyWebsite?: string | null
+  },
+): Promise<string | undefined> {
+  const name = data.companyName?.trim()
+  if (!name) return undefined
+
+  const existing = await db.company.findFirst({
+    where: { name: { equals: name, mode: 'insensitive' } },
+  })
+  if (existing) return existing.id
+
+  const created = await db.company.create({
+    data: tenantData({
+      name,
+      industry: data.companyIndustry?.trim() || null,
+      website: data.companyWebsite?.trim() || null,
+    }),
+  })
+  return created.id
+}
+
+/**
  * Creates a new lead within an organization.
  *
  * - Validates input with Zod (requires firstName, lastName, stageId)
  * - Persists with auto-injected organizationId via tenant middleware
  * - Ensures a default pipeline exists for the organization
+ * - Links (or creates) a Company when company fields are provided so it
+ *   surfaces on the Companies page
  * - For now, skips assignment rule trigger (task 11.2)
  *
  * Validates: Requirements 4.1, 4.6
@@ -57,6 +94,9 @@ export async function createLead(
     throw new AppError('STAGE_NOT_FOUND', 'The specified stage does not exist', 404)
   }
 
+  // Link to (or create) a Company so it appears on the Companies page.
+  const companyId = await resolveCompanyId(db, validated)
+
   // Create the lead
   // Note: organizationId is auto-injected by the tenant middleware at runtime
   const lead = await db.lead.create({
@@ -79,6 +119,8 @@ export async function createLead(
       companyName: validated.companyName,
       companyIndustry: validated.companyIndustry,
       companyWebsite: validated.companyWebsite || null,
+      companyLinkedinUrl: validated.companyLinkedinUrl || null,
+      companyId: companyId ?? null,
       stageId: validated.stageId,
     }),
   })
@@ -148,12 +190,26 @@ export async function updateLead(
   for (const [key, value] of Object.entries(validated)) {
     if (value !== undefined) {
       // Convert empty strings to null for optional URL/email fields
-      if (value === '' && ['email', 'altEmail', 'linkedinUrl', 'companyWebsite'].includes(key)) {
+      if (
+        value === '' &&
+        ['email', 'altEmail', 'linkedinUrl', 'companyWebsite', 'companyLinkedinUrl'].includes(key)
+      ) {
         updateData[key] = null
       } else {
         updateData[key] = value
       }
     }
+  }
+
+  // Keep the Company link in sync when the company name is edited so the
+  // lead continues to surface on the Companies page.
+  if (validated.companyName !== undefined) {
+    updateData.companyId =
+      (await resolveCompanyId(db, {
+        companyName: validated.companyName,
+        companyIndustry: validated.companyIndustry,
+        companyWebsite: validated.companyWebsite,
+      })) ?? null
   }
 
   const lead = await db.lead.update({
@@ -387,6 +443,18 @@ export async function getLeads(
   }
   if (filters.tier) {
     where.tier = filters.tier
+  }
+  if (filters.search) {
+    const term = filters.search.trim()
+    if (term) {
+      // Case-insensitive match across the fields the list surfaces.
+      where.OR = [
+        { firstName: { contains: term, mode: 'insensitive' } },
+        { lastName: { contains: term, mode: 'insensitive' } },
+        { email: { contains: term, mode: 'insensitive' } },
+        { companyName: { contains: term, mode: 'insensitive' } },
+      ]
+    }
   }
 
   const [leads, total] = await Promise.all([

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Mail, Phone, Trash2 } from 'lucide-react'
+import { Loader2, Trash2 } from 'lucide-react'
 
 import { useContactsQuery, useDeleteContactMutation, type ContactListItem } from '@/hooks/use-contacts'
 import { Button } from '@/components/ui/button'
@@ -30,12 +30,12 @@ export interface ContactTableProps {
 }
 
 /**
- * Card-grid list for the contacts page.
+ * Table list for the contacts page, matching the Leads table layout.
  *
  * - Fetches data via TanStack Query (`useContactsQuery`)
  * - Supports search filtering
- * - Each card links to contact detail; a stretched overlay link keeps
- *   the whole card clickable while the delete control stays reachable.
+ * - Each row links to contact detail via a stretched cell link; the delete
+ *   control sits above the overlay so it stays clickable.
  *
  * Validates: Requirement 19.1
  */
@@ -93,72 +93,76 @@ export function ContactTable({
           {currentSearch ? 'No contacts match your search.' : 'No contacts yet.'}
         </div>
       ) : (
-        <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
-          {rows.map((contact) => {
-            const fullName = `${contact.firstName} ${contact.lastName}`.trim()
-            const roleCompany = [contact.jobTitle, contact.company?.name]
-              .filter(Boolean)
-              .join(' · ')
-            return (
-              <div
-                key={contact.id}
-                className="group relative rounded-lg border bg-card p-4 transition-colors hover:bg-background"
-              >
-                <Link
-                  href={`/contacts/${contact.id}`}
-                  aria-label={`Open ${fullName}`}
-                  className="absolute inset-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-
-                <div className="mb-3.5 flex items-center gap-3">
-                  <span
-                    aria-hidden="true"
-                    className="flex size-[42px] shrink-0 items-center justify-center rounded-full bg-brand-subtle text-sm font-semibold text-brand-emphasis"
+        <div className="overflow-x-auto rounded-lg border bg-card">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead className="border-b bg-muted/40 text-left">
+              <tr>
+                <th scope="col" className="eyebrow px-4 py-3">
+                  Name
+                </th>
+                <th scope="col" className="eyebrow px-4 py-3">
+                  Role
+                </th>
+                <th scope="col" className="eyebrow px-4 py-3">
+                  Company
+                </th>
+                <th scope="col" className="eyebrow px-4 py-3">
+                  Email
+                </th>
+                <th scope="col" className="eyebrow px-4 py-3">
+                  Phone
+                </th>
+                <th scope="col" className="eyebrow px-4 py-3 text-right">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-row-divider">
+              {rows.map((contact) => {
+                const fullName = `${contact.firstName} ${contact.lastName}`.trim()
+                return (
+                  <tr
+                    key={contact.id}
+                    className="relative cursor-pointer transition-colors hover:bg-background focus-within:bg-background"
                   >
-                    {initials(contact.firstName, contact.lastName)}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-foreground">
-                      {fullName}
-                    </div>
-                    {roleCompany ? (
-                      <div className="truncate text-xs text-muted-foreground">
-                        {roleCompany}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1.5 text-[12.5px] text-muted-foreground">
-                  {contact.email ? (
-                    <div className="flex items-center gap-2">
-                      <Mail className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                      <span className="truncate">{contact.email}</span>
-                    </div>
-                  ) : null}
-                  {contact.phone ? (
-                    <div className="flex items-center gap-2">
-                      <Phone className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                      <span className="truncate">{contact.phone}</span>
-                    </div>
-                  ) : null}
-                </div>
-
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() =>
-                    handleDelete(contact.id, fullName)
-                  }
-                  disabled={deleteMutation.isPending}
-                  aria-label={`Delete ${fullName}`}
-                  className="absolute right-2 top-2 z-10 text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
-                >
-                  <Trash2 className="size-4" aria-hidden="true" />
-                </Button>
-              </div>
-            )
-          })}
+                    <td className="px-4 py-3 font-semibold">
+                      <Link
+                        href={`/contacts/${contact.id}`}
+                        aria-label={`Open ${fullName}`}
+                        className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
+                      >
+                        {fullName}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {contact.jobTitle ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {contact.company?.name ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {contact.email ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {contact.phone ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleDelete(contact.id, fullName)}
+                        disabled={deleteMutation.isPending}
+                        aria-label={`Delete ${fullName}`}
+                        className="relative z-10 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="size-4" aria-hidden="true" />
+                      </Button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -174,11 +178,4 @@ export function ContactTable({
   )
 }
 
-/**
- * Two-letter initials from a contact's name, used for the avatar chip.
- */
-function initials(firstName: string, lastName: string): string {
-  const a = firstName.trim().charAt(0)
-  const b = lastName.trim().charAt(0)
-  return `${a}${b}`.toUpperCase() || '?'
-}
+

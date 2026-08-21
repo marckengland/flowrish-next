@@ -1,13 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import fc from 'fast-check'
-import { sanitizedString, safeJsonBody, hasPrototypePollution } from '@/lib/validators/common'
+import {
+  sanitizedString,
+  safeFileName,
+  safeJsonBody,
+  hasPrototypePollution,
+} from '@/lib/validators/common'
 
 /**
  * Property-based tests for input validation schemas.
  * **Validates: Requirements 21.4, 21.5, 21.6**
  */
 describe('Input Validation Schemas - Property Tests', () => {
-  describe('Property: Sanitized strings never contain null bytes or path traversal sequences', () => {
+  describe('Property: Sanitized strings strip null bytes and allow ordinary prose', () => {
     /**
      * **Validates: Requirements 21.4, 21.5**
      */
@@ -24,24 +29,38 @@ describe('Input Validation Schemas - Property Tests', () => {
               // If parsing succeeds, the output must not contain null bytes
               expect(result.data).not.toContain('\0')
             }
-            // If parsing fails, it's due to path traversal detection (which is also valid)
           }
         )
       )
     })
 
-    it('rejects strings containing path traversal sequences (..)', () => {
+    it('accepts free text containing dot sequences (ellipses / "..")', () => {
+      // Regression guard: these are prose fields, not paths. Text with
+      // ".."/"..." must be accepted (only length + null-byte rules apply).
       fc.assert(
         fc.property(
-          fc.string().map(s => s.slice(0, 100)),
-          fc.string().map(s => s.slice(0, 100)),
+          fc.string().map(s => s.slice(0, 100).replace(/\0/g, '')),
+          fc.string().map(s => s.slice(0, 100).replace(/\0/g, '')),
           (prefix, suffix) => {
-            // Construct a string with path traversal
-            const malicious = prefix + '..' + suffix
-            const result = sanitizedString.safeParse(malicious)
+            const text = `${prefix}..${suffix}`
+            const result = sanitizedString.safeParse(text)
+            expect(result.success).toBe(true)
+            if (result.success) expect(result.data).toBe(text)
+          }
+        )
+      )
+    })
 
-            // Must always be rejected
-            expect(result.success).toBe(false)
+    it('safeFileName always rejects traversal sequences and separators', () => {
+      // Path-traversal protection lives here (the upload boundary), not in
+      // the general text validators.
+      fc.assert(
+        fc.property(
+          fc.string().map(s => s.slice(0, 50).replace(/\0/g, '')),
+          fc.string().map(s => s.slice(0, 50).replace(/\0/g, '')),
+          (prefix, suffix) => {
+            expect(safeFileName.safeParse(`${prefix}..${suffix}`).success).toBe(false)
+            expect(safeFileName.safeParse(`${prefix}/${suffix}`).success).toBe(false)
           }
         )
       )

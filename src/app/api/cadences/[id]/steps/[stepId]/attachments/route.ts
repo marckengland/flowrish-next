@@ -7,6 +7,7 @@ import {
   listCadenceStepAttachments,
   uploadCadenceStepAttachment,
 } from '@/server/services/cadences'
+import { safeFileName } from '@/lib/validators/common'
 import { errorResponse, AppError } from '@/lib/errors'
 
 const paramsSchema = z.object({
@@ -68,6 +69,10 @@ export async function POST(
       )
     }
 
+    // Validate the filename before it's used to build a storage path.
+    // This is the real path-traversal boundary (see safeFileName).
+    const fileName = safeFileName.parse(file.name)
+
     const buffer = Buffer.from(await file.arrayBuffer())
 
     const attachment = await uploadCadenceStepAttachment(
@@ -75,7 +80,7 @@ export async function POST(
       stepId,
       {
         data: buffer,
-        fileName: file.name,
+        fileName,
         mimeType: file.type || 'application/octet-stream',
         size: file.size,
       },

@@ -19,6 +19,7 @@ import { HelpTooltip } from '@/components/ui/help-tooltip'
 import { inputBaseClass } from '@/components/ui/input'
 import { RichTextEditor } from '@/components/email/rich-text-editor'
 import { addStep, deleteStep, updateStep } from '@/server/actions/cadences'
+import { createSupabaseBrowser } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import type { CadenceStep, StepActionType } from '@/hooks/use-cadences'
 
@@ -202,6 +203,80 @@ export function StepEditor({
     }
   }, [cadenceId, step?.id])
 
+  /**
+   * Uploads one file straight to Supabase Storage using a signed URL, then
+   * records the DB row. The bytes never pass through the serverless
+   * function, so large files no longer hit the request-body cap (HTTP 413).
+   */
+  async function uploadOneViaSignedUrl(
+    targetStepId: string,
+    file: File,
+  ): Promise<{ data?: StepAttachment; error?: string }> {
+    const meta = {
+      fileName: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      size: file.size,
+    }
+
+    // 1. Ask the server for a signed upload URL (tiny JSON body).
+    const signedRes = await fetch(
+      `/api/cadences/${cadenceId}/steps/${targetStepId}/attachments/signed-url`,
+      {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(meta),
+      },
+    )
+    if (!signedRes.ok) {
+      const body = (await signedRes.json().catch(() => ({}))) as {
+        error?: { message?: string }
+      }
+      return {
+        error:
+          body.error?.message
+          ?? `Failed to upload ${file.name} (${signedRes.status})`,
+      }
+    }
+    const { data: signed } = (await signedRes.json()) as {
+      data: { attachmentId: string; bucket: string; path: string; token: string }
+    }
+
+    // 2. Send the bytes directly to Storage.
+    const supabase = createSupabaseBrowser()
+    const { error: uploadError } = await supabase.storage
+      .from(signed.bucket)
+      .uploadToSignedUrl(signed.path, signed.token, file, {
+        contentType: meta.mimeType,
+      })
+    if (uploadError) {
+      return { error: `Failed to upload ${file.name}: ${uploadError.message}` }
+    }
+
+    // 3. Record the DB row (tiny JSON body).
+    const finalizeRes = await fetch(
+      `/api/cadences/${cadenceId}/steps/${targetStepId}/attachments/finalize`,
+      {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attachmentId: signed.attachmentId, ...meta }),
+      },
+    )
+    if (!finalizeRes.ok) {
+      const body = (await finalizeRes.json().catch(() => ({}))) as {
+        error?: { message?: string }
+      }
+      return {
+        error:
+          body.error?.message
+          ?? `Failed to save ${file.name} (${finalizeRes.status})`,
+      }
+    }
+    const body = (await finalizeRes.json()) as { data: StepAttachment }
+    return { data: body.data }
+  }
+
   async function uploadAttachmentFiles(
     files: readonly File[],
   ): Promise<void> {
@@ -215,24 +290,15 @@ export function StepEditor({
     setUploading(true)
     try {
       for (const file of files) {
-        const formData = new FormData()
-        formData.append('file', file, file.name)
-        const res = await fetch(
-          `/api/cadences/${cadenceId}/steps/${step.id}/attachments`,
-          { method: 'POST', credentials: 'same-origin', body: formData },
-        )
-        if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as {
-            error?: { message?: string }
-          }
-          setError(
-            body.error?.message
-              ?? `Failed to upload ${file.name} (${res.status})`,
-          )
+        const result = await uploadOneViaSignedUrl(step.id, file)
+        if (result.error) {
+          setError(result.error)
           continue
         }
-        const body = (await res.json()) as { data: StepAttachment }
-        setAttachments((prev) => [...prev, body.data])
+        if (result.data) {
+          const uploaded = result.data
+          setAttachments((prev) => [...prev, uploaded])
+        }
       }
     } finally {
       setUploading(false)
@@ -247,22 +313,14 @@ export function StepEditor({
   async function flushPendingFiles(stepId: string): Promise<void> {
     if (pendingFiles.length === 0) return
     for (const file of pendingFiles) {
-      const formData = new FormData()
-      formData.append('file', file, file.name)
-      const res = await fetch(
-        `/api/cadences/${cadenceId}/steps/${stepId}/attachments`,
-        { method: 'POST', credentials: 'same-origin', body: formData },
-      )
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as {
-          error?: { message?: string }
-        }
+      const result = await uploadOneViaSignedUrl(stepId, file)
+      if (result.error) {
         // Surface the failure but don't block save — the step itself
         // exists; users can re-attempt from the editor.
-        setError(
-          body.error?.message
-            ?? `Step saved but failed to attach ${file.name} (${res.status})`,
-        )
+        setError(`Step saved but ${result.error}`)
+      } else if (result.data) {
+        const uploaded = result.data
+        setAttachments((prev) => [...prev, uploaded])
       }
     }
     setPendingFiles([])

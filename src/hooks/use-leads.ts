@@ -119,10 +119,14 @@ export const leadsKeys = {
  * Pass filters from the Zustand filters store to keep client UI state
  * and server-state queries in sync without duplicating storage.
  */
-export function useLeadsQuery(input: LeadsQueryInput) {
+export function useLeadsQuery(input: LeadsQueryInput, initialData?: LeadsPage) {
   return useQuery({
     queryKey: leadsKeys.list(input),
     queryFn: () => fetchLeads(input),
+    initialData,
+    // Always refetch when the list mounts so returning to /leads after
+    // creating a lead shows the new row instead of a stale cached page.
+    refetchOnMount: 'always',
   })
 }
 
