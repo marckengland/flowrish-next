@@ -136,9 +136,9 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
             </Link>
             <Link
               href={getStartedHref}
-              className="inline-flex h-[38px] items-center gap-1.5 rounded-[10px] bg-brand px-[18px] text-[14px] font-semibold text-brand-foreground transition-colors hover:bg-brand-hover"
+              className="inline-flex h-[38px] items-center gap-1.5 rounded-[10px] bg-brand px-[18px] text-[14px] font-semibold text-brand-foreground transition-[background-color,transform] hover:bg-brand-hover active:translate-y-px"
             >
-              Get started
+              {primaryLabel}
               <ArrowRight className="size-[15px]" aria-hidden="true" />
             </Link>
           </div>

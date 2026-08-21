@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Target } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { ScoreBadge } from '@/components/scoring/score-badge'
+import { TableState } from '@/components/ui/table'
 import { useFiltersStore } from '@/stores/filters'
 import { useLeadsQuery, type LeadListItem } from '@/hooks/use-leads'
 
@@ -156,25 +157,17 @@ export function LeadTable({
           </thead>
           <tbody className="divide-y divide-row-divider">
             {query.isError ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-8 text-center text-sm text-danger-foreground"
-                  role="alert"
-                >
-                  Couldn&apos;t load leads.{' '}
-                  {query.error instanceof Error ? query.error.message : ''}
-                </td>
-              </tr>
+              <TableState colSpan={7} tone="error">
+                Couldn&apos;t load leads.{' '}
+                {query.error instanceof Error ? query.error.message : ''}
+              </TableState>
             ) : sorted.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-8 text-center text-sm text-muted-foreground"
-                >
-                  No leads match the current filters.
-                </td>
-              </tr>
+              <TableState
+                colSpan={7}
+                icon={<Target className="size-5" aria-hidden="true" />}
+                title="No leads match the current filters"
+                description="Adjust or clear your filters, or add a lead to get started."
+              />
             ) : (
               sorted.map((lead) => (
                 <tr

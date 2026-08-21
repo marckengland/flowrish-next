@@ -81,7 +81,7 @@ const STEP_ICON_MAP: Record<StepActionType, {
   LINKEDIN: {
     icon: Handshake,
     label: 'LinkedIn',
-    badgeClass: 'bg-blue-600/10 text-blue-600 dark:text-blue-400',
+    badgeClass: 'bg-info-subtle text-info',
   },
   MANUAL_TASK: {
     icon: ClipboardList,

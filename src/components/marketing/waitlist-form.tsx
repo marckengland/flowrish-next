@@ -71,8 +71,8 @@ export function WaitlistForm({
 
   const labelClass = dark ? 'text-white/80' : 'text-muted-foreground'
   const inputClass = dark
-    ? 'h-12 w-full rounded-xl border border-white/20 bg-white/5 px-4 text-[15px] text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none'
-    : 'h-12 w-full rounded-xl border border-border bg-card px-4 text-[15px] text-foreground placeholder:text-muted-foreground focus:border-brand focus:outline-none'
+    ? 'h-12 w-full rounded-xl border border-white/20 bg-white/5 px-4 text-[15px] text-white placeholder:text-white/40 transition-[border-color,box-shadow] focus:border-white/50 focus:outline-none focus:ring-2 focus:ring-white/25'
+    : 'h-12 w-full rounded-xl border border-border bg-card px-4 text-[15px] text-foreground placeholder:text-muted-foreground transition-[border-color,box-shadow] focus:border-brand focus:outline-none focus:ring-[3px] focus:ring-brand/15'
 
   return (
     <form

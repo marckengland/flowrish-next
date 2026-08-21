@@ -129,7 +129,7 @@ describe('LeadTable', () => {
         }}
       />,
     )
-    expect(container.textContent).toContain('No leads match the current filters.')
+    expect(container.textContent).toContain('No leads match the current filters')
     unmount()
   })
 

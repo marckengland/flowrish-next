@@ -232,7 +232,8 @@ export function CadenceList({
         />
       ) : (
         <Card className="overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-sm">
             <thead className="border-b border-border bg-muted/40">
               <tr>
                 <SortHeader
@@ -333,6 +334,7 @@ export function CadenceList({
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
 

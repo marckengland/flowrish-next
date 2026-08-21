@@ -2,12 +2,22 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Search, Trash2 } from 'lucide-react'
+import { Building2, Loader2, Search, Trash2 } from 'lucide-react'
 
 import { useCompaniesQuery, useDeleteCompanyMutation, type CompanyListItem } from '@/hooks/use-companies'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
+import {
+  Table,
+  TableHead,
+  Th,
+  TableBody,
+  Tr,
+  Td,
+  TableState,
+} from '@/components/ui/table'
+import { toast } from '@/lib/toast'
 
 export interface CompanyTableProps {
   /** Initial data rendered server-side for instant paint. */
@@ -50,10 +60,26 @@ export function CompanyTable({
   const rows = companiesPage?.data ?? []
 
   const deleteMutation = useDeleteCompanyMutation()
+  const [confirmTarget, setConfirmTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
 
   function handleDelete(id: string, name: string) {
-    if (confirm(`Delete company "${name}"? Contacts and leads will be unlinked.`)) {
-      deleteMutation.mutate(id)
+    setConfirmTarget({ id, name })
+  }
+
+  async function confirmDelete(): Promise<void> {
+    if (!confirmTarget) return
+    const { id, name } = confirmTarget
+    try {
+      await deleteMutation.mutateAsync(id)
+      toast.success(`Deleted ${name}`)
+      setConfirmTarget(null)
+    } catch (err) {
+      toast.error("Couldn't delete company", {
+        description: err instanceof Error ? err.message : undefined,
+      })
     }
   }
 
@@ -83,91 +109,87 @@ export function CompanyTable({
         )}
       </div>
 
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-[13.5px]">
-            <thead>
-              <tr className="border-b bg-background text-left">
-                <th scope="col" className="eyebrow px-4 py-[11px]">Name</th>
-                <th scope="col" className="eyebrow px-4 py-[11px]">Industry</th>
-                <th scope="col" className="eyebrow px-4 py-[11px]">Website</th>
-                <th scope="col" className="eyebrow px-4 py-[11px] text-right">Contacts</th>
-                <th scope="col" className="eyebrow px-4 py-[11px] text-right">Leads</th>
-                <th scope="col" className="px-4 py-[11px]">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-row-divider">
-              {query.isError ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-destructive" role="alert">
-                    Couldn&apos;t load companies.{' '}
-                    {query.error instanceof Error ? query.error.message : ''}
-                  </td>
-                </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                    {currentSearch ? 'No companies match your search.' : 'No companies yet.'}
-                  </td>
-                </tr>
-              ) : (
-                rows.map((company) => (
-                  <tr
-                    key={company.id}
-                    className="relative cursor-pointer transition-colors hover:bg-background focus-within:bg-background"
+      <Table minWidth={600}>
+        <TableHead>
+          <Th>Name</Th>
+          <Th>Industry</Th>
+          <Th>Website</Th>
+          <Th align="right">Contacts</Th>
+          <Th align="right">Leads</Th>
+          <Th>
+            <span className="sr-only">Actions</span>
+          </Th>
+        </TableHead>
+        <TableBody>
+          {query.isError ? (
+            <TableState colSpan={6} tone="error">
+              Couldn&apos;t load companies.{' '}
+              {query.error instanceof Error ? query.error.message : ''}
+            </TableState>
+          ) : rows.length === 0 ? (
+            <TableState
+              colSpan={6}
+              icon={<Building2 className="size-5" aria-hidden="true" />}
+              title={
+                currentSearch ? 'No companies match your search' : 'No companies yet'
+              }
+              description={
+                currentSearch
+                  ? 'Try a different name or clear the search.'
+                  : 'Companies are created automatically as you add leads and contacts.'
+              }
+            />
+          ) : (
+            rows.map((company) => (
+              <Tr key={company.id} className="cursor-pointer">
+                <Td className="font-semibold text-foreground">
+                  <Link
+                    href={`/companies/${company.id}`}
+                    aria-label={`Open ${company.name}`}
+                    className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
                   >
-                    <td className="px-4 py-3 font-semibold text-foreground">
-                      <Link
-                        href={`/companies/${company.id}`}
-                        aria-label={`Open ${company.name}`}
-                        className="text-foreground before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:underline focus-visible:outline-none"
-                      >
-                        {company.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {company.industry ?? '—'}
-                    </td>
-                    <td className="relative z-10 px-4 py-3">
-                      {company.website ? (
-                        <a
-                          href={company.website}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-brand-emphasis hover:underline"
-                        >
-                          {safeHostname(company.website)}
-                        </a>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="tnum px-4 py-3 text-right text-muted-foreground">
-                      {company._count.contacts}
-                    </td>
-                    <td className="tnum px-4 py-3 text-right text-muted-foreground">
-                      {company._count.leads}
-                    </td>
-                    <td className="relative z-10 px-4 py-3 text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => handleDelete(company.id, company.name)}
-                        disabled={deleteMutation.isPending}
-                        aria-label={`Delete ${company.name}`}
-                      >
-                        <Trash2 className="size-4 text-muted-foreground" aria-hidden="true" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                    {company.name}
+                  </Link>
+                </Td>
+                <Td className="text-muted-foreground">
+                  {company.industry ?? '—'}
+                </Td>
+                <Td className="relative z-10">
+                  {company.website ? (
+                    <a
+                      href={company.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-brand-emphasis hover:underline"
+                    >
+                      {safeHostname(company.website)}
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </Td>
+                <Td align="right" className="tnum text-muted-foreground">
+                  {company._count.contacts}
+                </Td>
+                <Td align="right" className="tnum text-muted-foreground">
+                  {company._count.leads}
+                </Td>
+                <Td align="right" className="relative z-10">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => handleDelete(company.id, company.name)}
+                    disabled={deleteMutation.isPending}
+                    aria-label={`Delete ${company.name}`}
+                  >
+                    <Trash2 className="size-4 text-muted-foreground" aria-hidden="true" />
+                  </Button>
+                </Td>
+              </Tr>
+            ))
+          )}
+        </TableBody>
+      </Table>
 
       {companiesPage?.pagination && (
         <p className="text-xs text-muted-foreground" aria-live="polite">
@@ -177,6 +199,20 @@ export function CompanyTable({
           )}
         </p>
       )}
+
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        onClose={() => setConfirmTarget(null)}
+        onConfirm={confirmDelete}
+        tone="danger"
+        title="Delete company"
+        description={
+          confirmTarget
+            ? `Delete "${confirmTarget.name}"? Contacts and leads will be unlinked.`
+            : undefined
+        }
+        confirmLabel="Delete"
+      />
     </div>
   )
 }

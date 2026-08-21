@@ -3,8 +3,8 @@
 import { useActionState, useMemo } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Field, SelectField } from '@/components/ui/field'
 import { createLead, updateLead } from '@/server/actions/leads'
-import { cn } from '@/lib/utils'
 
 /**
  * Minimal pipeline stage shape consumed by the form.
@@ -397,83 +397,6 @@ export function LeadForm({
 }
 
 // ─── Private helpers ────────────────────────────────────────────────────────
-
-type FieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
-  id: string
-  name: string
-  label: string
-}
-
-function Field({
-  id,
-  name,
-  label,
-  required,
-  className,
-  ...rest
-}: FieldProps): React.JSX.Element {
-  return (
-    <div>
-      <label
-        htmlFor={id}
-        className="block text-sm font-medium text-foreground mb-1.5"
-      >
-        {label}
-        {required ? <span className="text-destructive"> *</span> : null}
-      </label>
-      <input
-        id={id}
-        name={name}
-        required={required}
-        className={cn(
-          'flex h-9 w-full rounded-[10px] border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:border-brand focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50',
-          className,
-        )}
-        {...rest}
-      />
-    </div>
-  )
-}
-
-type SelectFieldProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
-  id: string
-  name: string
-  label: string
-}
-
-function SelectField({
-  id,
-  name,
-  label,
-  required,
-  className,
-  children,
-  ...rest
-}: SelectFieldProps): React.JSX.Element {
-  return (
-    <div>
-      <label
-        htmlFor={id}
-        className="block text-sm font-medium text-foreground mb-1.5"
-      >
-        {label}
-        {required ? <span className="text-destructive"> *</span> : null}
-      </label>
-      <select
-        id={id}
-        name={name}
-        required={required}
-        className={cn(
-          'flex h-9 w-full rounded-[10px] border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm transition-[color,box-shadow,border-color] focus-visible:border-brand focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50',
-          className,
-        )}
-        {...rest}
-      >
-        {children}
-      </select>
-    </div>
-  )
-}
 
 /**
  * Prisma returns `dealValue` as a Decimal (serialized to string over the wire

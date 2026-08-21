@@ -201,8 +201,12 @@ export function KanbanBoard({
           <StageColumn
             key={stage.id}
             stage={stage}
+            stages={stages}
             leads={leadsByStage.get(stage.id) ?? []}
             canMove={canMove}
+            onMove={(leadId, toStageId) =>
+              moveMutation.mutate({ leadId, toStageId })
+            }
             onDropLead={(leadId) => {
               const lead = leads.find((l) => l.id === leadId)
               if (!lead) return
@@ -223,14 +227,18 @@ export function KanbanBoard({
  */
 function StageColumn({
   stage,
+  stages,
   leads,
   canMove,
   onDropLead,
+  onMove,
 }: {
   stage: KanbanStage
+  stages: readonly KanbanStage[]
   leads: readonly KanbanCardLead[]
   canMove: boolean
   onDropLead: (leadId: string) => void
+  onMove: (leadId: string, toStageId: string) => void
 }): React.JSX.Element {
   const draggingLeadId = useKanbanStore((s) => s.draggingLeadId)
   const dragOverStageId = useKanbanStore((s) => s.dragOverStageId)
@@ -312,7 +320,14 @@ function StageColumn({
 
       <div className="flex flex-1 flex-col gap-2.5">
         {leads.map((lead) => (
-          <KanbanCard key={lead.id} lead={lead} draggable={canMove} />
+          <KanbanCard
+            key={lead.id}
+            lead={lead}
+            draggable={canMove}
+            currentStageId={stage.id}
+            stages={stages}
+            onMove={onMove}
+          />
         ))}
         {leads.length === 0 && (
           <p className="rounded-[10px] border border-dashed py-8 text-center text-xs text-muted-foreground">

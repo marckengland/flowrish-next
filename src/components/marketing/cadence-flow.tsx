@@ -38,7 +38,7 @@ const NODES: readonly FlowNode[] = [
     n: 2,
     icon: Handshake,
     label: 'LinkedIn',
-    badgeClass: 'bg-blue-600/10 text-blue-600 dark:text-blue-400',
+    badgeClass: 'bg-info-subtle text-info',
     delay: 'Wait 2 days',
     preview: 'Connect and reference the email',
   },

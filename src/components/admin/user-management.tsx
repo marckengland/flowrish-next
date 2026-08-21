@@ -7,6 +7,8 @@ import { Users, UserPlus, Mail, Trash2, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog } from '@/components/ui/dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { toast } from '@/lib/toast'
 
 /** Two-letter initials for an avatar chip, derived from a display name. */
 function initials(name: string): string {
@@ -61,6 +63,8 @@ export function UserManagement(): React.JSX.Element {
     type: 'remove' | 'leave'
     member: OrgMember
   } | null>(null)
+  const [transferTargetId, setTransferTargetId] = useState('')
+  const [confirmTransferOpen, setConfirmTransferOpen] = useState(false)
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
 
   // Get current user's email to identify self in the list
@@ -444,6 +448,34 @@ export function UserManagement(): React.JSX.Element {
         )}
       </Dialog>
 
+      <ConfirmDialog
+        open={confirmTransferOpen}
+        onClose={() => setConfirmTransferOpen(false)}
+        onConfirm={async () => {
+          if (!transferTargetId) return
+          const res = await fetch('/api/admin/members/transfer-ownership', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetUserId: transferTargetId }),
+          })
+          if (res.ok) {
+            queryClient.invalidateQueries({ queryKey: ['org-members'] })
+            toast.success('Ownership transferred')
+            setConfirmTransferOpen(false)
+            setTransferTargetId('')
+          } else {
+            const err = await res.json().catch(() => ({}))
+            toast.error(err?.error?.message ?? 'Transfer failed')
+          }
+        }}
+        title="Transfer ownership"
+        description={`Transfer ownership to ${
+          members?.find((m) => m.user.id === transferTargetId)?.user.name ??
+          'this member'
+        }? You will be downgraded to Admin.`}
+        confirmLabel="Transfer ownership"
+      />
+
       {/* Leave Organization — shown at the bottom */}
       {members && members.length > 0 && (
         <div className="border-t pt-4 mt-4 space-y-4">
@@ -470,8 +502,10 @@ export function UserManagement(): React.JSX.Element {
                 <div className="flex items-center gap-2">
                   <select
                     id="transfer-target"
+                    aria-label="Select member to transfer ownership to"
                     className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                    defaultValue=""
+                    value={transferTargetId}
+                    onChange={(e) => setTransferTargetId(e.target.value)}
                   >
                     <option value="" disabled>Select member...</option>
                     {otherMembers.map((m) => (
@@ -483,23 +517,8 @@ export function UserManagement(): React.JSX.Element {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={async () => {
-                      const select = document.getElementById('transfer-target') as HTMLSelectElement
-                      const targetUserId = select?.value
-                      if (!targetUserId) return
-                      if (!window.confirm(`Transfer ownership to ${otherMembers.find(m => m.user.id === targetUserId)?.user.name}? You will be downgraded to Admin.`)) return
-                      const res = await fetch('/api/admin/members/transfer-ownership', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ targetUserId }),
-                      })
-                      if (res.ok) {
-                        queryClient.invalidateQueries({ queryKey: ['org-members'] })
-                      } else {
-                        const err = await res.json()
-                        alert(err.error?.message ?? 'Transfer failed')
-                      }
-                    }}
+                    disabled={!transferTargetId}
+                    onClick={() => setConfirmTransferOpen(true)}
                   >
                     Transfer
                   </Button>

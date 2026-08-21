@@ -292,7 +292,7 @@ function getEntityLabel(entityType: SearchEntityType): string {
 function getEntityBgColor(entityType: SearchEntityType): string {
   switch (entityType) {
     case 'Lead':
-      return 'bg-blue-500/12 text-blue-600 dark:text-blue-400'
+      return 'bg-info-subtle text-info'
     case 'Contact':
       return 'bg-brand-subtle text-brand-emphasis'
     case 'Company':

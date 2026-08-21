@@ -56,6 +56,9 @@
   --color-ai: var(--ai);
   --color-ai-foreground: var(--ai-foreground);
   --color-ai-subtle: var(--ai-subtle);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-subtle: var(--info-subtle);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -131,6 +134,13 @@
   --ai: oklch(0.5 0.2 300);
   --ai-foreground: oklch(0.985 0 0);
   --ai-subtle: oklch(0.5 0.2 300 / 0.1);
+
+  /* Info (blue) — third categorical accent for entity types / channels
+     (e.g. Lead search results, LinkedIn cadence steps) that previously used
+     raw Tailwind blues. */
+  --info: oklch(0.55 0.16 250);
+  --info-foreground: oklch(0.48 0.16 250);
+  --info-subtle: oklch(0.55 0.16 250 / 0.12);
 }
 
 .dark {
@@ -190,6 +200,10 @@
   --ai: oklch(0.62 0.2 300);
   --ai-foreground: oklch(0.145 0 0);
   --ai-subtle: oklch(0.62 0.2 300 / 0.16);
+
+  --info: oklch(0.62 0.16 250);
+  --info-foreground: oklch(0.72 0.14 250);
+  --info-subtle: oklch(0.62 0.16 250 / 0.16);
 }
 
 @layer base {

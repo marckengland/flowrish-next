@@ -3,9 +3,8 @@
 import { useActionState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { inputBaseClass } from '@/components/ui/input'
+import { Field } from '@/components/ui/field'
 import { createCompany, updateCompany } from '@/server/actions/contacts'
-import { cn } from '@/lib/utils'
 
 /**
  * Existing company shape accepted when the form is used in edit mode.
@@ -113,38 +112,5 @@ export function CompanyForm({
         </Button>
       </div>
     </form>
-  )
-}
-
-// ─── Private helpers ────────────────────────────────────────────────────────
-
-type FieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
-  id: string
-  name: string
-  label: string
-}
-
-function Field({
-  id,
-  name,
-  label,
-  required,
-  className,
-  ...rest
-}: FieldProps): React.JSX.Element {
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-foreground mb-1.5">
-        {label}
-        {required ? <span className="text-destructive"> *</span> : null}
-      </label>
-      <input
-        id={id}
-        name={name}
-        required={required}
-        className={cn(inputBaseClass, className)}
-        {...rest}
-      />
-    </div>
   )
 }

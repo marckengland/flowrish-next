@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Loader2, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
 
 /**
@@ -126,6 +127,7 @@ export function CadenceScheduleEditor({
   )
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false)
   const [pending, startTransition] = useTransition()
 
   // Reset form to whatever the server sent if the underlying record
@@ -208,13 +210,11 @@ export function CadenceScheduleEditor({
 
   function clear() {
     if (!initialSchedule) return
-    if (
-      !confirm(
-        'Remove this schedule? Steps will fire immediately as they queue, with no time-of-day gating.',
-      )
-    ) {
-      return
-    }
+    setConfirmClearOpen(true)
+  }
+
+  function doClear() {
+    setConfirmClearOpen(false)
     setError(null)
     setSuccess(null)
 
@@ -414,6 +414,16 @@ export function CadenceScheduleEditor({
           </Button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmClearOpen}
+        onClose={() => setConfirmClearOpen(false)}
+        onConfirm={doClear}
+        tone="danger"
+        title="Remove schedule"
+        description="Remove this schedule? Steps will fire immediately as they queue, with no time-of-day gating."
+        confirmLabel="Remove schedule"
+      />
     </form>
   )
 }

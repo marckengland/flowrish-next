@@ -2,11 +2,14 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Trash2 } from 'lucide-react'
+import { Loader2, Trash2, Users } from 'lucide-react'
 
 import { useContactsQuery, useDeleteContactMutation, type ContactListItem } from '@/hooks/use-contacts'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
+import { Table, TableHead, Th, TableBody, Tr, TableState } from '@/components/ui/table'
+import { toast } from '@/lib/toast'
 
 export interface ContactTableProps {
   /** Initial data rendered server-side for instant paint. */
@@ -53,10 +56,26 @@ export function ContactTable({
   const rows = contactsPage?.data ?? []
 
   const deleteMutation = useDeleteContactMutation()
+  const [confirmTarget, setConfirmTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
 
   function handleDelete(id: string, name: string) {
-    if (confirm(`Delete contact "${name}"? This cannot be undone.`)) {
-      deleteMutation.mutate(id)
+    setConfirmTarget({ id, name })
+  }
+
+  async function confirmDelete(): Promise<void> {
+    if (!confirmTarget) return
+    const { id, name } = confirmTarget
+    try {
+      await deleteMutation.mutateAsync(id)
+      toast.success(`Deleted ${name}`)
+      setConfirmTarget(null)
+    } catch (err) {
+      toast.error("Couldn't delete contact", {
+        description: err instanceof Error ? err.message : undefined,
+      })
     }
   }
 
@@ -80,51 +99,41 @@ export function ContactTable({
         )}
       </div>
 
-      {query.isError ? (
-        <div
-          role="alert"
-          className="rounded-lg border bg-card p-8 text-center text-sm text-destructive"
-        >
-          Couldn&apos;t load contacts.{' '}
-          {query.error instanceof Error ? query.error.message : ''}
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
-          {currentSearch ? 'No contacts match your search.' : 'No contacts yet.'}
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border bg-card">
-          <table className="w-full min-w-[720px] text-sm">
-            <thead className="border-b bg-muted/40 text-left">
-              <tr>
-                <th scope="col" className="eyebrow px-4 py-3">
-                  Name
-                </th>
-                <th scope="col" className="eyebrow px-4 py-3">
-                  Role
-                </th>
-                <th scope="col" className="eyebrow px-4 py-3">
-                  Company
-                </th>
-                <th scope="col" className="eyebrow px-4 py-3">
-                  Email
-                </th>
-                <th scope="col" className="eyebrow px-4 py-3">
-                  Phone
-                </th>
-                <th scope="col" className="eyebrow px-4 py-3 text-right">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-row-divider">
-              {rows.map((contact) => {
-                const fullName = `${contact.firstName} ${contact.lastName}`.trim()
-                return (
-                  <tr
-                    key={contact.id}
-                    className="relative cursor-pointer transition-colors hover:bg-background focus-within:bg-background"
-                  >
+      <Table minWidth={720}>
+        <TableHead>
+          <Th>Name</Th>
+          <Th>Role</Th>
+          <Th>Company</Th>
+          <Th>Email</Th>
+          <Th>Phone</Th>
+          <Th align="right">
+            <span className="sr-only">Actions</span>
+          </Th>
+        </TableHead>
+        <TableBody>
+          {query.isError ? (
+            <TableState colSpan={6} tone="error">
+              Couldn&apos;t load contacts.{' '}
+              {query.error instanceof Error ? query.error.message : ''}
+            </TableState>
+          ) : rows.length === 0 ? (
+            <TableState
+              colSpan={6}
+              icon={<Users className="size-5" aria-hidden="true" />}
+              title={
+                currentSearch ? 'No contacts match your search' : 'No contacts yet'
+              }
+              description={
+                currentSearch
+                  ? 'Try a different name or clear the search.'
+                  : 'Contacts you add or import will show up here.'
+              }
+            />
+          ) : (
+            rows.map((contact) => {
+              const fullName = `${contact.firstName} ${contact.lastName}`.trim()
+              return (
+                <Tr key={contact.id} className="cursor-pointer">
                     <td className="px-4 py-3 font-semibold">
                       <Link
                         href={`/contacts/${contact.id}`}
@@ -158,13 +167,12 @@ export function ContactTable({
                         <Trash2 className="size-4" aria-hidden="true" />
                       </Button>
                     </td>
-                  </tr>
+                  </Tr>
                 )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+              })
+            )}
+          </TableBody>
+        </Table>
 
       {contactsPage?.pagination && (
         <p className="text-xs text-muted-foreground" aria-live="polite">
@@ -174,6 +182,20 @@ export function ContactTable({
           )}
         </p>
       )}
+
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        onClose={() => setConfirmTarget(null)}
+        onConfirm={confirmDelete}
+        tone="danger"
+        title="Delete contact"
+        description={
+          confirmTarget
+            ? `Delete "${confirmTarget.name}"? This cannot be undone.`
+            : undefined
+        }
+        confirmLabel="Delete"
+      />
     </div>
   )
 }

@@ -16,7 +16,9 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useDeleteContactMutation } from '@/hooks/use-contacts'
+import { toast } from '@/lib/toast'
 
 export interface ContactDetailLead {
   id: string
@@ -59,20 +61,20 @@ export function ContactDetailView({
 }: ContactDetailViewProps): React.JSX.Element {
   const router = useRouter()
   const deleteMutation = useDeleteContactMutation()
-  const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const fullName = `${contact.firstName} ${contact.lastName}`.trim()
 
-  function handleDelete(): void {
-    setError(null)
-    if (!confirm(`Delete contact "${fullName}"? This cannot be undone.`)) {
-      return
+  async function confirmDelete(): Promise<void> {
+    try {
+      await deleteMutation.mutateAsync(contact.id)
+      toast.success(`Deleted ${fullName}`)
+      router.push('/contacts')
+    } catch (err) {
+      toast.error("Couldn't delete contact", {
+        description: err instanceof Error ? err.message : undefined,
+      })
     }
-    deleteMutation.mutate(contact.id, {
-      onSuccess: () => router.push('/contacts'),
-      onError: (err) =>
-        setError(err instanceof Error ? err.message : 'Couldn’t delete contact.'),
-    })
   }
 
   return (
@@ -122,7 +124,7 @@ export function ContactDetailView({
             type="button"
             variant="destructive"
             size="sm"
-            onClick={handleDelete}
+            onClick={() => setConfirmOpen(true)}
             disabled={deleteMutation.isPending}
           >
             {deleteMutation.isPending ? (
@@ -140,11 +142,15 @@ export function ContactDetailView({
         ) : null}
       </header>
 
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={confirmDelete}
+        tone="danger"
+        title="Delete contact"
+        description={`Delete "${fullName}"? This cannot be undone.`}
+        confirmLabel="Delete"
+      />
 
       <section
         aria-labelledby="contact-info"

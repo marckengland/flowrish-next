@@ -29,6 +29,12 @@ export interface KanbanCardProps {
   lead: KanbanCardLead
   /** Whether the user may drag this card (requires `leads:write`). */
   draggable?: boolean
+  /** The stage this card currently sits in (drives the move control). */
+  currentStageId?: string
+  /** All stages, in order — offered as move targets in the keyboard menu. */
+  stages?: readonly { id: string; name: string }[]
+  /** Keyboard/pointer alternative to drag-and-drop; moves the lead. */
+  onMove?: (leadId: string, toStageId: string) => void
 }
 
 /**
@@ -45,6 +51,9 @@ export interface KanbanCardProps {
 export function KanbanCard({
   lead,
   draggable = false,
+  currentStageId,
+  stages,
+  onMove,
 }: KanbanCardProps): React.JSX.Element {
   const draggingLeadId = useKanbanStore((s) => s.draggingLeadId)
   const startDrag = useKanbanStore((s) => s.startDrag)
@@ -113,6 +122,33 @@ export function KanbanCard({
         </span>
         <ScoreBadge score={lead.score} />
       </div>
+
+      {/* Keyboard/pointer alternative to drag-and-drop. Screen-reader and
+          keyboard users can move a lead without a drag gesture. */}
+      {draggable && onMove && stages && stages.length > 1 ? (
+        <div className="mt-2.5 border-t border-row-divider pt-2">
+          <label htmlFor={`move-${lead.id}`} className="sr-only">
+            Move {fullName(lead)} to stage
+          </label>
+          <select
+            id={`move-${lead.id}`}
+            value={currentStageId}
+            draggable={false}
+            onMouseDown={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              const to = e.target.value
+              if (to && to !== currentStageId) onMove(lead.id, to)
+            }}
+            className="h-7 w-full rounded-md border border-input bg-background px-2 text-[11.5px] text-muted-foreground transition-[border-color,box-shadow] focus-visible:border-brand focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/15"
+          >
+            {stages.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.id === currentStageId ? `In ${s.name}` : `Move to ${s.name}`}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
     </div>
   )
 }
