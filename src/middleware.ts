@@ -97,8 +97,8 @@ export async function middleware(request: NextRequest) {
     'camera=(), microphone=(), geolocation=(), payment=()'
   )
 
-  // 2. Rate limiting (skip for static assets, and skip entirely when
-  // Redis isn't configured — see getRateLimiters())
+  // 2. Rate limiting (skip entirely when Redis isn't configured — see
+  // getRateLimiters())
   const path = request.nextUrl.pathname
 
   // Static assets served from /public (logo, images, fonts, etc.) must
@@ -109,7 +109,12 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  if (!path.startsWith('/_next') && !path.startsWith('/favicon')) {
+  // Only rate-limit the API. Page navigations and RSC payload requests are
+  // GETs that just render — counting them against a per-IP limit means a
+  // single person clicking around the app trips the limit (a real bug: it
+  // 429'd normal browsing). Abuse protection belongs on the API surface
+  // (auth attempts, writes, data reads), which is what we gate here.
+  if (path.startsWith('/api/')) {
     const limiters = getRateLimiters()
     if (limiters) {
       const ip =
