@@ -57,3 +57,6 @@ next-env.d.ts
 
 # discord feedback tool — pulled transcripts + downloaded screenshots
 /.kiro-discord-feedback/
+
+# graphify generated knowledge-graph output (regenerable; embeds local paths)
+/graphify-out
