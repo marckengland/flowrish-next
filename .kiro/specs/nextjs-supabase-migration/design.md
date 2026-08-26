@@ -1432,7 +1432,7 @@ const envSchema = z.object({
   // AI
   AI_API_KEY: z.string().min(1),
   AI_API_URL: z.string().url().default('https://generativelanguage.googleapis.com/v1beta/openai'),
-  AI_MODEL: z.string().default('gemini-2.5-flash-lite-preview'),
+  AI_MODEL: z.string().default('gemini-3.1-flash-lite'),
 })
 
 export const env = envSchema.parse(process.env)

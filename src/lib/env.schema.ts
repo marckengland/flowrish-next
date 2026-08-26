@@ -43,7 +43,7 @@ export const envSchema = z.object({
     .string()
     .url('AI_API_URL must be a valid URL when provided')
     .default('https://generativelanguage.googleapis.com/v1beta/openai'),
-  AI_MODEL: z.string().min(1).default('gemini-2.5-flash-lite-preview'),
+  AI_MODEL: z.string().min(1).default('gemini-3.1-flash-lite'),
 
   // Microsoft 365 / Outlook email (optional) — one Azure app for the
   // deployment. When unset, the Outlook connector shows setup instructions

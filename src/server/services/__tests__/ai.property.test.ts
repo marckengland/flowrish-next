@@ -50,7 +50,7 @@ vi.mock('@/lib/supabase/server', () => ({
 const mockEnv = {
   AI_API_KEY: 'sk-test-key-12345',
   AI_API_URL: 'https://api.example.com/v1',
-  AI_MODEL: 'gemini-2.5-flash-lite-preview',
+  AI_MODEL: 'gemini-3.1-flash-lite',
 }
 
 vi.mock('@/lib/env', () => ({
@@ -99,7 +99,7 @@ const urlArb = fc.oneof(
 const modelNameArb = fc.oneof(
   fc.string({ minLength: 3, maxLength: 50 }),
   fc.constantFrom(
-    'gemini-2.5-flash-lite-preview',
+    'gemini-3.1-flash-lite',
     'gpt-4-turbo',
     'claude-3-opus',
     'internal-model-v2',

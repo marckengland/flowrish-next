@@ -198,8 +198,20 @@ async function callAI(
   })
 
   if (!response.ok) {
-    // Log internally but never expose details
-    console.error('[AI Service] API request failed with status:', response.status)
+    // Log the provider's actual error internally (server-side only) so
+    // misconfigurations — missing/placeholder API key, deprecated model
+    // name, quota — are diagnosable from the logs. The client still only
+    // ever sees the generic AI_UNAVAILABLE_MESSAGE.
+    let detail = ''
+    try {
+      detail = (await response.text()).slice(0, 500)
+    } catch {
+      // ignore — body already consumed or unavailable
+    }
+    console.error(
+      `[AI Service] API request failed (status ${response.status}, model "${env.AI_MODEL}"):`,
+      detail,
+    )
     throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
   }
 

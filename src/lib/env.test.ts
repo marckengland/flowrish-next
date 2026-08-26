@@ -38,7 +38,7 @@ describe('env validation schema', () => {
       expect(result.data.AI_API_URL).toBe(
         'https://generativelanguage.googleapis.com/v1beta/openai'
       )
-      expect(result.data.AI_MODEL).toBe('gemini-2.5-flash-lite-preview')
+      expect(result.data.AI_MODEL).toBe('gemini-2.5-flash-lite')
     }
   })
 
