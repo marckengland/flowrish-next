@@ -106,9 +106,9 @@ export function CompanyDetailView({
                   href={normalizeUrl(company.website)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-brand-emphasis hover:underline"
+                  className="flex min-w-0 items-center gap-1 break-all text-brand-emphasis hover:underline"
                 >
-                  <Globe className="size-3.5" aria-hidden="true" />
+                  <Globe className="size-3.5 shrink-0" aria-hidden="true" />
                   {company.website}
                 </a>
               ) : null}

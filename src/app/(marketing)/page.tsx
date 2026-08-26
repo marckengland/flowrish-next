@@ -18,6 +18,7 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import { siteConfig } from '@/lib/site'
 import { DashboardMockup } from '@/components/marketing/dashboard-mockup'
 import { CadenceFlow } from '@/components/marketing/cadence-flow'
+import { MarketingNav } from '@/components/marketing/marketing-nav'
 import { PricingSection } from '@/components/marketing/pricing-section'
 import { WaitlistForm } from '@/components/marketing/waitlist-form'
 import { isWaitlistEnabled } from '@/lib/waitlist'
@@ -94,55 +95,14 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
   const primaryLabel = waitlistEnabled ? 'Join the waitlist' : 'Get started'
 
   return (
-    <div className="min-h-screen bg-card text-foreground">
+    <div className="min-h-screen overflow-x-clip bg-card text-foreground">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
       />
       <div className="mx-auto max-w-[1280px]">
         {/* NAV */}
-        <nav className="sticky top-0 z-10 flex h-[68px] items-center justify-between border-b bg-card/85 px-6 backdrop-blur sm:px-10">
-          <div className="flex items-center gap-11">
-            <Link href="/" className="flex items-center gap-2.5">
-              <Image
-                src="/flower-emerald.png"
-                alt=""
-                width={20}
-                height={20}
-                className="size-5 object-contain"
-              />
-              <span className="text-[17px] font-semibold tracking-[-0.01em]">
-                Flowrish
-              </span>
-            </Link>
-            <div className="hidden items-center gap-[30px] text-[14px] text-muted-foreground md:flex">
-              <a href="#features" className="transition-colors hover:text-foreground">
-                Features
-              </a>
-              <a href="#how" className="transition-colors hover:text-foreground">
-                How it works
-              </a>
-              <a href="#pricing" className="transition-colors hover:text-foreground">
-                Pricing
-              </a>
-            </div>
-          </div>
-          <div className="flex items-center gap-3.5">
-            <Link
-              href="/login"
-              className="text-[14px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Sign in
-            </Link>
-            <Link
-              href={getStartedHref}
-              className="inline-flex h-[38px] items-center gap-1.5 rounded-[10px] bg-brand px-[18px] text-[14px] font-semibold text-brand-foreground transition-[background-color,transform] hover:bg-brand-hover active:translate-y-px"
-            >
-              {primaryLabel}
-              <ArrowRight className="size-[15px]" aria-hidden="true" />
-            </Link>
-          </div>
-        </nav>
+        <MarketingNav getStartedHref={getStartedHref} primaryLabel={primaryLabel} />
 
         {/* HERO */}
         <section className="relative grid items-center gap-14 px-6 py-16 sm:px-14 lg:grid-cols-[1.02fr_1.18fr]">

@@ -236,12 +236,12 @@ interface DetailRowProps {
 
 function DetailRow({ icon: Icon, label, children }: DetailRowProps) {
   return (
-    <div className="grid grid-cols-[140px_1fr] items-center gap-3 px-4 py-2.5">
+    <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3 px-4 py-2.5">
       <dt className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         <Icon className="size-3.5" aria-hidden />
         {label}
       </dt>
-      <dd>{children}</dd>
+      <dd className="min-w-0 break-words">{children}</dd>
     </div>
   )
 }

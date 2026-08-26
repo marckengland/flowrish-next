@@ -182,13 +182,13 @@ function Field({
   numeric?: boolean
 }): React.JSX.Element {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex min-w-0 flex-col gap-1">
       <dt className="eyebrow">{label}</dt>
       <dd
         className={
           numeric
             ? 'tnum text-sm font-semibold text-foreground'
-            : 'text-sm text-foreground'
+            : 'min-w-0 break-words text-sm text-foreground'
         }
       >
         {value === null || value === undefined || value === '' ? (

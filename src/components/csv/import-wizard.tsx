@@ -550,7 +550,7 @@ function MappingStep({
         role="table"
         aria-label="Column mapping"
       >
-        <div className="grid grid-cols-[1fr_40px_1fr] items-center gap-x-0 gap-y-0 text-sm">
+        <div className="grid grid-cols-[minmax(0,1fr)_40px_minmax(0,1fr)] items-center gap-x-0 gap-y-0 text-sm">
           {/* Header row */}
           <div
             className="eyebrow border-b bg-muted/40 px-3.5 py-2.5"
@@ -624,7 +624,7 @@ function MappingRow({
 }) {
   return (
     <>
-      <div className="border-b border-row-divider px-3.5 py-2.5 font-mono text-xs text-foreground">
+      <div className="min-w-0 break-words border-b border-row-divider px-3.5 py-2.5 font-mono text-xs text-foreground">
         {csvHeader}
       </div>
       <div
