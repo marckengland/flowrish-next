@@ -283,8 +283,8 @@ export function LeadDiscovery(): React.JSX.Element {
         <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
           <Radar className="size-5 text-brand-emphasis" aria-hidden="true" />
           <p>
-            Search public business listings by location and category, then import
-            the ones you want as companies. Free and keyless via OpenStreetMap.
+            Search for local businesses by location and category, then add the
+            ones you want as companies.
           </p>
         </div>
       )}

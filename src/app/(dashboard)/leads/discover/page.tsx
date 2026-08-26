@@ -42,8 +42,8 @@ export default async function DiscoverLeadsPage(): Promise<React.JSX.Element> {
           Find leads
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Discover businesses from public OpenStreetMap data and import them as
-          companies — free, no API key.
+          Search for local businesses by location and category, then add the
+          ones you want as companies.
         </p>
       </header>
 
