@@ -862,11 +862,11 @@ function statusFallback(status: NonNullable<ChatTurn['actionStatus']>): string {
 
 /**
  * Tiny markdown renderer covering the subset of formatting the assistant
- * realistically returns: paragraphs, bullets, numbered lists, inline
- * code, bold, italics, and links. We avoid pulling in `react-markdown`
- * to keep the bundle thin — `dangerouslySetInnerHTML` here only consumes
- * a string we've fully escaped and re-wrapped, so untrusted markup
- * never reaches the DOM.
+ * realistically returns: headings, paragraphs, bullets, numbered lists,
+ * fenced code blocks, inline code, bold, italics, and links. We avoid
+ * pulling in `react-markdown` to keep the bundle thin —
+ * `dangerouslySetInnerHTML` here only consumes a string we've fully
+ * escaped and re-wrapped, so untrusted markup never reaches the DOM.
  */
 function Markdown({ source }: { source: string }): React.JSX.Element {
   return (
@@ -904,6 +904,9 @@ function renderMarkdown(source: string): string {
   const out: string[] = []
   let inUl = false
   let inOl = false
+  let inCode = false
+  let codeLines: string[] = []
+  let codeLang = ''
 
   function closeLists(): void {
     if (inUl) {
@@ -923,11 +926,51 @@ function renderMarkdown(source: string): string {
     paragraphLines = []
   }
 
+  function flushCode(): void {
+    // Code block contents are escaped verbatim — never run through the
+    // inline pass — so markdown-like characters inside code render as
+    // typed and no markup can leak in.
+    const cls = codeLang ? ` class="language-${escapeHtml(codeLang)}"` : ''
+    out.push(
+      `<pre><code${cls}>${escapeHtml(codeLines.join('\n'))}</code></pre>`,
+    )
+    codeLines = []
+    codeLang = ''
+  }
+
   for (const rawLine of lines) {
+    // Fenced code blocks take precedence over every other construct so
+    // that markdown syntax inside a block is preserved verbatim.
+    const fenceMatch = /^\s*```(.*)$/.exec(rawLine)
+    if (fenceMatch) {
+      if (inCode) {
+        flushCode()
+        inCode = false
+      } else {
+        flushParagraph()
+        closeLists()
+        inCode = true
+        codeLang = fenceMatch[1].trim()
+      }
+      continue
+    }
+    if (inCode) {
+      codeLines.push(rawLine)
+      continue
+    }
+
     const line = rawLine.trimEnd()
     if (line.trim() === '') {
       flushParagraph()
       closeLists()
+      continue
+    }
+    const headingMatch = /^\s*(#{1,6})\s+(.*)$/.exec(line)
+    if (headingMatch) {
+      flushParagraph()
+      closeLists()
+      const level = headingMatch[1].length
+      out.push(`<h${level}>${renderInline(headingMatch[2])}</h${level}>`)
       continue
     }
     const ulMatch = /^\s*[-*]\s+(.*)$/.exec(line)
@@ -963,5 +1006,8 @@ function renderMarkdown(source: string): string {
   }
   flushParagraph()
   closeLists()
+  // Close an unterminated code fence gracefully (e.g. a streamed reply
+  // that opened ``` but hasn't emitted the closing fence yet).
+  if (inCode) flushCode()
   return out.join('')
 }

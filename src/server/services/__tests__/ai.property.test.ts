@@ -14,7 +14,9 @@ vi.setConfig({ testTimeout: 15_000 })
  *
  * These tests verify that:
  * 1. AI failures never expose API keys or internal system details in the response
- * 2. AI requests always include the admin-configured system prompt when active
+ * 2. AI requests always include the immutable platform guardrail system
+ *    message, with any admin-configured prompt layered in as subordinate
+ *    customization when active
  *
  * **Validates: Requirements 8.5, 8.4**
  */
@@ -442,7 +444,7 @@ describe('AI Error Handling - Property Tests', () => {
     })
   })
 
-  describe('Property: AI requests always include admin-configured system prompt when active', () => {
+  describe('Property: AI requests always include the immutable platform guardrail; admin prompt is layered in (subordinate) when active', () => {
     /**
      * **Validates: Requirements 8.4**
      *
@@ -487,15 +489,19 @@ describe('AI Error Handling - Property Tests', () => {
             const systemMessages = parsed.messages.filter(
               (m: { role: string }) => m.role === 'system',
             )
+            // One system message: the immutable guardrail with the admin
+            // prompt layered in as a subordinate customization block.
             expect(systemMessages).toHaveLength(1)
-            expect(systemMessages[0].content).toBe(systemPrompt)
+            expect(systemMessages[0].content).toContain('B2B sales CRM')
+            expect(systemMessages[0].content).toContain(systemPrompt)
+            expect(systemMessages[0].content).toContain('Organization customization')
           },
         ),
         { numRuns: 30 },
       )
     })
 
-    it('generateEmail excludes system prompt when no active config exists', async () => {
+    it('generateEmail still sends the platform guardrail when no active config exists', async () => {
       await fc.assert(
         fc.asyncProperty(
           uuidArb,
@@ -525,7 +531,11 @@ describe('AI Error Handling - Property Tests', () => {
             const systemMessages = parsed.messages.filter(
               (m: { role: string }) => m.role === 'system',
             )
-            expect(systemMessages).toHaveLength(0)
+            // Guardrail is always present; with no admin config there is no
+            // subordinate customization block.
+            expect(systemMessages).toHaveLength(1)
+            expect(systemMessages[0].content).toContain('B2B sales CRM')
+            expect(systemMessages[0].content).not.toContain('Organization customization')
           },
         ),
         { numRuns: 30 },
@@ -570,15 +580,19 @@ describe('AI Error Handling - Property Tests', () => {
             const systemMessages = parsed.messages.filter(
               (m: { role: string }) => m.role === 'system',
             )
+            // One system message: the immutable guardrail with the admin
+            // prompt layered in as a subordinate customization block.
             expect(systemMessages).toHaveLength(1)
-            expect(systemMessages[0].content).toBe(systemPrompt)
+            expect(systemMessages[0].content).toContain('B2B sales CRM')
+            expect(systemMessages[0].content).toContain(systemPrompt)
+            expect(systemMessages[0].content).toContain('Organization customization')
           },
         ),
         { numRuns: 30 },
       )
     })
 
-    it('researchAccount excludes system prompt when no active config exists', async () => {
+    it('researchAccount still sends the platform guardrail when no active config exists', async () => {
       await fc.assert(
         fc.asyncProperty(
           uuidArb,
@@ -610,7 +624,11 @@ describe('AI Error Handling - Property Tests', () => {
             const systemMessages = parsed.messages.filter(
               (m: { role: string }) => m.role === 'system',
             )
-            expect(systemMessages).toHaveLength(0)
+            // Guardrail is always present; with no admin config there is no
+            // subordinate customization block.
+            expect(systemMessages).toHaveLength(1)
+            expect(systemMessages[0].content).toContain('B2B sales CRM')
+            expect(systemMessages[0].content).not.toContain('Organization customization')
           },
         ),
         { numRuns: 30 },
@@ -650,15 +668,19 @@ describe('AI Error Handling - Property Tests', () => {
             const systemMessages = parsed.messages.filter(
               (m: { role: string }) => m.role === 'system',
             )
+            // One system message: the immutable guardrail with the admin
+            // prompt layered in as a subordinate customization block.
             expect(systemMessages).toHaveLength(1)
-            expect(systemMessages[0].content).toBe(systemPrompt)
+            expect(systemMessages[0].content).toContain('B2B sales CRM')
+            expect(systemMessages[0].content).toContain(systemPrompt)
+            expect(systemMessages[0].content).toContain('Organization customization')
           },
         ),
         { numRuns: 30 },
       )
     })
 
-    it('chatMessage excludes system prompt when no active config exists', async () => {
+    it('chatMessage still sends the platform guardrail when no active config exists', async () => {
       await fc.assert(
         fc.asyncProperty(
           uuidArb,
@@ -685,7 +707,11 @@ describe('AI Error Handling - Property Tests', () => {
             const systemMessages = parsed.messages.filter(
               (m: { role: string }) => m.role === 'system',
             )
-            expect(systemMessages).toHaveLength(0)
+            // Guardrail is always present; with no admin config there is no
+            // subordinate customization block.
+            expect(systemMessages).toHaveLength(1)
+            expect(systemMessages[0].content).toContain('B2B sales CRM')
+            expect(systemMessages[0].content).not.toContain('Organization customization')
           },
         ),
         { numRuns: 30 },
