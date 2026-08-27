@@ -552,11 +552,17 @@ function FlowCanvas({
     const chain = [START_NODE_ID, ...steps.map((s) => s.id), END_NODE_ID]
     let cancelled = false
     const ensure = (): void => {
+      // Temporary diagnostics (set unconditionally so they work in prod builds
+      // too). __flowMounted = number of ensure() passes that ran; __flowCtx =
+      // the plugin context once the ref resolves. Removed once lines render.
+      const g = globalThis as unknown as {
+        __flowMounted?: number
+        __flowCtx?: unknown
+      }
+      g.__flowMounted = (g.__flowMounted ?? 0) + 1
       const ctx = editorRef.current
       if (!ctx || cancelled || ctx.document.disposed) return
-      if (process.env.NODE_ENV !== 'production') {
-        ;(globalThis as unknown as { __flowCtx?: unknown }).__flowCtx = ctx
-      }
+      g.__flowCtx = ctx
       try {
         const lm = ctx.document.linesManager
         for (let i = 0; i < chain.length - 1; i++) {
