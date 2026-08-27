@@ -256,9 +256,9 @@ export function CallingProviders(): React.JSX.Element {
             <div
               key={p.id}
               className={cn(
-                'flex flex-col rounded-xl border bg-card p-5 transition-shadow',
+                'flex flex-col rounded-xl border bg-card p-5 transition-[box-shadow,background-color,border-color]',
                 isSelected
-                  ? 'border-brand ring-1 ring-brand'
+                  ? 'border-brand bg-brand-subtle/30 ring-1 ring-brand'
                   : 'hover:shadow-[0_6px_18px_-10px_rgba(0,0,0,0.2)]',
               )}
             >

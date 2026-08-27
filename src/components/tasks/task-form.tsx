@@ -1,9 +1,11 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { ArrowDown, ArrowRight, ArrowUp } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { ChipGroup, type ChipOption } from '@/components/ui/chip-group'
 import { cn } from '@/lib/utils'
 import { createTask, updateTask } from '@/server/actions/tasks'
 import { tasksKeys } from '@/hooks/use-tasks'
@@ -66,11 +68,31 @@ export interface TaskFormProps {
   submitLabel?: string
 }
 
-const PRIORITY_OPTIONS = [
-  { value: 'LOW', label: 'Low' },
-  { value: 'MEDIUM', label: 'Medium' },
-  { value: 'HIGH', label: 'High' },
-] as const
+type Priority = 'LOW' | 'MEDIUM' | 'HIGH'
+
+const PRIORITY_OPTIONS: ReadonlyArray<ChipOption<Priority>> = [
+  {
+    value: 'LOW',
+    label: 'Low',
+    icon: ArrowDown,
+    iconClass: 'text-muted-foreground',
+    selectedClass: 'border-foreground/25 bg-muted text-foreground',
+  },
+  {
+    value: 'MEDIUM',
+    label: 'Medium',
+    icon: ArrowRight,
+    iconClass: 'text-warning-foreground',
+    selectedClass: 'border-warning/50 bg-warning-subtle text-warning-foreground',
+  },
+  {
+    value: 'HIGH',
+    label: 'High',
+    icon: ArrowUp,
+    iconClass: 'text-danger-foreground',
+    selectedClass: 'border-danger/50 bg-danger-subtle text-danger-foreground',
+  },
+]
 
 type ActionResult = {
   error?: string
@@ -129,7 +151,7 @@ export function TaskForm({
   const defaultLead = task?.leadId ?? defaultLeadId ?? leads[0]?.id ?? ''
   const defaultAssignee =
     task?.assigneeId ?? defaultAssigneeId ?? assignees[0]?.id ?? ''
-  const defaultPriority = task?.priority ?? 'MEDIUM'
+  const [priority, setPriority] = useState<Priority>(task?.priority ?? 'MEDIUM')
   const defaultDueDate = toDateTimeLocal(task?.dueDate)
 
   const resolvedSubmitLabel =
@@ -212,24 +234,17 @@ export function TaskForm({
         </div>
 
         <div>
-          <label
-            htmlFor="task-priority"
-            className="block text-sm font-medium text-foreground mb-1.5"
-          >
+          <span className="block text-sm font-medium text-foreground mb-1.5">
             Priority
-          </label>
-          <select
-            id="task-priority"
-            name="priority"
-            defaultValue={defaultPriority}
-            className={selectClass}
-          >
-            {PRIORITY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          </span>
+          <input type="hidden" name="priority" value={priority} />
+          <ChipGroup
+            ariaLabel="Priority"
+            options={PRIORITY_OPTIONS}
+            value={priority}
+            onChange={setPriority}
+            className="pt-1"
+          />
         </div>
       </div>
 

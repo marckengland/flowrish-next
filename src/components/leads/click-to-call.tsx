@@ -10,10 +10,10 @@ import {
   PhoneMissed,
   PhoneOff,
   Voicemail,
-  type LucideIcon,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { ChipGroup, type ChipOption } from '@/components/ui/chip-group'
 import { cn } from '@/lib/utils'
 import { useCreateActivityMutation } from '@/hooks/use-activities'
 import { useTwilioDialer } from '@/hooks/use-twilio-dialer'
@@ -29,51 +29,55 @@ export interface ClickToCallProps {
   voiceProvider?: string | null
 }
 
-const OUTCOMES = [
-  'Connected',
-  'Left voicemail',
-  'No answer',
-  'Busy',
-  'Wrong number',
-] as const
-
-type Outcome = (typeof OUTCOMES)[number]
+type Outcome =
+  | 'Connected'
+  | 'Left voicemail'
+  | 'No answer'
+  | 'Busy'
+  | 'Wrong number'
 
 /**
  * Visual config per outcome: an icon plus the semantic tone applied when
  * the chip is selected. Icons keep a subtle tone tint even when unselected
  * so the choices read as "call results" at a glance rather than a flat list.
  */
-const OUTCOME_CONFIG: Record<
-  Outcome,
-  { icon: LucideIcon; iconClass: string; selectedClass: string }
-> = {
-  Connected: {
+const OUTCOME_OPTIONS: ReadonlyArray<ChipOption<Outcome>> = [
+  {
+    value: 'Connected',
+    label: 'Connected',
     icon: PhoneCall,
     iconClass: 'text-brand',
     selectedClass: 'border-brand/50 bg-brand-subtle text-brand-emphasis',
   },
-  'Left voicemail': {
+  {
+    value: 'Left voicemail',
+    label: 'Left voicemail',
     icon: Voicemail,
     iconClass: 'text-muted-foreground',
     selectedClass: 'border-foreground/25 bg-muted text-foreground',
   },
-  'No answer': {
+  {
+    value: 'No answer',
+    label: 'No answer',
     icon: PhoneMissed,
     iconClass: 'text-warning-foreground',
     selectedClass: 'border-warning/50 bg-warning-subtle text-warning-foreground',
   },
-  Busy: {
+  {
+    value: 'Busy',
+    label: 'Busy',
     icon: PhoneOff,
     iconClass: 'text-warning-foreground',
     selectedClass: 'border-warning/50 bg-warning-subtle text-warning-foreground',
   },
-  'Wrong number': {
+  {
+    value: 'Wrong number',
+    label: 'Wrong number',
     icon: Ban,
     iconClass: 'text-danger-foreground',
     selectedClass: 'border-danger/50 bg-danger-subtle text-danger-foreground',
   },
-}
+]
 
 /**
  * Click-to-call for the lead detail.
@@ -320,40 +324,12 @@ export function ClickToCall({
             <span className="mb-1.5 block text-xs font-medium text-foreground">
               Outcome
             </span>
-            <div
-              role="radiogroup"
-              aria-label="Call outcome"
-              className="flex flex-wrap gap-1.5"
-            >
-              {OUTCOMES.map((o, i) => {
-                const { icon: Icon, iconClass, selectedClass } =
-                  OUTCOME_CONFIG[o]
-                const selected = outcome === o
-                return (
-                  <button
-                    key={o}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    tabIndex={selected ? 0 : -1}
-                    onClick={() => setOutcome(o)}
-                    onKeyDown={(e) => handleChipKeydown(e, i, setOutcome)}
-                    className={cn(
-                      'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-brand/25',
-                      selected
-                        ? selectedClass
-                        : 'border-input bg-card text-muted-foreground hover:bg-muted hover:text-foreground',
-                    )}
-                  >
-                    <Icon
-                      className={cn('size-3.5', selected ? '' : iconClass)}
-                      aria-hidden="true"
-                    />
-                    {o}
-                  </button>
-                )
-              })}
-            </div>
+            <ChipGroup
+              ariaLabel="Call outcome"
+              options={OUTCOME_OPTIONS}
+              value={outcome}
+              onChange={setOutcome}
+            />
           </div>
 
           {/* Duration — reads as mm:ss; editable behind an explicit affordance
@@ -442,31 +418,6 @@ export function ClickToCall({
       )}
     </div>
   )
-}
-
-/**
- * Roving-tabindex keyboard support for the outcome radiogroup: arrow keys
- * move (and select) the adjacent chip, wrapping at the ends, and focus the
- * newly selected control so the group behaves like a native radio set.
- */
-function handleChipKeydown(
-  e: React.KeyboardEvent<HTMLButtonElement>,
-  index: number,
-  setOutcome: (o: Outcome) => void,
-): void {
-  let next = index
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-    next = (index + 1) % OUTCOMES.length
-  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-    next = (index - 1 + OUTCOMES.length) % OUTCOMES.length
-  } else {
-    return
-  }
-  e.preventDefault()
-  setOutcome(OUTCOMES[next])
-  const group = e.currentTarget.parentElement
-  const target = group?.children[next] as HTMLElement | undefined
-  target?.focus()
 }
 
 /** Inline mm:ss editor: two small numeric fields feeding a seconds total. */

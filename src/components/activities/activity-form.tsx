@@ -1,25 +1,25 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Mail, Phone, StickyNote, Users } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { ChipGroup, type ChipOption } from '@/components/ui/chip-group'
 import { cn } from '@/lib/utils'
 import { useCreateActivityMutation } from '@/hooks/use-activities'
 
 /**
- * Activity types exposed in the logger dropdown. FILE_ATTACHMENT is
- * omitted here because it is created indirectly by the upload flow
- * (task 17 in the spec), not by typing into a text box.
+ * Activity types exposed in the logger. FILE_ATTACHMENT is omitted here
+ * because it is created indirectly by the upload flow (task 17 in the
+ * spec), not by typing into a text box.
  */
-const ACTIVITY_TYPE_OPTIONS: ReadonlyArray<{
-  value: 'NOTE' | 'CALL' | 'MEETING' | 'EMAIL'
-  label: string
-}> = [
-  { value: 'NOTE', label: 'Note' },
-  { value: 'CALL', label: 'Call' },
-  { value: 'MEETING', label: 'Meeting' },
-  { value: 'EMAIL', label: 'Email' },
+const ACTIVITY_TYPE_OPTIONS: ReadonlyArray<
+  ChipOption<'NOTE' | 'CALL' | 'MEETING' | 'EMAIL'>
+> = [
+  { value: 'NOTE', label: 'Note', icon: StickyNote, iconClass: 'text-muted-foreground' },
+  { value: 'CALL', label: 'Call', icon: Phone, iconClass: 'text-muted-foreground' },
+  { value: 'MEETING', label: 'Meeting', icon: Users, iconClass: 'text-muted-foreground' },
+  { value: 'EMAIL', label: 'Email', icon: Mail, iconClass: 'text-muted-foreground' },
 ]
 
 export interface ActivityFormProps {
@@ -106,24 +106,15 @@ export function ActivityForm({
     >
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[160px]">
-          <label
-            htmlFor="activity-type"
-            className="block text-xs font-medium text-foreground mb-1"
-          >
+          <span className="mb-1.5 block text-xs font-medium text-foreground">
             Activity type
-          </label>
-          <select
-            id="activity-type"
+          </span>
+          <ChipGroup
+            ariaLabel="Activity type"
+            options={ACTIVITY_TYPE_OPTIONS}
             value={type}
-            onChange={(e) => setType(e.target.value as ActivityType)}
-            className="flex h-10 w-full rounded-[10px] border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm transition-[color,box-shadow,border-color] focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15"
-          >
-            {ACTIVITY_TYPE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            onChange={setType}
+          />
         </div>
 
         {type === 'CALL' && (
