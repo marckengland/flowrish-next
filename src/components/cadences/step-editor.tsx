@@ -73,6 +73,8 @@ export interface StepEditorProps {
   cadenceId: string
   /** When provided, the dialog is in "edit" mode. */
   step?: CadenceStep | null
+  /** Preselects the action type when adding a new step (ignored in edit mode). */
+  defaultActionType?: StepActionType
   canEdit: boolean
   canDelete: boolean
   onClose: () => void
@@ -85,6 +87,7 @@ export interface StepEditorProps {
 export function StepEditor({
   cadenceId,
   step,
+  defaultActionType,
   canEdit,
   canDelete,
   onClose,
@@ -95,7 +98,7 @@ export function StepEditor({
   const isNew = !step
 
   const [actionType, setActionType] = useState<StepActionType>(
-    step?.actionType ?? 'EMAIL',
+    step?.actionType ?? defaultActionType ?? 'EMAIL',
   )
   const [delayUnit, setDelayUnit] = useState<DelayUnit>(() => {
     const h = step?.delayHours ?? 0

@@ -15,6 +15,7 @@ import { useRouter } from 'next/navigation'
 import {
   ChevronLeft,
   ClipboardList,
+  Copy,
   Handshake,
   Mail,
   Maximize2,
@@ -40,7 +41,12 @@ import '@flowgram.ai/free-layout-editor/index.css'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { deleteStep, reorderSteps, saveCadenceLayout } from '@/server/actions/cadences'
+import {
+  deleteStep,
+  duplicateStep,
+  reorderSteps,
+  saveCadenceLayout,
+} from '@/server/actions/cadences'
 import { StepEditor } from '@/components/cadences/step-editor'
 import type {
   CadenceStep,
@@ -105,6 +111,18 @@ const ACTION_META: Record<
   },
 }
 
+/** Quick-add palette entries — one per step action type. */
+const ADD_PALETTE: ReadonlyArray<{
+  type: StepActionType
+  label: string
+  icon: LucideIcon
+}> = [
+  { type: 'EMAIL', label: 'Email', icon: Mail },
+  { type: 'CALL', label: 'Call', icon: Phone },
+  { type: 'LINKEDIN', label: 'LinkedIn', icon: Handshake },
+  { type: 'MANUAL_TASK', label: 'Task', icon: ClipboardList },
+]
+
 function describeDelay(hours: number): string {
   if (hours <= 0) return 'Immediately'
   if (hours < 24) return `Wait ${hours}h`
@@ -129,6 +147,7 @@ interface CanvasContextValue {
   stepsById: Map<string, CadenceStep>
   onEdit: (stepId: string) => void
   onDelete: (stepId: string) => void
+  onDuplicate: (stepId: string) => void
 }
 
 const CanvasContext = createContext<CanvasContextValue | null>(null)
@@ -276,7 +295,7 @@ function buildRegistries(readOnly: boolean): WorkflowNodeRegistry[] {
 /** renderDefaultNode — branches on node type. */
 function CanvasNode({ node }: { node: WorkflowNodeEntity }): React.JSX.Element | null {
   const render = useNodeRender()
-  const { readOnly, stepsById, onEdit, onDelete } = useCanvas()
+  const { readOnly, stepsById, onEdit, onDelete, onDuplicate } = useCanvas()
   const id = node.id
   const ports = render.ports ?? []
   const portEls = ports.map((p) => <WorkflowPortRender key={p.id} entity={p} />)
@@ -346,18 +365,34 @@ function CanvasNode({ node }: { node: WorkflowNodeEntity }): React.JSX.Element |
             </p>
           </div>
           {!readOnly && (
-            <button
-              type="button"
-              aria-label={`Delete step ${step.stepOrder}`}
-              className="text-muted-foreground/60 hover:text-danger-foreground"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete(step.id)
-              }}
-            >
-              <Trash2 className="size-4" aria-hidden="true" />
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                aria-label={`Duplicate step ${step.stepOrder}`}
+                title="Duplicate step"
+                className="text-muted-foreground/60 hover:text-foreground"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDuplicate(step.id)
+                }}
+              >
+                <Copy className="size-3.5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                aria-label={`Delete step ${step.stepOrder}`}
+                title="Delete step"
+                className="text-muted-foreground/60 hover:text-danger-foreground"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete(step.id)
+                }}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+              </button>
+            </div>
           )}
         </div>
         <button
@@ -542,7 +577,9 @@ export function CadenceCanvas({
   const stepsById = useMemo(() => new Map(steps.map((s) => [s.id, s])), [steps])
 
   const [editing, setEditing] = useState<
-    { mode: 'new' } | { mode: 'edit'; stepId: string } | null
+    | { mode: 'new'; actionType?: StepActionType }
+    | { mode: 'edit'; stepId: string }
+    | null
   >(null)
   const [error, setError] = useState<string | null>(null)
   const [graphValid, setGraphValid] = useState(true)
@@ -596,6 +633,21 @@ export function CadenceCanvas({
       setError(null)
       startTransition(async () => {
         const result = await deleteStep(cadenceId, stepId)
+        if (result && 'error' in result && result.error) {
+          setError(result.error)
+          return
+        }
+        router.refresh()
+      })
+    },
+    [cadenceId, router],
+  )
+
+  const handleDuplicate = useCallback(
+    (stepId: string): void => {
+      setError(null)
+      startTransition(async () => {
+        const result = await duplicateStep(cadenceId, stepId)
         if (result && 'error' in result && result.error) {
           setError(result.error)
           return
@@ -682,6 +734,38 @@ export function CadenceCanvas({
           )}
         </button>
 
+        {/* Quick-add palette — a "component list" for dropping steps onto
+            the flow. Clicking a type opens the editor pre-set to it; on save
+            the new step auto-wires at the end of the chain, ready to drag /
+            rewire. (Click-to-add is used over canvas drag-and-drop because
+            it's reliable across pointer + touch and needs no drop-coordinate
+            math against the canvas pan/zoom transform.) */}
+        {!readOnly && (
+          <div className="absolute left-3 top-14 z-20 flex w-36 flex-col gap-0.5 rounded-lg border border-border bg-card/95 p-1.5 shadow-sm backdrop-blur">
+            <span className="px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Add step
+            </span>
+            {ADD_PALETTE.map(({ type, label, icon: Icon }) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setEditing({ mode: 'new', actionType: type })}
+                className="flex items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+              >
+                <span
+                  className={cn(
+                    'inline-flex size-6 shrink-0 items-center justify-center rounded-md',
+                    ACTION_META[type].badgeClass,
+                  )}
+                >
+                  <Icon className="size-3.5" aria-hidden="true" />
+                </span>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {mounted ? (
           <CanvasContext.Provider
             value={{
@@ -689,6 +773,7 @@ export function CadenceCanvas({
               stepsById,
               onEdit: (stepId) => setEditing({ mode: 'edit', stepId }),
               onDelete: handleDelete,
+              onDuplicate: handleDuplicate,
             }}
           >
             <FlowCanvas
@@ -714,6 +799,9 @@ export function CadenceCanvas({
         <StepEditor
           cadenceId={cadenceId}
           step={editingStep}
+          defaultActionType={
+            editing.mode === 'new' ? editing.actionType : undefined
+          }
           canEdit
           canDelete={editing.mode === 'edit' && !hasLiveEnrollments}
           onClose={() => setEditing(null)}

@@ -463,6 +463,68 @@ export async function saveCadenceLayout(
 }
 
 /**
+ * Duplicates an existing step, copying its configuration into a new step
+ * appended at the end of the cadence. Goes through the same
+ * `addStepService` path as a manual add, so ordering + validation are
+ * identical. Attachments are NOT copied (the copy starts with none).
+ */
+export async function duplicateStep(cadenceId: string, stepId: string) {
+  const session = await requireSession()
+  requirePermission(session.dbUser, 'cadences:manage')
+
+  if (!cadenceId || !stepId) {
+    return { error: 'Cadence and step are required' }
+  }
+
+  try {
+    const db = createTenantPrisma(session.organizationId)
+    // Tenant-scoped read authorizes + confirms the step belongs to the org.
+    const source = await db.cadenceStep.findFirst({
+      where: { id: stepId, cadenceId },
+    })
+    if (!source) {
+      return { error: 'Step not found' }
+    }
+
+    const step = await addStepService(
+      cadenceId,
+      {
+        actionType: source.actionType,
+        stepOrder: 1, // ignored — service appends at the end
+        delayHours: source.delayHours,
+        subject: source.emailSubject,
+        body: source.emailBody,
+        taskTitle: source.taskTitle,
+        taskDescription: source.taskDescription,
+        startNewThread: source.startNewThread,
+      },
+      session.organizationId,
+    )
+
+    db.auditEntry.create({
+      data: tenantData({
+        userId: session.dbUser.id,
+        action: 'CREATE',
+        entityType: 'CadenceStep',
+        entityId: step.id,
+        changes: { cadenceId, duplicatedFrom: stepId },
+      }),
+    }).catch((err) => {
+      console.error('Audit log failed (duplicateStep):', err)
+    })
+
+    revalidatePath('/cadences')
+    return { data: step }
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'statusCode' in err) {
+      const appErr = err as { message: string; statusCode: number }
+      return { error: appErr.message }
+    }
+    return { error: 'Failed to duplicate step. Please try again.' }
+  }
+}
+
+/**
  * Enrolls a lead in a cadence.
  *
  * @param cadenceId - The cadence to enroll the lead in
