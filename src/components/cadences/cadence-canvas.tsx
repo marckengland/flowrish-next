@@ -482,8 +482,21 @@ function FlowCanvas({
         }, 600)
       },
       onAllLayersRendered(ctx: FreeLayoutPluginContext) {
+        // Ports measure their offset from the DOM only after the first
+        // paint. Until that happens the line geometry is stale, so the
+        // connections render invisible and would otherwise only appear once
+        // a drag forced a recompute. Once the nodes have actually laid out,
+        // re-validate every port and force the lines layer to re-render.
+        const refreshLines = (): void => {
+          if (ctx.document.disposed) return
+          ctx.document.getAllPorts().forEach((port) => port.validate())
+          ctx.document.linesManager.forceUpdate()
+        }
         setTimeout(() => {
+          if (ctx.document.disposed) return
           void ctx.tools.fitView(false)
+          // Two frames: first lets ports measure, second redraws the lines.
+          requestAnimationFrame(() => requestAnimationFrame(refreshLines))
         }, 10)
       },
     }),
