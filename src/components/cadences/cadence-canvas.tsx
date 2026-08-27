@@ -466,8 +466,19 @@ function FlowCanvas({
       readonly: readOnly,
       initialData: buildDocument(steps, layout),
       nodeRegistries: registries,
-      // We render our own node content, so the form/node engine is off.
-      nodeEngine: { enable: false },
+      // The node engine must be ENABLED even though we render our own node
+      // content. With it disabled, a node's ports are only registered when
+      // the React node paints (WorkflowPortRender) — which is AFTER
+      // initialData loads — so the edges can't resolve their ports and no
+      // line entities are ever created (the lines layer renders empty until a
+      // drag materialises them). With the engine on, ports exist at node-
+      // entity creation, so the edges form their lines on load. We still draw
+      // our own visuals via renderDefaultNode; the per-node formMeta below is
+      // a no-op that just satisfies the engine.
+      nodeEngine: { enable: true },
+      getNodeDefaultRegistry(type) {
+        return { type, meta: {}, formMeta: { render: () => null } }
+      },
       materials: {
         renderDefaultNode: CanvasNode,
       },
@@ -518,37 +529,55 @@ function FlowCanvas({
         }, 600)
       },
       onAllLayersRendered(ctx: FreeLayoutPluginContext) {
+        // Dev-only debug handle so we can inspect the live editor state from
+        // the browser console (e.g. window.__flowCtx.document.linesManager
+        // .getAllLines().length). Stripped in production builds.
+        if (process.env.NODE_ENV !== 'production') {
+          ;(globalThis as unknown as { __flowCtx?: unknown }).__flowCtx = ctx
+        }
         // Why connections are invisible until you drag a node:
         //
-        // A line's path is produced by WorkflowLineRenderData.update(), which
-        // reads the live fromPort/toPort points. That runs once, in the lines
-        // layer's useLayoutEffect rAF on mount. `fitView` then changes the
-        // playground's viewport transform (the port points depend on it) but
-        // never re-triggers update() — so every line keeps its stale, pre-fit
-        // geometry until something forces a recompute. A node drag is what
-        // does that, which is why only the dragged node's lines appeared.
+        // A line entity can only be created once BOTH its ports exist. Our
+        // nodes register their ports when the node React component renders
+        // (WorkflowPortRender), which happens AFTER `initialData` is loaded —
+        // so at edge-load time the ports don't exist yet and no line entities
+        // are ever created. The lines layer (which reactively renders
+        // WorkflowLineEntity) therefore stays empty. Dragging a node is what
+        // finally materialises its lines, which is why only the moved node's
+        // connections appeared.
         //
-        // Fix: after fitView settles the viewport, recompute each line's
-        // geometry (the real update(), which must run inside a rAF) and force
-        // the layer to re-render with the fresh paths.
-        const recompute = (): void => {
+        // Fix: once the layers (and thus node ports) have mounted, explicitly
+        // (re)create the linear chain — Start → each step → End — guarded by
+        // hasLine so it's idempotent. Then recompute geometry + repaint.
+        const chain = [
+          START_NODE_ID,
+          ...steps.map((s) => s.id),
+          END_NODE_ID,
+        ]
+        const ensureLines = (): void => {
           if (ctx.document.disposed) return
           try {
-            for (const line of ctx.document.linesManager.getAllLines()) {
-              line.getData(WorkflowLineRenderData).update()
+            const lm = ctx.document.linesManager
+            for (let i = 0; i < chain.length - 1; i++) {
+              const from = chain[i]
+              const to = chain[i + 1]
+              if (!lm.hasLine({ from, to })) {
+                lm.createLine({ from, to })
+              }
             }
-            ctx.document.linesManager.forceUpdate()
+            lm.getAllLines().forEach((line) =>
+              line.getData(WorkflowLineRenderData).update(),
+            )
+            lm.forceUpdate()
           } catch {
-            // Non-fatal — lines may not be ready on an early pass.
+            // Non-fatal — ports may not be mounted yet on an early pass.
           }
         }
-        // fitView resolves once the viewport transform is applied; recompute
-        // right after, with extra passes to cover late node paint.
-        void ctx.tools.fitView(false).then(() => {
-          requestAnimationFrame(recompute)
-        })
-        for (const delay of [150, 350, 700]) {
-          setTimeout(() => requestAnimationFrame(recompute), delay)
+        void ctx.tools.fitView(false)
+        // Several passes: ports mount a little after the layers render, so an
+        // early pass may no-op; later passes create the lines once ready.
+        for (const delay of [50, 200, 500, 900]) {
+          setTimeout(() => requestAnimationFrame(ensureLines), delay)
         }
       },
     }),
