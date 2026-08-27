@@ -482,22 +482,29 @@ function FlowCanvas({
         }, 600)
       },
       onAllLayersRendered(ctx: FreeLayoutPluginContext) {
-        // Ports measure their offset from the DOM only after the first
-        // paint. Until that happens the line geometry is stale, so the
-        // connections render invisible and would otherwise only appear once
-        // a drag forced a recompute. Once the nodes have actually laid out,
-        // re-validate every port and force the lines layer to re-render.
+        // A connection's path is computed from its two ports' MODEL anchor
+        // points. The visual port dots position via CSS immediately, but the
+        // model points stay stale (0,0) until each port measures its DOM —
+        // which only happens after the node content has painted. Until then
+        // the lines render invisible and would otherwise appear only once a
+        // drag forces a transform recompute (exactly the symptom seen).
+        //
+        // So: re-validate every port (recomputes its anchor from the DOM)
+        // and force the lines layer to redraw. Node content mounts over a
+        // few frames, so retry on a short schedule — forceUpdate is cheap
+        // and idempotent, so redundant passes are harmless.
         const refreshLines = (): void => {
           if (ctx.document.disposed) return
+          // Recompute port anchors from the DOM, then each line's path from
+          // its (now-correct) ports, then force the layer to redraw.
           ctx.document.getAllPorts().forEach((port) => port.validate())
+          ctx.document.linesManager.getAllLines().forEach((line) => line.validate())
           ctx.document.linesManager.forceUpdate()
         }
-        setTimeout(() => {
-          if (ctx.document.disposed) return
-          void ctx.tools.fitView(false)
-          // Two frames: first lets ports measure, second redraws the lines.
-          requestAnimationFrame(() => requestAnimationFrame(refreshLines))
-        }, 10)
+        void ctx.tools.fitView(false)
+        for (const delay of [0, 60, 150, 300, 600]) {
+          setTimeout(() => requestAnimationFrame(refreshLines), delay)
+        }
       },
     }),
     [steps, layout, registries, readOnly, onReorder, onLayout, onValidityChange],
