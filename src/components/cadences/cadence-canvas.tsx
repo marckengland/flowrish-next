@@ -550,21 +550,10 @@ function FlowCanvas({
   // geometry and repaint. Retried across a few frames to catch port mount.
   useEffect(() => {
     const chain = [START_NODE_ID, ...steps.map((s) => s.id), END_NODE_ID]
-    const expectedLines = chain.length - 1
     let cancelled = false
-    let painted = false
     const ensure = (): void => {
-      // Temporary diagnostics (set unconditionally so they work in prod builds
-      // too). __flowMounted = number of ensure() passes that ran; __flowCtx =
-      // the plugin context once the ref resolves. Removed once lines render.
-      const g = globalThis as unknown as {
-        __flowMounted?: number
-        __flowCtx?: unknown
-      }
-      g.__flowMounted = (g.__flowMounted ?? 0) + 1
       const ctx = editorRef.current
       if (!ctx || cancelled || ctx.document.disposed) return
-      g.__flowCtx = ctx
       try {
         const lm = ctx.document.linesManager
         for (let i = 0; i < chain.length - 1; i++) {
@@ -577,38 +566,15 @@ function FlowCanvas({
         )
         lm.forceUpdate()
 
-        // The lines now exist with valid geometry, but the lines layer only
-        // repaints on a render tick — which a node drag triggers (that's why
-        // connections appeared only after moving a node). Once the whole chain
-        // is present, replicate that repaint ONCE: nudge every node +1px then
-        // restore it on the next frame. Positions net out unchanged, and
-        // history is paused around it so this never enters the undo stack.
-        if (!painted && lm.getAllLines().length >= expectedLines) {
-          painted = true
-          void ctx.tools.fitView(false)
-          const json = ctx.document.toJSON() as WorkflowJSON
-          const originals = json.nodes
-            .map((n, i) => ({ id: json.nodes[i].id, p: n.meta?.position }))
-            .filter(
-              (o): o is { id: string; p: { x: number; y: number } } =>
-                !!o.p && typeof o.p.x === 'number' && typeof o.p.y === 'number',
-            )
-          ctx.history.stop()
-          originals.forEach((o) =>
-            ctx.operation.updateNodePosition(o.id, { x: o.p.x + 1, y: o.p.y }),
-          )
-          requestAnimationFrame(() => {
-            try {
-              if (!ctx.document.disposed) {
-                originals.forEach((o) =>
-                  ctx.operation.updateNodePosition(o.id, { x: o.p.x, y: o.p.y }),
-                )
-              }
-            } finally {
-              ctx.history.start()
-            }
-          })
-        }
+        // The lines exist with valid geometry, but the lines layer's React
+        // component doesn't re-render on its own after we create them — the
+        // playground render pipeline sits idle until an interaction (a drag)
+        // wakes it, which is exactly why connections only appeared after
+        // moving a node. Force the pipeline to flush all layers now: it
+        // re-detects the newly created line entities as changed and re-renders
+        // the lines layer, painting the connections without needing a drag.
+        ctx.playground.flush()
+        void ctx.tools.fitView(false)
       } catch {
         // Ports may not be mounted yet on an early pass — a later one covers it.
       }
