@@ -30,6 +30,7 @@ import {
   EditorRenderer,
   FreeLayoutEditorProvider,
   useNodeRender,
+  WorkflowLineRenderData,
   WorkflowPortRender,
   type FreeLayoutProps,
   type FreeLayoutPluginContext,
@@ -519,54 +520,36 @@ function FlowCanvas({
       onAllLayersRendered(ctx: FreeLayoutPluginContext) {
         // Why connections are invisible until you drag a node:
         //
-        // A line's geometry comes from its two ports' anchor points. A port's
-        // point (free-layout-core WorkflowPortEntity.point) is derived from
-        // its DOM rect mapped through the playground's VIEWPORT transform, and
-        // it only recomputes when the node's TransformData fires a change.
-        // `fitView` changes that viewport transform AFTER the lines first
-        // render but fires no node-transform change — so every line keeps its
-        // stale, pre-fit geometry until a node transform actually changes.
-        // Dragging one node is exactly what does that, and only that node's
-        // lines refresh (which matches the reported symptom).
+        // A line's path is produced by WorkflowLineRenderData.update(), which
+        // reads the live fromPort/toPort points. That runs once, in the lines
+        // layer's useLayoutEffect rAF on mount. `fitView` then changes the
+        // playground's viewport transform (the port points depend on it) but
+        // never re-triggers update() — so every line keeps its stale, pre-fit
+        // geometry until something forces a recompute. A node drag is what
+        // does that, which is why only the dragged node's lines appeared.
         //
-        // Fix: after fitView settles the viewport, replicate a drag on every
-        // node — move it, then restore it on the NEXT frame.
-        const nudgeAll = (): void => {
+        // Fix: after fitView settles the viewport, recompute each line's
+        // geometry (the real update(), which must run inside a rAF) and force
+        // the layer to re-render with the fresh paths.
+        const recompute = (): void => {
           if (ctx.document.disposed) return
-          const json = ctx.document.toJSON() as WorkflowJSON
-          const originals = json.nodes
-            .map((n, i) => ({ id: json.nodes[i].id, p: n.meta?.position }))
-            .filter(
-              (o): o is { id: string; p: { x: number; y: number } } =>
-                !!o.p && typeof o.p.x === 'number' && typeof o.p.y === 'number',
-            )
           try {
-            // Frame 1: a real move fires the node's transform change, which
-            // makes its ports recompute against the now-settled viewport
-            // transform, giving the lines correct geometry.
-            originals.forEach((o) =>
-              ctx.operation.updateNodePosition(o.id, { x: o.p.x + 1, y: o.p.y }),
-            )
-            // Frame 2: restore, so positions net out unchanged. Must be a
-            // separate frame — a synchronous move+restore nets to zero and is
-            // deduped, firing no transform event at all.
-            requestAnimationFrame(() => {
-              if (ctx.document.disposed) return
-              originals.forEach((o) =>
-                ctx.operation.updateNodePosition(o.id, { x: o.p.x, y: o.p.y }),
-              )
-              ctx.document.linesManager.forceUpdate()
-            })
+            for (const line of ctx.document.linesManager.getAllLines()) {
+              line.getData(WorkflowLineRenderData).update()
+            }
+            ctx.document.linesManager.forceUpdate()
           } catch {
-            // Non-fatal — nodes may not be ready on an early pass.
+            // Non-fatal — lines may not be ready on an early pass.
           }
         }
-        // Fit first (settles the viewport transform the port anchors depend
-        // on), then nudge once the DOM has painted; a second pass covers late
-        // paint.
-        void ctx.tools.fitView(false)
-        setTimeout(() => requestAnimationFrame(nudgeAll), 200)
-        setTimeout(() => requestAnimationFrame(nudgeAll), 500)
+        // fitView resolves once the viewport transform is applied; recompute
+        // right after, with extra passes to cover late node paint.
+        void ctx.tools.fitView(false).then(() => {
+          requestAnimationFrame(recompute)
+        })
+        for (const delay of [150, 350, 700]) {
+          setTimeout(() => requestAnimationFrame(recompute), delay)
+        }
       },
     }),
     [steps, layout, registries, readOnly, onReorder, onLayout, onValidityChange],
