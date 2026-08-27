@@ -449,6 +449,9 @@ function FlowCanvas({
     stepIdsRef.current = steps.map((s) => s.id)
   }, [steps])
 
+  // Ref to the flowgram plugin context (forwarded by FreeLayoutEditorProvider).
+  const editorRef = useRef<FreeLayoutPluginContext | null>(null)
+
   // Simple trailing debounce for the (chatty) content-change callback.
   const debounceRef = useRef<number | null>(null)
   useEffect(
@@ -528,64 +531,59 @@ function FlowCanvas({
           }
         }, 600)
       },
-      onAllLayersRendered(ctx: FreeLayoutPluginContext) {
-        // Dev-only debug handle so we can inspect the live editor state from
-        // the browser console (e.g. window.__flowCtx.document.linesManager
-        // .getAllLines().length). Stripped in production builds.
-        if (process.env.NODE_ENV !== 'production') {
-          ;(globalThis as unknown as { __flowCtx?: unknown }).__flowCtx = ctx
-        }
-        // Why connections are invisible until you drag a node:
-        //
-        // A line entity can only be created once BOTH its ports exist. Our
-        // nodes register their ports when the node React component renders
-        // (WorkflowPortRender), which happens AFTER `initialData` is loaded —
-        // so at edge-load time the ports don't exist yet and no line entities
-        // are ever created. The lines layer (which reactively renders
-        // WorkflowLineEntity) therefore stays empty. Dragging a node is what
-        // finally materialises its lines, which is why only the moved node's
-        // connections appeared.
-        //
-        // Fix: once the layers (and thus node ports) have mounted, explicitly
-        // (re)create the linear chain — Start → each step → End — guarded by
-        // hasLine so it's idempotent. Then recompute geometry + repaint.
-        const chain = [
-          START_NODE_ID,
-          ...steps.map((s) => s.id),
-          END_NODE_ID,
-        ]
-        const ensureLines = (): void => {
-          if (ctx.document.disposed) return
-          try {
-            const lm = ctx.document.linesManager
-            for (let i = 0; i < chain.length - 1; i++) {
-              const from = chain[i]
-              const to = chain[i + 1]
-              if (!lm.hasLine({ from, to })) {
-                lm.createLine({ from, to })
-              }
-            }
-            lm.getAllLines().forEach((line) =>
-              line.getData(WorkflowLineRenderData).update(),
-            )
-            lm.forceUpdate()
-          } catch {
-            // Non-fatal — ports may not be mounted yet on an early pass.
-          }
-        }
-        void ctx.tools.fitView(false)
-        // Several passes: ports mount a little after the layers render, so an
-        // early pass may no-op; later passes create the lines once ready.
-        for (const delay of [50, 200, 500, 900]) {
-          setTimeout(() => requestAnimationFrame(ensureLines), delay)
-        }
-      },
     }),
     [steps, layout, registries, readOnly, onReorder, onLayout, onValidityChange],
   )
 
+  // Materialise the connection lines after mount.
+  //
+  // The editor's onAllLayersRendered lifecycle callback does NOT fire in this
+  // setup, so anything placed there never ran. Instead we drive it from a
+  // React effect via a ref to the plugin context, which is guaranteed to run.
+  //
+  // Why it's needed: a line entity only exists once BOTH its ports do. Our
+  // nodes register their ports when the node paints (WorkflowPortRender),
+  // which is AFTER initialData loads — so the edges can't form lines on load
+  // and the lines layer stays empty until a drag materialises them. So once
+  // the ports have mounted we explicitly (re)create the linear chain — Start
+  // → each step → End — guarded by hasLine so it's idempotent, then recompute
+  // geometry and repaint. Retried across a few frames to catch port mount.
+  useEffect(() => {
+    const chain = [START_NODE_ID, ...steps.map((s) => s.id), END_NODE_ID]
+    let cancelled = false
+    const ensure = (): void => {
+      const ctx = editorRef.current
+      if (!ctx || cancelled || ctx.document.disposed) return
+      if (process.env.NODE_ENV !== 'production') {
+        ;(globalThis as unknown as { __flowCtx?: unknown }).__flowCtx = ctx
+      }
+      try {
+        const lm = ctx.document.linesManager
+        for (let i = 0; i < chain.length - 1; i++) {
+          const from = chain[i]
+          const to = chain[i + 1]
+          if (!lm.hasLine({ from, to })) lm.createLine({ from, to })
+        }
+        lm.getAllLines().forEach((line) =>
+          line.getData(WorkflowLineRenderData).update(),
+        )
+        lm.forceUpdate()
+        void ctx.tools.fitView(false)
+      } catch {
+        // Ports may not be mounted yet on an early pass — a later one covers it.
+      }
+    }
+    const timers = [0, 120, 300, 600, 1000, 1600].map((d) =>
+      window.setTimeout(() => requestAnimationFrame(ensure), d),
+    )
+    return () => {
+      cancelled = true
+      timers.forEach((t) => window.clearTimeout(t))
+    }
+  }, [steps])
+
   return (
-    <FreeLayoutEditorProvider {...editorProps}>
+    <FreeLayoutEditorProvider ref={editorRef} {...editorProps}>
       <EditorRenderer className="size-full" />
     </FreeLayoutEditorProvider>
   )
