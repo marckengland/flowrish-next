@@ -550,7 +550,9 @@ function FlowCanvas({
   // geometry and repaint. Retried across a few frames to catch port mount.
   useEffect(() => {
     const chain = [START_NODE_ID, ...steps.map((s) => s.id), END_NODE_ID]
+    const expectedLines = chain.length - 1
     let cancelled = false
+    let painted = false
     const ensure = (): void => {
       const ctx = editorRef.current
       if (!ctx || cancelled || ctx.document.disposed) return
@@ -566,15 +568,38 @@ function FlowCanvas({
         )
         lm.forceUpdate()
 
-        // The lines exist with valid geometry, but the lines layer's React
-        // component doesn't re-render on its own after we create them — the
-        // playground render pipeline sits idle until an interaction (a drag)
-        // wakes it, which is exactly why connections only appeared after
-        // moving a node. Force the pipeline to flush all layers now: it
-        // re-detects the newly created line entities as changed and re-renders
-        // the lines layer, painting the connections without needing a drag.
         ctx.playground.flush()
         void ctx.tools.fitView(false)
+
+        // The line elements mount in a placeholder state with an EMPTY path —
+        // flowgram only computes a line's actual geometry on a real node
+        // transform change (a drag). That's the true reason connections only
+        // appeared after moving a node. So once every line exists, replicate
+        // that transform change ONCE for each node: nudge +1px, then restore
+        // on the next frame. Each move makes the node's incident lines
+        // recompute their path and paint. Positions net out unchanged, and
+        // history.clear() afterwards keeps the undo stack clean (there's
+        // nothing meaningful to undo on a fresh load).
+        if (!painted && lm.getAllLines().length >= expectedLines) {
+          painted = true
+          const json = ctx.document.toJSON() as WorkflowJSON
+          const originals = json.nodes
+            .map((n, i) => ({ id: json.nodes[i].id, p: n.meta?.position }))
+            .filter(
+              (o): o is { id: string; p: { x: number; y: number } } =>
+                !!o.p && typeof o.p.x === 'number' && typeof o.p.y === 'number',
+            )
+          originals.forEach((o) =>
+            ctx.operation.updateNodePosition(o.id, { x: o.p.x + 1, y: o.p.y }),
+          )
+          requestAnimationFrame(() => {
+            if (ctx.document.disposed) return
+            originals.forEach((o) =>
+              ctx.operation.updateNodePosition(o.id, { x: o.p.x, y: o.p.y }),
+            )
+            ctx.history.clear()
+          })
+        }
       } catch {
         // Ports may not be mounted yet on an early pass — a later one covers it.
       }
