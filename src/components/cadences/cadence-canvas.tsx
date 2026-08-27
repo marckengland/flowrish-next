@@ -530,14 +530,32 @@ function FlowCanvas({
         // and idempotent, so redundant passes are harmless.
         const refreshLines = (): void => {
           if (ctx.document.disposed) return
-          // Recompute port anchors from the DOM, then each line's path from
-          // its (now-correct) ports, then force the layer to redraw.
+          // Recompute port anchors from the DOM, then each line's path.
           ctx.document.getAllPorts().forEach((port) => port.validate())
           ctx.document.linesManager.getAllLines().forEach((line) => line.validate())
           ctx.document.linesManager.forceUpdate()
+
+          // Definitive fallback: a node drag is the one thing that reliably
+          // makes stale connection geometry appear, because the position
+          // update forces the incident lines to recompute. Replicate that
+          // for every node — nudge 1px, then restore — so positions net out
+          // unchanged but every line is refreshed exactly as a drag would.
+          try {
+            const json = ctx.document.toJSON() as WorkflowJSON
+            for (const n of json.nodes) {
+              const p = n.meta?.position
+              if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') {
+                continue
+              }
+              ctx.operation.updateNodePosition(n.id, { x: p.x + 1, y: p.y })
+              ctx.operation.updateNodePosition(n.id, { x: p.x, y: p.y })
+            }
+          } catch {
+            // Non-fatal — the validate/forceUpdate pass above still ran.
+          }
         }
         void ctx.tools.fitView(false)
-        for (const delay of [0, 60, 150, 300, 600]) {
+        for (const delay of [0, 120, 400]) {
           setTimeout(() => requestAnimationFrame(refreshLines), delay)
         }
       },
