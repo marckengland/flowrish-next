@@ -484,6 +484,19 @@ model Cadence {
   enrollments CadenceEnrollment[]
   schedule    CadenceSchedule?
 
+  /**
+   * Cosmetic canvas layout for the visual flow builder: per-node
+   * positions keyed by node id ("start", "end", or a CadenceStep id),
+   * e.g. { "positions": { "start": { "x": 0, "y": 160 }, ... } }.
+   *
+   * Purely presentational — the execution order is ALWAYS the linear,
+   * contiguous `CadenceStep.stepOrder` the Inngest runner reads. The
+   * canvas derives a new stepOrder from the Start→End connection chain
+   * and persists it through the normal reorder path; positions here just
+   * let the builder restore where the user dragged each node.
+   */
+  canvasLayout Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

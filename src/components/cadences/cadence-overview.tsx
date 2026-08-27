@@ -6,7 +6,7 @@ import { List, Workflow } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { CadenceBuilder } from '@/components/cadences/cadence-builder'
-import type { CadenceStep } from '@/hooks/use-cadences'
+import type { CadenceStep, CanvasLayout } from '@/hooks/use-cadences'
 
 /**
  * The flowgram canvas is a large, browser-only bundle. Load it lazily and
@@ -36,6 +36,7 @@ type View = 'list' | 'flow'
 export interface CadenceOverviewProps {
   cadenceId: string
   initialSteps: readonly CadenceStep[]
+  initialLayout?: CanvasLayout
   readOnly?: boolean
   hasLiveEnrollments?: boolean
 }
@@ -43,6 +44,7 @@ export interface CadenceOverviewProps {
 export function CadenceOverview({
   cadenceId,
   initialSteps,
+  initialLayout,
   readOnly = false,
   hasLiveEnrollments = false,
 }: CadenceOverviewProps): React.JSX.Element {
@@ -91,6 +93,7 @@ export function CadenceOverview({
         <CadenceCanvas
           cadenceId={cadenceId}
           initialSteps={initialSteps}
+          initialLayout={initialLayout}
           readOnly={readOnly}
           hasLiveEnrollments={hasLiveEnrollments}
         />

@@ -43,6 +43,21 @@ export interface CadenceStep {
   updatedAt: string
 }
 
+/** A single node's position on the visual flow canvas. */
+export interface CanvasNodePosition {
+  x: number
+  y: number
+}
+
+/**
+ * Cosmetic layout for the visual flow builder. Positions are keyed by node
+ * id ("start", "end", or a CadenceStep id). Purely presentational — the
+ * runner always executes in `stepOrder`.
+ */
+export interface CanvasLayout {
+  positions: Record<string, CanvasNodePosition>
+}
+
 export interface CadenceListItem {
   id: string
   name: string

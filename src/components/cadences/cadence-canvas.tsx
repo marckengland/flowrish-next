@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -14,7 +15,6 @@ import { useRouter } from 'next/navigation'
 import {
   ChevronLeft,
   ClipboardList,
-  GripVertical,
   Handshake,
   Mail,
   Maximize2,
@@ -22,49 +22,66 @@ import {
   Phone,
   Plus,
   Trash2,
+  Trophy,
   type LucideIcon,
 } from 'lucide-react'
 import {
   EditorRenderer,
-  FixedLayoutEditorProvider,
-  FlowRendererKey,
+  FreeLayoutEditorProvider,
   useNodeRender,
-  type FixedLayoutProps,
-  type FixedLayoutPluginContext,
-  type FlowDocumentJSON,
-  type FlowNodeEntity,
-  type FlowNodeRegistry,
-} from '@flowgram.ai/fixed-layout-editor'
-import '@flowgram.ai/fixed-layout-editor/index.css'
+  WorkflowPortRender,
+  type FreeLayoutProps,
+  type FreeLayoutPluginContext,
+  type WorkflowJSON,
+  type WorkflowNodeEntity,
+  type WorkflowNodeRegistry,
+} from '@flowgram.ai/free-layout-editor'
+import '@flowgram.ai/free-layout-editor/index.css'
 
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { deleteStep, reorderSteps } from '@/server/actions/cadences'
+import { deleteStep, reorderSteps, saveCadenceLayout } from '@/server/actions/cadences'
 import { StepEditor } from '@/components/cadences/step-editor'
-import type { CadenceStep, StepActionType } from '@/hooks/use-cadences'
+import type {
+  CadenceStep,
+  CanvasLayout,
+  CanvasNodePosition,
+  StepActionType,
+} from '@/hooks/use-cadences'
 
 /**
- * Visual, node-based cadence builder backed by flowgram.ai's fixed-layout
- * editor. It renders the cadence's steps as a single vertical flow
- * (Start → step → step → … → End) and lets users:
- *   - click a step node to open the existing modal {@link StepEditor}
- *   - click the "+" between nodes to insert a new step at that position
- *   - drag a step node to reorder
- *   - delete a step from the node itself
+ * Visual, node-based cadence builder backed by flowgram.ai's FREE-layout
+ * editor (n8n-style). Users can:
+ *   - drag step nodes anywhere on an infinite canvas
+ *   - draw a connection from one node's output port to the next node's
+ *     input port to wire the send order
+ *   - delete a connection to unwire, then re-draw it differently
+ *   - click a step to edit it, or delete it from the node
  *
- * IMPORTANT — persistence is unchanged. flowgram is used purely as the
- * interaction surface; every structural change is routed through the same
- * server actions the list builder uses (`addStep`/`updateStep`/
- * `deleteStep`/`reorderSteps`) and then `router.refresh()` re-seeds the
- * canvas from the server. flowgram never owns the source of truth, so the
- * strictly-linear, contiguous `stepOrder` contract the Inngest executor
- * depends on is preserved. Branch/loop node types are deliberately NOT
- * registered, so the canvas cannot produce a shape the data model can't
- * represent.
+ * IMPORTANT — the executor contract is preserved. The Inngest runner still
+ * reads a strictly linear, contiguous `CadenceStep.stepOrder`. This canvas
+ * DERIVES that order from the single Start→End connection chain: whenever
+ * the wiring forms one clean line through every step, the new order is
+ * persisted through the same `reorderSteps` server action the list builder
+ * uses. Node positions are cosmetic and saved separately via
+ * `saveCadenceLayout`. If the graph is not a clean single line (a branch, a
+ * gap, a stray edge), the last valid order stays in effect and the UI asks
+ * the user to reconnect — the canvas can never produce a shape the data
+ * model can't run.
  */
 
 const START_NODE_ID = 'start'
 const END_NODE_ID = 'end'
 const STEP_NODE_TYPE = 'cadenceStep'
+
+// Auto-layout spacing when a node has no saved position yet (horizontal,
+// left-to-right like n8n).
+const AUTO_X_GAP = 320
+const AUTO_Y = 200
+const STEP_W = 288
+const STEP_H = 96
+const MARKER_W = 132
+const MARKER_H = 44
 
 const ACTION_META: Record<
   StepActionType,
@@ -105,16 +122,12 @@ function bodyPreview(html: string): string {
     .trim()
 }
 
-/**
- * Handlers + lookup shared with the flowgram-rendered node and adder
- * components (which live inside the editor provider and can't receive
- * props directly).
- */
+// ─── Shared handlers / lookup for nodes rendered inside the editor ───────────
+
 interface CanvasContextValue {
   readOnly: boolean
   stepsById: Map<string, CadenceStep>
   onEdit: (stepId: string) => void
-  onAddAfter: (afterNodeId: string) => void
   onDelete: (stepId: string) => void
 }
 
@@ -126,43 +139,167 @@ function useCanvas(): CanvasContextValue {
   return ctx
 }
 
-/**
- * Builds the flowgram document from the ordered step list. The document
- * is always a single linear chain: a Start marker, one node per step in
- * `stepOrder`, then an End marker.
- */
-function buildDocument(steps: readonly CadenceStep[]): FlowDocumentJSON {
-  return {
-    nodes: [
-      { id: START_NODE_ID, type: 'start', data: { title: 'Start' } },
-      ...steps.map((s) => ({
-        id: s.id,
-        type: STEP_NODE_TYPE,
-        data: { title: ACTION_META[s.actionType].label },
-      })),
-      { id: END_NODE_ID, type: 'end', data: { title: 'End' } },
-    ],
-  }
+// ─── Document build + order derivation ───────────────────────────────────────
+
+interface FlowEdge {
+  sourceNodeID: string
+  targetNodeID: string
 }
 
-/** Node renderer for every node type; branches on the node id/type. */
-function CanvasNode(): React.JSX.Element | null {
-  const { node, startDrag, dragging } = useNodeRender()
+/**
+ * Builds the flowgram document from the ordered steps and saved layout.
+ * Positions come from the saved layout when present, otherwise nodes are
+ * auto-arranged left-to-right. Edges are the current linear chain
+ * (Start → step[0] → … → End) so the canvas opens wired in send order.
+ */
+function buildDocument(
+  steps: readonly CadenceStep[],
+  layout: CanvasLayout | undefined,
+): WorkflowJSON {
+  const pos = (id: string, autoIndex: number): CanvasNodePosition =>
+    layout?.positions?.[id] ?? { x: autoIndex * AUTO_X_GAP, y: AUTO_Y }
+
+  const nodes: WorkflowJSON['nodes'] = [
+    {
+      id: START_NODE_ID,
+      type: 'start',
+      meta: { position: pos(START_NODE_ID, 0) },
+      data: { title: 'Start' },
+    },
+    ...steps.map((s, i) => ({
+      id: s.id,
+      type: STEP_NODE_TYPE,
+      meta: { position: pos(s.id, i + 1) },
+      data: { title: ACTION_META[s.actionType].label },
+    })),
+    {
+      id: END_NODE_ID,
+      type: 'end',
+      meta: { position: pos(END_NODE_ID, steps.length + 1) },
+      data: { title: 'End' },
+    },
+  ]
+
+  const chain = [START_NODE_ID, ...steps.map((s) => s.id), END_NODE_ID]
+  const edges: FlowEdge[] = chain.slice(0, -1).map((sourceNodeID, i) => ({
+    sourceNodeID,
+    targetNodeID: chain[i + 1],
+  }))
+
+  return { nodes, edges }
+}
+
+/**
+ * Derives the linear send order from the connection graph. Returns the
+ * ordered step ids when the edges form exactly one clean line from Start
+ * through every step to End; otherwise returns null (branch, gap, cycle,
+ * or a stray edge), which means "don't touch the order".
+ */
+function deriveLinearOrder(
+  edges: readonly FlowEdge[],
+  stepIds: readonly string[],
+): string[] | null {
+  // A clean single chain has exactly one edge per hop: start→…→end.
+  if (edges.length !== stepIds.length + 1) return null
+
+  const outgoing = new Map<string, string[]>()
+  for (const e of edges) {
+    const arr = outgoing.get(e.sourceNodeID) ?? []
+    arr.push(e.targetNodeID)
+    outgoing.set(e.sourceNodeID, arr)
+  }
+
+  const stepIdSet = new Set(stepIds)
+  const order: string[] = []
+  const visited = new Set<string>()
+  let current = START_NODE_ID
+
+  // Follow the single outgoing edge from each node until we reach End.
+  for (let guard = 0; guard <= stepIds.length + 1; guard++) {
+    const nexts = outgoing.get(current) ?? []
+    if (nexts.length !== 1) return null
+    const next = nexts[0]
+    if (next === END_NODE_ID) {
+      return order.length === stepIds.length ? order : null
+    }
+    if (!stepIdSet.has(next) || visited.has(next)) return null
+    visited.add(next)
+    order.push(next)
+    current = next
+  }
+  return null
+}
+
+// ─── Node registries ─────────────────────────────────────────────────────────
+
+function buildRegistries(readOnly: boolean): WorkflowNodeRegistry[] {
+  const marker = { width: MARKER_W, height: MARKER_H }
+  return [
+    {
+      type: 'start',
+      meta: {
+        isStart: true,
+        deleteDisable: true,
+        copyDisable: true,
+        draggable: !readOnly,
+        defaultPorts: [{ type: 'output' }],
+        size: marker,
+      },
+    },
+    {
+      type: 'end',
+      meta: {
+        deleteDisable: true,
+        copyDisable: true,
+        draggable: !readOnly,
+        defaultPorts: [{ type: 'input' }],
+        size: marker,
+      },
+    },
+    {
+      type: STEP_NODE_TYPE,
+      meta: {
+        // Deletion is routed through the server action from the node's own
+        // trash button so the canvas and DB never diverge.
+        deleteDisable: true,
+        copyDisable: true,
+        draggable: !readOnly,
+        defaultPorts: [{ type: 'input' }, { type: 'output' }],
+        size: { width: STEP_W, height: STEP_H },
+      },
+    },
+  ]
+}
+
+// ─── Node renderers ──────────────────────────────────────────────────────────
+
+/** renderDefaultNode — branches on node type. */
+function CanvasNode({ node }: { node: WorkflowNodeEntity }): React.JSX.Element | null {
+  const render = useNodeRender()
   const { readOnly, stepsById, onEdit, onDelete } = useCanvas()
   const id = node.id
+  const ports = render.ports ?? []
+  const portEls = ports.map((p) => <WorkflowPortRender key={p.id} entity={p} />)
 
-  if (id === START_NODE_ID) {
+  if (id === START_NODE_ID || id === END_NODE_ID) {
+    const isStart = id === START_NODE_ID
     return (
-      <div className="rounded-full border border-border bg-muted px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Start
-      </div>
-    )
-  }
-  if (id === END_NODE_ID) {
-    return (
-      <div className="rounded-full border border-border bg-muted px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        End
-      </div>
+      <>
+        <div
+          ref={render.nodeRef}
+          draggable={!readOnly}
+          onDragStart={render.startDrag}
+          className="flex h-[44px] w-[132px] items-center justify-center gap-1.5 rounded-full border border-border bg-muted text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+        >
+          {isStart ? (
+            <Plus className="size-3.5" aria-hidden="true" />
+          ) : (
+            <Trophy className="size-3.5" aria-hidden="true" />
+          )}
+          {isStart ? 'Start' : 'End'}
+        </div>
+        {portEls}
+      </>
     )
   }
 
@@ -180,47 +317,40 @@ function CanvasNode(): React.JSX.Element | null {
         : null
 
   return (
-    <div
-      className={cn(
-        'w-72 rounded-lg border bg-card p-3.5 text-left shadow-sm transition-colors',
-        dragging ? 'border-brand opacity-40' : 'border-border',
-        !readOnly && 'hover:border-foreground/30',
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            'inline-flex size-7 items-center justify-center rounded-md',
-            meta.badgeClass,
-          )}
-        >
-          <Icon className="size-4" aria-hidden="true" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">
-            {step.stepOrder}. {meta.label}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {describeDelay(step.delayHours)}
-          </p>
-        </div>
-        {!readOnly && (
-          <>
-            <button
-              type="button"
-              aria-label="Drag to reorder"
-              className="cursor-grab text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
-              onMouseDown={(e) => {
-                startDrag(e)
-                e.stopPropagation()
-              }}
-            >
-              <GripVertical className="size-4" aria-hidden="true" />
-            </button>
+    <>
+      <div
+        ref={render.nodeRef}
+        draggable={!readOnly}
+        onDragStart={render.startDrag}
+        className={cn(
+          'flex h-24 w-72 flex-col justify-between rounded-lg border bg-card p-3.5 text-left shadow-sm transition-colors',
+          render.selected ? 'border-brand' : 'border-border',
+          !readOnly && 'hover:border-foreground/30',
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              'inline-flex size-7 shrink-0 items-center justify-center rounded-md',
+              meta.badgeClass,
+            )}
+          >
+            <Icon className="size-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">
+              {step.stepOrder}. {meta.label}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {describeDelay(step.delayHours)}
+            </p>
+          </div>
+          {!readOnly && (
             <button
               type="button"
               aria-label={`Delete step ${step.stepOrder}`}
               className="text-muted-foreground/60 hover:text-danger-foreground"
+              onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation()
                 onDelete(step.id)
@@ -228,170 +358,151 @@ function CanvasNode(): React.JSX.Element | null {
             >
               <Trash2 className="size-4" aria-hidden="true" />
             </button>
-          </>
-        )}
+          )}
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (!readOnly) onEdit(step.id)
+          }}
+          className={cn(
+            'block w-full truncate text-left text-xs text-muted-foreground',
+            !readOnly &&
+              'cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+          )}
+        >
+          {preview ?? 'No content yet — click to edit'}
+        </button>
       </div>
-      <button
-        type="button"
-        disabled={readOnly}
-        onClick={() => !readOnly && onEdit(step.id)}
-        className={cn(
-          'mt-2 block w-full truncate text-left text-xs text-muted-foreground',
-          !readOnly &&
-            'cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-        )}
-      >
-        {preview ?? 'No content yet — click to edit'}
-      </button>
-    </div>
+      {portEls}
+    </>
   )
 }
 
-/**
- * Custom "+" adder rendered in the gap after `from`. Instead of letting
- * flowgram insert a node into its own document, it opens the step editor;
- * the resulting server-side add + reorder re-seeds the canvas.
- */
-function CanvasAdder(props: {
-  from: FlowNodeEntity
-  to?: FlowNodeEntity
-  hoverActivated: boolean
-}): React.JSX.Element | null {
-  const { readOnly, onAddAfter } = useCanvas()
-  if (readOnly) return null
-  // No adder after the End marker.
-  if (props.from.id === END_NODE_ID) return null
-  return (
-    <button
-      type="button"
-      aria-label="Add step here"
-      onClick={() => onAddAfter(props.from.id)}
-      className={cn(
-        'flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-all hover:border-brand hover:text-brand',
-        props.hoverActivated ? 'size-6' : 'size-4',
-      )}
-    >
-      <Plus className={props.hoverActivated ? 'size-4' : 'size-3'} aria-hidden="true" />
-    </button>
-  )
-}
-
-/**
- * The fixed-drag plugin eagerly resolves a DRAG_NODE renderer on ready and
- * the drag indicators once a drag begins. The bundled defaults live in the
- * Semi Design materials package, which we don't use — so we supply small,
- * dependency-free equivalents. Without these, flowgram throws
- * "Unknown render key drag-node".
- */
-function DragNodePreview(): React.JSX.Element {
-  return (
-    <div className="rounded-md border border-brand bg-card px-3 py-1.5 text-xs font-medium shadow-md">
-      Moving step…
-    </div>
-  )
-}
-
-function DragDropIndicator(): React.JSX.Element {
-  return <div className="h-1 w-16 rounded-full bg-brand/70" aria-hidden="true" />
-}
+// ─── Editor host ─────────────────────────────────────────────────────────────
 
 interface FlowCanvasProps {
   steps: readonly CadenceStep[]
+  layout: CanvasLayout | undefined
   readOnly: boolean
   onReorder: (orderedStepIds: string[]) => void
+  onLayout: (positions: Record<string, CanvasNodePosition>) => void
+  onValidityChange: (valid: boolean) => void
 }
 
-/**
- * The flowgram provider + renderer. Kept as its own component so the
- * parent can force a clean re-init (fresh `initialData`) by changing its
- * `key` whenever the server-side step list changes.
- */
 function FlowCanvas({
   steps,
+  layout,
   readOnly,
   onReorder,
+  onLayout,
+  onValidityChange,
 }: FlowCanvasProps): React.JSX.Element {
-  // The server-truth order of step ids, used to detect real reorders in
-  // onContentChange (which also fires on load, expand, fitView, etc.).
+  // Server-truth order, used to detect real reorders (onContentChange also
+  // fires on load, drag, fitView, etc.).
   const orderRef = useRef<string[]>(steps.map((s) => s.id))
   useEffect(() => {
     orderRef.current = steps.map((s) => s.id)
   }, [steps])
 
-  // Only the custom step type needs registering. 'start' / 'end' / 'default'
-  // are flowgram's built-in base registries — redefining a type whose
-  // `extend` equals its own name (e.g. type:'start' extend:'start') creates
-  // an infinite extend-resolution loop ("Maximum call stack size exceeded").
-  const nodeRegistries: FlowNodeRegistry[] = useMemo(
-    () => [
-      {
-        type: STEP_NODE_TYPE,
-        extend: 'default',
-        meta: { draggable: !readOnly, deleteDisable: true },
-      },
-    ],
-    [readOnly],
+  const stepIdsRef = useRef<string[]>(steps.map((s) => s.id))
+  useEffect(() => {
+    stepIdsRef.current = steps.map((s) => s.id)
+  }, [steps])
+
+  // Simple trailing debounce for the (chatty) content-change callback.
+  const debounceRef = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    },
+    [],
   )
 
-  const editorProps = useMemo<FixedLayoutProps>(
+  const registries = useMemo(() => buildRegistries(readOnly), [readOnly])
+
+  const editorProps = useMemo<FreeLayoutProps>(
     () => ({
       background: true,
       readonly: readOnly,
-      initialData: buildDocument(steps),
-      nodeRegistries,
-      // We render entirely from our own step lookup, so the node engine
-      // (forms) is not needed.
+      initialData: buildDocument(steps, layout),
+      nodeRegistries: registries,
+      // We render our own node content, so the form/node engine is off.
       nodeEngine: { enable: false },
       materials: {
         renderDefaultNode: CanvasNode,
-        components: {
-          [FlowRendererKey.ADDER]: CanvasAdder,
-          [FlowRendererKey.DRAG_NODE]: DragNodePreview,
-          [FlowRendererKey.DRAGGABLE_ADDER]: DragDropIndicator,
-          [FlowRendererKey.DRAG_HIGHLIGHT_ADDER]: DragDropIndicator,
-        },
       },
-      history: { enable: true, enableChangeNode: true },
       /**
-       * Fires on any document mutation. We only care about drag-reorders:
-       * derive the new order of step nodes and, if it actually changed
-       * from server truth, persist it via `reorderSteps`.
+       * Prevent self-loops and cycles at connect time. Whole-graph
+       * validation (single clean chain) happens in onContentChange; here we
+       * just stop obviously-illegal links so the runner-safe shape holds.
        */
-      onContentChange(ctx: FixedLayoutPluginContext) {
-        if (readOnly) return
-        const json = ctx.document.toJSON() as FlowDocumentJSON
-        const known = new Set(orderRef.current)
-        const nextOrder = json.nodes
-          .map((n) => n.id)
-          .filter((nid) => known.has(nid))
-        if (nextOrder.length !== orderRef.current.length) return
-        const changed = nextOrder.some((nid, i) => nid !== orderRef.current[i])
-        if (changed) {
-          // Optimistically adopt the new order so we don't re-fire for the
-          // same drag; the server refresh will confirm it.
-          orderRef.current = nextOrder
-          onReorder(nextOrder)
-        }
+      canAddLine(_ctx, fromPort, toPort) {
+        if (fromPort.node === toPort.node) return false
+        return !fromPort.node.lines.allInputNodes.includes(toPort.node)
       },
-      onAllLayersRendered(ctx: FixedLayoutPluginContext) {
+      // Node deletion is routed through the server action (trash button), so
+      // block the editor's own delete to keep canvas + DB in sync.
+      canDeleteNode: () => false,
+      // Lines can always be deleted — that's how the user "disconnects".
+      canDeleteLine: () => true,
+      onContentChange(ctx: FreeLayoutPluginContext) {
+        if (readOnly) return
+        if (debounceRef.current) window.clearTimeout(debounceRef.current)
+        debounceRef.current = window.setTimeout(() => {
+          if (ctx.document.disposed) return
+          const json = ctx.document.toJSON() as WorkflowJSON
+
+          // 1. Persist cosmetic positions.
+          const positions: Record<string, CanvasNodePosition> = {}
+          for (const n of json.nodes) {
+            const p = n.meta?.position
+            if (p && typeof p.x === 'number' && typeof p.y === 'number') {
+              positions[n.id] = { x: p.x, y: p.y }
+            }
+          }
+          onLayout(positions)
+
+          // 2. Derive send order from the wiring.
+          const edges = (json.edges ?? []) as FlowEdge[]
+          const derived = deriveLinearOrder(edges, stepIdsRef.current)
+          onValidityChange(derived !== null)
+          if (derived) {
+            const changed =
+              derived.length !== orderRef.current.length ||
+              derived.some((idv, i) => idv !== orderRef.current[i])
+            if (changed) {
+              orderRef.current = derived
+              onReorder(derived)
+            }
+          }
+        }, 600)
+      },
+      onAllLayersRendered(ctx: FreeLayoutPluginContext) {
         setTimeout(() => {
           void ctx.tools.fitView(false)
         }, 10)
       },
     }),
-    [steps, nodeRegistries, readOnly, onReorder],
+    [steps, layout, registries, readOnly, onReorder, onLayout, onValidityChange],
   )
 
   return (
-    <FixedLayoutEditorProvider {...editorProps}>
+    <FreeLayoutEditorProvider {...editorProps}>
       <EditorRenderer className="size-full" />
-    </FixedLayoutEditorProvider>
+    </FreeLayoutEditorProvider>
   )
 }
+
+// ─── Public component ────────────────────────────────────────────────────────
 
 export interface CadenceCanvasProps {
   cadenceId: string
   initialSteps: readonly CadenceStep[]
+  initialLayout?: CanvasLayout
   readOnly?: boolean
   hasLiveEnrollments?: boolean
 }
@@ -399,6 +510,7 @@ export interface CadenceCanvasProps {
 export function CadenceCanvas({
   cadenceId,
   initialSteps,
+  initialLayout,
   readOnly = false,
   hasLiveEnrollments = false,
 }: CadenceCanvasProps): React.JSX.Element {
@@ -407,31 +519,26 @@ export function CadenceCanvas({
     () => [...initialSteps].sort((a, b) => a.stepOrder - b.stepOrder),
     [initialSteps],
   )
-  const stepsById = useMemo(
-    () => new Map(steps.map((s) => [s.id, s])),
-    [steps],
-  )
+  const stepsById = useMemo(() => new Map(steps.map((s) => [s.id, s])), [steps])
 
   const [editing, setEditing] = useState<
-    { mode: 'new'; afterNodeId: string } | { mode: 'edit'; stepId: string } | null
+    { mode: 'new' } | { mode: 'edit'; stepId: string } | null
   >(null)
   const [error, setError] = useState<string | null>(null)
+  const [graphValid, setGraphValid] = useState(true)
   const [, startTransition] = useTransition()
 
   // flowgram initializes from `initialData` once; re-key it whenever the
-  // server-side step list changes so a refresh re-seeds the canvas.
+  // server-side step list (order/content) changes so a refresh re-seeds.
   const signature = useMemo(
     () => steps.map((s) => `${s.id}:${s.stepOrder}:${s.updatedAt}`).join('|'),
     [steps],
   )
 
-  // SSR gate — flowgram is a browser-only, DI/DOM-heavy editor.
+  // SSR gate — flowgram is a browser-only, DOM-heavy editor.
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
-  // Fullscreen (immersive) canvas. The flowgram editor uses a large infinite
-  // dotted canvas, so a small boxed viewport leaves it looking sparse — going
-  // fullscreen gives the flow room to breathe. Escape exits.
   const [fullscreen, setFullscreen] = useState(false)
   useEffect(() => {
     if (!fullscreen) return
@@ -442,54 +549,42 @@ export function CadenceCanvas({
     return () => document.removeEventListener('keydown', onKey)
   }, [fullscreen])
 
-  function handleReorder(orderedStepIds: string[]): void {
-    setError(null)
-    startTransition(async () => {
-      const result = await reorderSteps(cadenceId, orderedStepIds)
-      if (result && 'error' in result && result.error) {
-        setError(result.error)
-      }
-      router.refresh()
-    })
-  }
+  const handleReorder = useCallback(
+    (orderedStepIds: string[]): void => {
+      setError(null)
+      startTransition(async () => {
+        const result = await reorderSteps(cadenceId, orderedStepIds)
+        if (result && 'error' in result && result.error) {
+          setError(result.error)
+        }
+        router.refresh()
+      })
+    },
+    [cadenceId, router],
+  )
 
-  function handleDelete(stepId: string): void {
-    setError(null)
-    startTransition(async () => {
-      const result = await deleteStep(cadenceId, stepId)
-      if (result && 'error' in result && result.error) {
-        setError(result.error)
-        return
-      }
-      router.refresh()
-    })
-  }
+  const handleLayout = useCallback(
+    (positions: Record<string, CanvasNodePosition>): void => {
+      // Cosmetic — fire-and-forget, no refresh.
+      void saveCadenceLayout(cadenceId, positions)
+    },
+    [cadenceId],
+  )
 
-  /**
-   * After the editor creates a step (always appended at the end by the
-   * service), move it into the slot the user clicked "+" on.
-   */
-  function handleNewStepSaved(saved: CadenceStep): void {
-    const afterNodeId =
-      editing?.mode === 'new' ? editing.afterNodeId : END_NODE_ID
-    const currentIds = steps.map((s) => s.id)
-    const insertAt =
-      afterNodeId === START_NODE_ID
-        ? 0
-        : currentIds.indexOf(afterNodeId) + 1 || currentIds.length
-    // If it's already going to the end, the append is correct — skip the
-    // extra reorder round-trip.
-    if (insertAt >= currentIds.length) return
-    const nextOrder = [...currentIds]
-    nextOrder.splice(insertAt, 0, saved.id)
-    startTransition(async () => {
-      const result = await reorderSteps(cadenceId, nextOrder)
-      if (result && 'error' in result && result.error) {
-        setError(result.error)
-      }
-      router.refresh()
-    })
-  }
+  const handleDelete = useCallback(
+    (stepId: string): void => {
+      setError(null)
+      startTransition(async () => {
+        const result = await deleteStep(cadenceId, stepId)
+        if (result && 'error' in result && result.error) {
+          setError(result.error)
+          return
+        }
+        router.refresh()
+      })
+    },
+    [cadenceId, router],
+  )
 
   const editingStep =
     editing?.mode === 'edit' ? stepsById.get(editing.stepId) ?? null : null
@@ -501,15 +596,33 @@ export function CadenceCanvas({
           <h2 className="text-lg font-semibold tracking-tight">Flow</h2>
           <p className="text-sm text-muted-foreground">
             {steps.length === 0
-              ? 'No steps yet. Use the + on the canvas to add one.'
-              : `${steps.length} step${steps.length === 1 ? '' : 's'} · drag to reorder, click a step to edit.`}
+              ? 'No steps yet. Add one, then wire it from Start to End.'
+              : 'Drag to arrange. Connect each step in one line from Start to End to set the send order.'}
           </p>
         </div>
+        {!readOnly && (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setEditing({ mode: 'new' })}
+          >
+            <Plus className="size-4" aria-hidden="true" />
+            Add step
+          </Button>
+        )}
       </header>
 
       {error ? (
         <p role="alert" className="text-sm text-danger-foreground">
           {error}
+        </p>
+      ) : null}
+
+      {!readOnly && !graphValid && steps.length > 0 ? (
+        <p className="rounded-md border border-warning/30 bg-warning-subtle px-3 py-2 text-sm text-warning-foreground">
+          These steps aren&apos;t connected in a single line from Start to End,
+          so the send order is unchanged. Wire every step in one path to update
+          the order.
         </p>
       ) : null}
 
@@ -521,9 +634,6 @@ export function CadenceCanvas({
             : 'h-[min(680px,calc(100dvh-240px))] min-h-[440px] rounded-lg border',
         )}
       >
-        {/* The flowgram canvas captures wheel/pan and fills the viewport, so
-            the page-level "Back to cadences" link can scroll out of reach.
-            Pin an always-visible exit directly onto the diagram. */}
         <Link
           href="/cadences"
           className="absolute left-3 top-3 z-20 inline-flex items-center gap-1 rounded-md border border-border bg-card/95 px-2.5 py-1.5 text-sm text-muted-foreground shadow-sm backdrop-blur transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
@@ -532,8 +642,6 @@ export function CadenceCanvas({
           <span>Back to cadences</span>
         </Link>
 
-        {/* Fullscreen toggle — the immersive view gives the flow room and
-            escapes the cramped boxed canvas. */}
         <button
           type="button"
           onClick={() => setFullscreen((f) => !f)}
@@ -560,18 +668,19 @@ export function CadenceCanvas({
               readOnly,
               stepsById,
               onEdit: (stepId) => setEditing({ mode: 'edit', stepId }),
-              onAddAfter: (afterNodeId) =>
-                setEditing({ mode: 'new', afterNodeId }),
               onDelete: handleDelete,
             }}
           >
             <FlowCanvas
-              // Re-key on fullscreen change so flowgram re-inits and re-runs
-              // fitView against the new viewport size.
+              // Re-key on step changes + fullscreen so flowgram re-inits and
+              // re-runs fitView against the (new) viewport.
               key={`${signature}:${fullscreen ? 'fs' : 'box'}`}
               steps={steps}
+              layout={initialLayout}
               readOnly={readOnly}
               onReorder={handleReorder}
+              onLayout={handleLayout}
+              onValidityChange={setGraphValid}
             />
           </CanvasContext.Provider>
         ) : (
@@ -588,9 +697,7 @@ export function CadenceCanvas({
           canEdit
           canDelete={editing.mode === 'edit' && !hasLiveEnrollments}
           onClose={() => setEditing(null)}
-          onSaved={(saved) => {
-            if (editing.mode === 'new') handleNewStepSaved(saved)
-          }}
+          onSaved={() => router.refresh()}
           onDeleted={() => router.refresh()}
         />
       )}

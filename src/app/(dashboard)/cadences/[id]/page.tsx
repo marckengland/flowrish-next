@@ -21,9 +21,34 @@ import type {
   CadenceAnalytics,
   CadenceDetail,
   CadenceStep,
+  CanvasLayout,
   EnrollmentListItem,
   EnrollmentStatus,
 } from '@/hooks/use-cadences'
+
+/**
+ * Best-effort parse of the stored `Cadence.canvasLayout` JSON into a
+ * {@link CanvasLayout}. Returns undefined for anything malformed so the
+ * canvas falls back to auto-arranging from stepOrder.
+ */
+function parseCanvasLayout(raw: unknown): CanvasLayout | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const positions = (raw as { positions?: unknown }).positions
+  if (!positions || typeof positions !== 'object') return undefined
+  const clean: CanvasLayout['positions'] = {}
+  for (const [id, pos] of Object.entries(positions as Record<string, unknown>)) {
+    if (
+      pos
+      && typeof pos === 'object'
+      && typeof (pos as { x?: unknown }).x === 'number'
+      && typeof (pos as { y?: unknown }).y === 'number'
+    ) {
+      const p = pos as { x: number; y: number }
+      clean[id] = { x: p.x, y: p.y }
+    }
+  }
+  return { positions: clean }
+}
 import type { EnrollDialogLead } from '@/components/cadences/enroll-dialog'
 
 /**
@@ -138,6 +163,11 @@ export default async function CadenceDetailPage({
     updatedAt: s.updatedAt.toISOString(),
   }))
 
+  // Parse the stored canvas layout (positions per node id). It's cosmetic
+  // and best-effort — a malformed/absent value just means the canvas
+  // auto-arranges from stepOrder.
+  const initialLayout = parseCanvasLayout(cadence.canvasLayout)
+
   const serializedEnrollments: EnrollmentListItem[] = enrollments.map(
     (e) => ({
       id: e.id,
@@ -249,6 +279,7 @@ export default async function CadenceDetailPage({
               <CadenceOverview
                 cadenceId={cadence.id}
                 initialSteps={serializedSteps}
+                initialLayout={initialLayout}
                 readOnly={!canManage || isArchived}
                 hasLiveEnrollments={counts.ACTIVE > 0 || counts.PAUSED > 0}
               />

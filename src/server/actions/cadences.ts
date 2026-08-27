@@ -405,6 +405,64 @@ export async function reorderSteps(cadenceId: string, stepIds: string[]) {
 }
 
 /**
+ * Persists the cosmetic canvas layout (per-node positions) for the visual
+ * flow builder. This never touches execution: `stepOrder` remains the sole
+ * source of truth for the runner. Positions are keyed by node id ("start",
+ * "end", or a CadenceStep id) so the builder can restore where the user
+ * dragged each node.
+ */
+export async function saveCadenceLayout(
+  cadenceId: string,
+  positions: Record<string, { x: number; y: number }>,
+) {
+  const session = await requireSession()
+  requirePermission(session.dbUser, 'cadences:manage')
+
+  if (!cadenceId) {
+    return { error: 'Cadence ID is required' }
+  }
+
+  // Defensive validation + cap — reject anything that isn't a plain
+  // {x,y} map of a sane size.
+  const entries = Object.entries(positions ?? {})
+  if (entries.length > 500) {
+    return { error: 'Layout is too large' }
+  }
+  const clean: Record<string, { x: number; y: number }> = {}
+  for (const [id, pos] of entries) {
+    if (
+      pos
+      && typeof pos.x === 'number'
+      && typeof pos.y === 'number'
+      && Number.isFinite(pos.x)
+      && Number.isFinite(pos.y)
+    ) {
+      clean[id] = { x: pos.x, y: pos.y }
+    }
+  }
+
+  try {
+    const db = createTenantPrisma(session.organizationId)
+    // findFirst is tenant-scoped, so this both authorizes and confirms the
+    // cadence belongs to the caller's organization before we write.
+    const existing = await db.cadence.findFirst({
+      where: { id: cadenceId },
+      select: { id: true },
+    })
+    if (!existing) {
+      return { error: 'Cadence not found' }
+    }
+    await db.cadence.update({
+      where: { id: cadenceId },
+      data: { canvasLayout: { positions: clean } },
+    })
+    return { data: { ok: true } }
+  } catch {
+    return { error: 'Failed to save layout.' }
+  }
+}
+
+/**
  * Enrolls a lead in a cadence.
  *
  * @param cadenceId - The cadence to enroll the lead in
