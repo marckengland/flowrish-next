@@ -7,7 +7,7 @@
 - An Upstash Redis database (for rate limiting)
 - An Inngest account (for background jobs)
 - A Google Cloud project (for Google OAuth login + Gmail integration)
-- A Gemini/OpenAI API key (for AI features — optional)
+- An LLM API key (for AI features — optional). Any OpenAI-compatible provider works: OpenAI, Anthropic (Claude), DeepSeek, Google Gemini (default), or OpenRouter for open-weight models.
 
 ## 1. Clone and Install
 
@@ -49,9 +49,10 @@ cp .env.example .env
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AI_API_URL` | Gemini/OpenAI API endpoint | `https://generativelanguage.googleapis.com/v1beta/openai` |
-| `AI_API_KEY` | API key for AI service | — |
-| `AI_MODEL` | Model name | `gemini-3.1-flash-lite` |
+| `LLM_PROVIDER` | Pick a provider by name: `gemini` (default) / `openai` / `deepseek` / `anthropic` / `openrouter`. Fills the base URL + a default model. | `gemini` |
+| `AI_API_KEY` | API key for the active provider | — |
+| `AI_API_URL` | Override the OpenAI-compatible base URL (wins over `LLM_PROVIDER`; e.g. a local Ollama) | `https://generativelanguage.googleapis.com/v1beta/openai` |
+| `AI_MODEL` | Override the model (e.g. `gpt-4o-mini`, `deepseek-chat`, `moonshotai/kimi-k2`) | `gemini-3.1-flash-lite` |
 | `NEXT_PUBLIC_SITE_URL` | Canonical site URL for SEO metadata, `sitemap.xml`, and `robots.txt` (`src/lib/site.ts`) | `https://flowrish.com` |
 | `NEXT_PUBLIC_APP_URL` | Base URL for organization invite links. Auto-derived from `VERCEL_URL` on Vercel; set explicitly on other hosts | `http://localhost:3000` |
 

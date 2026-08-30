@@ -116,7 +116,7 @@ prisma/
 - **Email Integration** — Gmail **and Microsoft 365 / Outlook** (Microsoft Graph) with OAuth, personalization tags, inbox sync, threaded replies, and rich HTML emails. Encrypted tokens; cadence email steps work with either provider automatically
 - **Calling** — Bring-your-own **click-to-call**: free `tel:` dialer + call logging out of the box, and optional **in-browser calling via Twilio** (per-org credentials, encrypted at rest; TwiML webhook signature verification). A provider comparison (Twilio/Telnyx/SignalWire/Plivo/Bandwidth) with self-serve setup guides lives in Settings
 - **Marketing landing page** — public `/` landing (auth-aware CTAs); the authenticated app lives under `/dashboard`
-- **AI Features** — Email generation, account research, and **Airish**, the in-app AI chatbot assistant (Gemini/OpenAI)
+- **AI Features** — Email generation, account research, and **Airish**, the in-app AI chatbot assistant. Provider-agnostic: runs on any OpenAI-compatible LLM — OpenAI, Anthropic (Claude), DeepSeek, Google Gemini (default), or OpenRouter (open-weight models like Kimi, GLM, Llama, Qwen) — via `LLM_PROVIDER`
 - **CSV Import/Export** — Bulk lead import with duplicate detection and field mapping
 - **Full-text Search** — PostgreSQL tsvector across leads, contacts, and companies
 - **Audit Logging** — Immutable trail of all CUD operations
