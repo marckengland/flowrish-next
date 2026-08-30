@@ -173,6 +173,65 @@ const AI_UNAVAILABLE_MESSAGE = 'AI service temporarily unavailable'
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 /**
+ * Provider-agnostic endpoint resolution. Every AI feature funnels through
+ * callAI(), which POSTs to an OpenAI-compatible `/chat/completions` endpoint —
+ * so the CRM runs on ANY OpenAI-compatible provider with no code change.
+ *
+ * `LLM_PROVIDER` picks a provider by name (fills its base URL + a sensible
+ * default model); `AI_API_URL` / `AI_MODEL` always override when set
+ * explicitly. `AI_API_KEY` is the single key for whichever provider is active.
+ * Defaults to Gemini (free tier) when nothing is set.
+ *
+ *   LLM_PROVIDER=gemini      (default — free tier)
+ *   LLM_PROVIDER=openai | deepseek | anthropic | openrouter
+ *
+ * OpenRouter fronts open-source models (Llama, Qwen, DeepSeek, etc.).
+ */
+const LLM_PRESETS: Record<string, { baseUrl: string; model: string }> = {
+  gemini: {
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    model: 'gemini-3.1-flash-lite',
+  },
+  openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+  deepseek: { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+  anthropic: {
+    baseUrl: 'https://api.anthropic.com/v1',
+    model: 'claude-3-5-haiku-latest',
+  },
+  openrouter: {
+    baseUrl: 'https://openrouter.ai/api/v1',
+    model: 'meta-llama/llama-3.3-70b-instruct',
+  },
+}
+
+function resolveAiEndpoint(): {
+  baseUrl: string
+  model: string
+  headers: Record<string, string>
+} {
+  const provider = (process.env.LLM_PROVIDER ?? '').trim().toLowerCase()
+  const preset = LLM_PRESETS[provider]
+
+  // Explicit AI_API_URL / AI_MODEL win. They carry schema defaults (Gemini),
+  // so read the RAW env to distinguish "explicitly set" from "defaulted".
+  const explicitUrl = process.env.AI_API_URL?.trim()
+  const explicitModel = process.env.AI_MODEL?.trim()
+
+  const baseUrl = (explicitUrl || preset?.baseUrl || env.AI_API_URL).replace(/\/+$/, '')
+  const model = explicitModel || preset?.model || env.AI_MODEL
+
+  const headers: Record<string, string> = {}
+  if (provider === 'openrouter') {
+    // OpenRouter requests attribution headers (optional but recommended).
+    const referer = process.env.NEXT_PUBLIC_SITE_URL
+    if (referer) headers['HTTP-Referer'] = referer
+    headers['X-Title'] = 'Flowrish'
+  }
+
+  return { baseUrl, model, headers }
+}
+
+/**
  * Calls the AI API (OpenAI-compatible chat completions endpoint).
  * Throws AppError with generic message on any failure.
  */
@@ -181,16 +240,18 @@ async function callAI(
   temperature = 0.7,
   maxTokens = 2000,
 ): Promise<string> {
-  const url = `${env.AI_API_URL}/chat/completions`
+  const { baseUrl, model, headers: providerHeaders } = resolveAiEndpoint()
+  const url = `${baseUrl}/chat/completions`
 
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${env.AI_API_KEY}`,
+      ...providerHeaders,
     },
     body: JSON.stringify({
-      model: env.AI_MODEL,
+      model,
       messages,
       temperature,
       max_tokens: maxTokens,
@@ -209,7 +270,7 @@ async function callAI(
       // ignore — body already consumed or unavailable
     }
     console.error(
-      `[AI Service] API request failed (status ${response.status}, model "${env.AI_MODEL}"):`,
+      `[AI Service] API request failed (status ${response.status}, model "${model}"):`,
       detail,
     )
     throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
