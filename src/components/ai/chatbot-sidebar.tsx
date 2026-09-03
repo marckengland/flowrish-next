@@ -179,6 +179,13 @@ interface ExecuteApiResponse {
   error?: { code?: string; message?: string }
 }
 
+/**
+ * Per-tab persistence key for the running conversation. sessionStorage
+ * is deliberate: the thread survives a refresh but not a tab close, so
+ * it won't leak to the next user on a shared browser.
+ */
+const CONVERSATION_STORAGE_KEY = 'airish:conversation'
+
 const QUICK_PROMPTS = [
   'Create a lead named Ada Lovelace at Acme',
   'Take me to the dashboard',
@@ -244,6 +251,35 @@ export function ChatbotSidebar(): React.JSX.Element | null {
 
   // Abort any in-flight stream if the component unmounts.
   useEffect(() => () => abortRef.current?.abort(), [])
+
+  // Restore the conversation after a reload. sessionStorage (not local)
+  // keeps it alive across refreshes but wipes it when the tab closes, so
+  // a chat never lingers for the next person on a shared machine.
+  // Hydrating in an effect (not lazy state init) keeps SSR and the first
+  // client render identical, avoiding a hydration mismatch.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(CONVERSATION_STORAGE_KEY)
+      if (!raw) return
+      const parsed: unknown = JSON.parse(raw)
+      if (Array.isArray(parsed)) setTurns(parsed as ChatTurn[])
+    } catch {
+      // Corrupt or unavailable storage — start fresh, never crash.
+    }
+  }, [])
+
+  // Persist on every change so an accidental refresh keeps the thread.
+  useEffect(() => {
+    try {
+      if (turns.length === 0) {
+        sessionStorage.removeItem(CONVERSATION_STORAGE_KEY)
+      } else {
+        sessionStorage.setItem(CONVERSATION_STORAGE_KEY, JSON.stringify(turns))
+      }
+    } catch {
+      // Quota exceeded or storage disabled — non-fatal, chat still works.
+    }
+  }, [turns])
 
   if (!open) return null
 
@@ -401,6 +437,14 @@ export function ChatbotSidebar(): React.JSX.Element | null {
   /** Aborts an in-flight reply; whatever streamed so far is kept. */
   function stop(): void {
     abortRef.current?.abort()
+  }
+
+  /** Clears the thread (and its saved copy) to start a fresh chat. */
+  function newChat(): void {
+    abortRef.current?.abort()
+    setTurns([])
+    setInput('')
+    textareaRef.current?.focus()
   }
 
   /**
@@ -597,6 +641,17 @@ export function ChatbotSidebar(): React.JSX.Element | null {
             value={autoConfirm}
             onChange={setAutoConfirm}
           />
+          {turns.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-[11px] text-muted-foreground"
+              onClick={newChat}
+              title="Start a new conversation"
+            >
+              New chat
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon-sm"
