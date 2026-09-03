@@ -133,6 +133,16 @@ export type ChatAction =
  */
 export type ChatNavigateAction = Extract<ChatAction, { type: 'navigate' }>
 
+/**
+ * A prior conversation turn replayed to the model for context. Error
+ * bubbles and action cards are never included — only the plain user /
+ * assistant text exchange.
+ */
+export interface ChatHistoryEntry {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface ChatResponse {
   message: string
   /**
@@ -285,6 +295,179 @@ async function callAI(
   }
 
   return content
+}
+
+/**
+ * Streaming twin of {@link callAI}. Sends `stream: true` and yields the
+ * incremental text deltas parsed out of the provider's Server-Sent
+ * Events. Works against any OpenAI-compatible endpoint (delta chunks
+ * shaped as `choices[0].delta.content`, terminated by `data: [DONE]`).
+ *
+ * Throws the same generic {@link AppError} on any failure so the client
+ * never sees provider internals.
+ */
+async function* callAIStream(
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  temperature = 0.7,
+  maxTokens = 2000,
+): AsyncGenerator<string, void, void> {
+  const { baseUrl, model, headers: providerHeaders } = resolveAiEndpoint()
+  const url = `${baseUrl}/chat/completions`
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${env.AI_API_KEY}`,
+      ...providerHeaders,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+      stream: true,
+    }),
+  })
+
+  if (!response.ok || !response.body) {
+    let detail = ''
+    try {
+      detail = (await response.text()).slice(0, 500)
+    } catch {
+      // ignore — body already consumed or unavailable
+    }
+    console.error(
+      `[AI Service] Streaming request failed (status ${response.status}, model "${model}"):`,
+      detail,
+    )
+    throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      // SSE frames are newline-delimited; a single `read()` may span
+      // several frames or split one mid-line, so drain complete lines
+      // and keep any trailing partial in the buffer.
+      let newlineIdx: number
+      while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIdx).trim()
+        buffer = buffer.slice(newlineIdx + 1)
+        if (!line.startsWith('data:')) continue
+        const payload = line.slice(5).trim()
+        if (payload === '[DONE]') return
+        try {
+          const parsed = JSON.parse(payload) as {
+            choices?: Array<{ delta?: { content?: string } }>
+          }
+          const delta = parsed.choices?.[0]?.delta?.content
+          if (typeof delta === 'string' && delta) yield delta
+        } catch {
+          // Ignore keep-alive comments and any non-JSON frame.
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+/**
+ * The assistant appends its structured action inside one of these
+ * markers at the very end of the reply. During streaming we must never
+ * surface a (partial) marker to the user, so we hold back any tail of
+ * the buffer that could still be growing into one.
+ */
+const CHAT_ACTION_MARKERS = ['[ACTION]', '[NAVIGATE:'] as const
+
+/**
+ * Returns the index up to which `text` is safe to reveal to the user —
+ * i.e. everything before a started action marker. If a full marker is
+ * present, we cut at its start; otherwise we hold back the longest
+ * trailing run that is still a prefix of some marker (so `[ACT` never
+ * flashes on screen before the rest of `[ACTION]` arrives).
+ */
+function safeStreamBoundary(text: string): number {
+  let boundary = text.length
+  for (const marker of CHAT_ACTION_MARKERS) {
+    const idx = text.indexOf(marker)
+    if (idx !== -1 && idx < boundary) boundary = idx
+  }
+  if (boundary < text.length) return boundary
+
+  const maxHold = Math.max(...CHAT_ACTION_MARKERS.map((m) => m.length)) - 1
+  for (let hold = Math.min(maxHold, text.length); hold > 0; hold--) {
+    const tail = text.slice(text.length - hold)
+    if (CHAT_ACTION_MARKERS.some((marker) => marker.startsWith(tail))) {
+      return text.length - hold
+    }
+  }
+  return text.length
+}
+
+/**
+ * Streaming twin of {@link chatMessage}. Yields user-facing text deltas
+ * as they arrive (with any trailing `[ACTION]` block withheld) and
+ * returns the final cleaned message plus the parsed action once the
+ * stream completes.
+ *
+ * The returned `message` is authoritative — the client should replace
+ * whatever it streamed with this value on completion so trimming and
+ * action-block stripping always match the non-streaming path.
+ *
+ * Validates: Requirements 8.3, 8.4, 8.5
+ */
+export async function* chatMessageStream(
+  message: string,
+  userId: string,
+  orgId: string,
+  history: ChatHistoryEntry[] = [],
+): AsyncGenerator<{ type: 'delta'; text: string }, ChatResponse, void> {
+  void userId
+  try {
+    const adminPrompt = await getActiveSystemPrompt('chatbot', orgId)
+    // System guardrail always leads. Prior turns are replayed as context
+    // between the guardrail and the new message so the assistant can
+    // resolve follow-ups ("enroll HER too", "what about that lead?").
+    // The `[ACTION]` hint rides only on the current turn — historical
+    // assistant messages were already stripped of their action block.
+    const messages: Array<{
+      role: 'system' | 'user' | 'assistant'
+      content: string
+    }> = [
+      { role: 'system', content: composeSystemPrompt(CHATBOT_ROLE, adminPrompt) },
+      ...history,
+      { role: 'user', content: message + CHAT_ACTION_HINT },
+    ]
+
+    let full = ''
+    let emitted = 0
+
+    for await (const delta of callAIStream(messages, 0.5, 1000)) {
+      full += delta
+      const boundary = safeStreamBoundary(full)
+      if (boundary > emitted) {
+        yield { type: 'delta', text: full.slice(emitted, boundary) }
+        emitted = boundary
+      }
+    }
+
+    return extractActionBlock(full)
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error
+    }
+    console.error('[AI Service] chatMessageStream failed:', error)
+    throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
+  }
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   ChevronUp,
   Loader2,
   Send,
+  Square,
   X,
   XCircle,
   Zap,
@@ -23,8 +24,9 @@ import { useLayoutStore } from '@/stores/layout'
  * prompts, lightweight markdown rendering, and an Autopilot switch.
  *
  * Action flow:
- *   1. The user sends a message; `/api/ai/chat` returns the assistant's
- *      reply plus an optional `action` payload.
+ *   1. The user sends a message; `/api/ai/chat` streams the assistant's
+ *      reply token-by-token (SSE) and ends with an optional `action`
+ *      payload, so text appears progressively instead of all at once.
  *   2. If the action is `navigate`, the client handles it locally
  *      (Next router push) — no execute request needed.
  *   3. For data-mutation actions (`create_lead`, `create_task`,
@@ -152,6 +154,22 @@ interface ChatApiResponse {
   error?: { code?: string; message?: string }
 }
 
+/** A prior turn sent back to the server as context for the next reply. */
+interface ChatHistoryMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+/**
+ * One decoded frame from the `/api/ai/chat` SSE stream. `delta` carries
+ * an incremental text chunk, `done` the final cleaned reply + action,
+ * and `error` a generic failure raised partway through the stream.
+ */
+type StreamFrame =
+  | { type: 'delta'; text: string }
+  | { type: 'done'; message?: string; action?: ChatAction | null }
+  | { type: 'error'; message?: string }
+
 interface ExecuteApiResponse {
   data?: {
     success: boolean
@@ -187,9 +205,20 @@ export function ChatbotSidebar(): React.JSX.Element | null {
   const [input, setInput] = useState('')
   const [autoConfirm, setAutoConfirm] = useState(false)
   const [pending, startTransition] = useTransition()
+  // `sending` covers the streamed chat round-trip; `thinking` is the
+  // brief window after the request goes out but before the first token
+  // lands, so the "AI is typing…" hint doesn't linger under a reply
+  // that's already streaming in. `pending` still covers action execution.
+  const [sending, setSending] = useState(false)
+  const [thinking, setThinking] = useState(false)
+  const busy = pending || sending
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  // Lets the Stop button abort an in-flight stream. Aborting the fetch
+  // also tears down the server-side generator, so we stop paying for
+  // tokens the moment the user bails.
+  const abortRef = useRef<AbortController | null>(null)
 
   // Close on Escape.
   useEffect(() => {
@@ -201,15 +230,20 @@ export function ChatbotSidebar(): React.JSX.Element | null {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, setOpen])
 
-  // Stick to the bottom when new turns arrive.
+  // Stick to the bottom as turns arrive AND as a reply streams in.
+  // Depending on the whole `turns` array (new reference per update) keeps
+  // the view pinned to the growing assistant message, not just new turns.
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
-  }, [turns.length])
+  }, [turns, thinking])
 
   // Focus the textarea when the panel opens.
   useEffect(() => {
     if (open) textareaRef.current?.focus()
   }, [open])
+
+  // Abort any in-flight stream if the component unmounts.
+  useEffect(() => () => abortRef.current?.abort(), [])
 
   if (!open) return null
 
@@ -340,7 +374,18 @@ export function ChatbotSidebar(): React.JSX.Element | null {
 
   function send(text?: string): void {
     const trimmed = (text ?? input).trim()
-    if (!trimmed || pending) return
+    if (!trimmed || busy) return
+
+    // Snapshot prior turns as model context before appending this one.
+    // Error bubbles are dropped and only the last few exchanges are kept
+    // so the prompt stays bounded (the server caps this again at 20).
+    const history: ChatHistoryMessage[] = turns
+      .filter(
+        (t): t is ChatTurn & { role: 'user' | 'assistant' } =>
+          t.role === 'user' || t.role === 'assistant',
+      )
+      .slice(-10)
+      .map((t) => ({ role: t.role, content: t.content }))
 
     const userTurn: ChatTurn = {
       id: `u-${Date.now()}`,
@@ -350,71 +395,164 @@ export function ChatbotSidebar(): React.JSX.Element | null {
     setTurns((prev) => [...prev, userTurn])
     setInput('')
 
-    startTransition(async () => {
-      try {
-        const res = await fetch('/api/ai/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ message: trimmed }),
-        })
+    void streamReply(trimmed, history)
+  }
 
+  /** Aborts an in-flight reply; whatever streamed so far is kept. */
+  function stop(): void {
+    abortRef.current?.abort()
+  }
+
+  /**
+   * Sends the message and consumes the `/api/ai/chat` SSE stream,
+   * appending the assistant turn on the first token and growing its
+   * content as deltas arrive. On the terminal `done` frame the streamed
+   * text is replaced with the server's authoritative cleaned message and
+   * any proposed action is attached.
+   */
+  async function streamReply(
+    message: string,
+    history: ChatHistoryMessage[],
+  ): Promise<void> {
+    const assistantId = `a-${Date.now()}`
+    let assistantCreated = false
+    let streamed = ''
+    let finalAction: ChatAction | null = null
+    let streamError: string | null = null
+
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    const pushError = (content: string): void => {
+      setTurns((prev) => [
+        ...prev,
+        { id: `e-${Date.now()}`, role: 'error', content },
+      ])
+    }
+
+    const ensureAssistant = (): void => {
+      if (assistantCreated) return
+      assistantCreated = true
+      setThinking(false)
+      setTurns((prev) => [
+        ...prev,
+        { id: assistantId, role: 'assistant', content: '' },
+      ])
+    }
+
+    setSending(true)
+    setThinking(true)
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ message, history }),
+        signal: controller.signal,
+      })
+
+      if (!res.ok || !res.body) {
         const body = (await res.json().catch(() => ({}))) as ChatApiResponse
-
-        if (!res.ok) {
-          setTurns((prev) => [
-            ...prev,
-            {
-              id: `e-${Date.now()}`,
-              role: 'error',
-              content: body.error?.message ?? 'AI service temporarily unavailable',
-            },
-          ])
-          return
-        }
-
-        const message = body.data?.message?.trim()
-        if (!message) {
-          setTurns((prev) => [
-            ...prev,
-            {
-              id: `e-${Date.now()}`,
-              role: 'error',
-              content: 'AI service temporarily unavailable',
-            },
-          ])
-          return
-        }
-
-        const action = sanitizeAction(body.data?.action ?? null)
-        const assistantId = `a-${Date.now()}`
-        setTurns((prev) => [
-          ...prev,
-          {
-            id: assistantId,
-            role: 'assistant',
-            content: message,
-            action: action ?? undefined,
-            actionStatus: action ? 'pending' : undefined,
-          },
-        ])
-        // Autopilot runs every action the moment it arrives — including
-        // navigation — with no confirmation step. This is the explicit
-        // "hands-off" mode the user opts into via the toggle.
-        if (action && autoConfirm) {
-          window.setTimeout(() => executeAction(assistantId, action), 0)
-        }
-      } catch {
-        setTurns((prev) => [
-          ...prev,
-          {
-            id: `e-${Date.now()}`,
-            role: 'error',
-            content: 'AI service temporarily unavailable',
-          },
-        ])
+        pushError(body.error?.message ?? 'AI service temporarily unavailable')
+        return
       }
-    })
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      const handleFrame = (raw: string): void => {
+        const dataLine = raw
+          .split('\n')
+          .find((line) => line.startsWith('data:'))
+        if (!dataLine) return
+        let payload: StreamFrame
+        try {
+          payload = JSON.parse(dataLine.slice(5).trim()) as StreamFrame
+        } catch {
+          return
+        }
+        if (payload.type === 'delta') {
+          ensureAssistant()
+          streamed += payload.text
+          const content = streamed
+          setTurns((prev) =>
+            prev.map((t) => (t.id === assistantId ? { ...t, content } : t)),
+          )
+        } else if (payload.type === 'done') {
+          ensureAssistant()
+          finalAction = sanitizeAction(payload.action ?? null)
+          const finalMessage = (payload.message ?? streamed).trim()
+          const action = finalAction
+          setTurns((prev) =>
+            prev.map((t) =>
+              t.id === assistantId
+                ? {
+                    ...t,
+                    content: finalMessage,
+                    action: action ?? undefined,
+                    actionStatus: action ? 'pending' : undefined,
+                  }
+                : t,
+            ),
+          )
+        } else if (payload.type === 'error') {
+          streamError = payload.message ?? 'AI service temporarily unavailable'
+        }
+      }
+
+      // Drain complete SSE frames (blank-line separated) as they arrive.
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let sep: number
+        while ((sep = buffer.indexOf('\n\n')) !== -1) {
+          handleFrame(buffer.slice(0, sep))
+          buffer = buffer.slice(sep + 2)
+        }
+      }
+      if (buffer.trim()) handleFrame(buffer)
+
+      if (streamError) {
+        // A mid-stream failure with nothing shown yet reads best as a
+        // plain error bubble; if text already streamed, surface the
+        // error beneath it so the partial reply isn't silently dropped.
+        pushError(streamError)
+        return
+      }
+      if (!assistantCreated) {
+        pushError('AI service temporarily unavailable')
+        return
+      }
+
+      // Autopilot runs every action the moment it arrives — including
+      // navigation — with no confirmation step. This is the explicit
+      // "hands-off" mode the user opts into via the toggle.
+      if (finalAction && autoConfirm) {
+        const action = finalAction
+        window.setTimeout(() => executeAction(assistantId, action), 0)
+      }
+    } catch (err) {
+      // User-initiated stop: keep whatever streamed, no error bubble.
+      // An empty aborted turn is dropped so we don't leave a blank card.
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        if (assistantCreated && streamed.trim() === '') {
+          setTurns((prev) => prev.filter((t) => t.id !== assistantId))
+        }
+      } else if (!assistantCreated) {
+        pushError('AI service temporarily unavailable')
+      } else {
+        pushError('The reply was interrupted. Please try again.')
+      }
+    } finally {
+      abortRef.current = null
+      setSending(false)
+      setThinking(false)
+    }
   }
 
   function onTextareaKeyDown(
@@ -475,7 +613,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
         ref={listRef}
         role="log"
         aria-live="polite"
-        aria-busy={pending || undefined}
+        aria-busy={busy || undefined}
         className="flex-1 space-y-3.5 overflow-y-auto p-[18px]"
       >
         {turns.length === 0 ? (
@@ -490,13 +628,13 @@ export function ChatbotSidebar(): React.JSX.Element | null {
             />
           ))
         )}
-        {pending ? (
+        {thinking || pending ? (
           <p
             className="flex items-center gap-2 text-xs text-muted-foreground"
             aria-live="polite"
           >
             <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-            AI is typing…
+            {pending ? 'Working…' : 'AI is thinking…'}
           </p>
         ) : null}
       </div>
@@ -526,19 +664,33 @@ export function ChatbotSidebar(): React.JSX.Element | null {
             onKeyDown={onTextareaKeyDown}
             rows={2}
             placeholder="Ask Airish…"
-            disabled={pending}
+            disabled={busy}
             className="flex-1 resize-none rounded-[10px] border border-input bg-card px-3 py-2.5 text-sm shadow-sm transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50"
           />
-          <Button
-            type="submit"
-            size="icon-lg"
-            className="rounded-[10px]"
-            disabled={pending || input.trim().length === 0}
-            aria-label="Send message"
-            title="Send"
-          >
-            <Send className="size-4" aria-hidden="true" />
-          </Button>
+          {sending ? (
+            <Button
+              type="button"
+              size="icon-lg"
+              variant="secondary"
+              className="rounded-[10px]"
+              onClick={stop}
+              aria-label="Stop generating"
+              title="Stop"
+            >
+              <Square className="size-3.5 fill-current" aria-hidden="true" />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              size="icon-lg"
+              className="rounded-[10px]"
+              disabled={busy || input.trim().length === 0}
+              aria-label="Send message"
+              title="Send"
+            >
+              <Send className="size-4" aria-hidden="true" />
+            </Button>
+          )}
         </div>
         <p className="mt-2 text-[10.5px] text-muted-foreground">
           Enter to send · Shift+Enter for a new line
