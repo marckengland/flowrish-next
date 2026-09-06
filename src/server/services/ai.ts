@@ -193,9 +193,12 @@ const AI_UNAVAILABLE_MESSAGE = 'AI service temporarily unavailable'
  * Defaults to Gemini (free tier) when nothing is set.
  *
  *   LLM_PROVIDER=gemini      (default — free tier)
- *   LLM_PROVIDER=openai | deepseek | anthropic | openrouter
+ *   LLM_PROVIDER=openai | deepseek | anthropic | openrouter | tokenrouter
  *
- * OpenRouter fronts open-source models (Llama, Qwen, DeepSeek, etc.).
+ * OpenRouter and TokenRouter are OpenAI-compatible multi-provider
+ * gateways — a drop-in `/chat/completions` surface fronting many models,
+ * addressed as `provider/model` (e.g. `z-ai/glm-5.3-free`). Set AI_MODEL
+ * to a model your TokenRouter account/providers actually expose.
  */
 const LLM_PRESETS: Record<string, { baseUrl: string; model: string }> = {
   gemini: {
