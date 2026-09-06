@@ -154,20 +154,34 @@ interface ChatApiResponse {
   error?: { code?: string; message?: string }
 }
 
-/** A prior turn sent back to the server as context for the next reply. */
-interface ChatHistoryMessage {
-  role: 'user' | 'assistant'
+/** A persisted message as returned by the conversations API. */
+interface ConversationMessageResponse {
+  id: string
+  role: string
   content: string
+}
+
+/** A conversation with its messages, from `/api/conversations/*`. */
+interface ConversationDetailResponse {
+  id: string
+  title: string | null
+  messages: ConversationMessageResponse[]
 }
 
 /**
  * One decoded frame from the `/api/ai/chat` SSE stream. `delta` carries
- * an incremental text chunk, `done` the final cleaned reply + action,
- * and `error` a generic failure raised partway through the stream.
+ * an incremental text chunk, `done` the final cleaned reply + action (and
+ * the thread's id, needed the first time a conversation is created), and
+ * `error` a generic failure raised partway through the stream.
  */
 type StreamFrame =
   | { type: 'delta'; text: string }
-  | { type: 'done'; message?: string; action?: ChatAction | null }
+  | {
+      type: 'done'
+      conversationId?: string
+      message?: string
+      action?: ChatAction | null
+    }
   | { type: 'error'; message?: string }
 
 interface ExecuteApiResponse {
@@ -180,11 +194,38 @@ interface ExecuteApiResponse {
 }
 
 /**
- * Per-tab persistence key for the running conversation. sessionStorage
- * is deliberate: the thread survives a refresh but not a tab close, so
- * it won't leak to the next user on a shared browser.
+ * Per-tab pointer to the conversation currently open in this tab. The
+ * messages live in the database (durable across refreshes and devices);
+ * this only remembers which thread to reopen after a reload. sessionStorage
+ * (not local) means "New chat" in one tab doesn't hijack another, and the
+ * pointer clears when the tab closes.
  */
-const CONVERSATION_STORAGE_KEY = 'airish:conversation'
+const ACTIVE_CONVERSATION_KEY = 'airish:active-conversation'
+
+function readActivePointer(): string | null {
+  try {
+    return sessionStorage.getItem(ACTIVE_CONVERSATION_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeActivePointer(id: string): void {
+  try {
+    sessionStorage.setItem(ACTIVE_CONVERSATION_KEY, id)
+  } catch {
+    // Storage disabled — the thread still works, it just won't be
+    // re-pinned to this tab on the next reload.
+  }
+}
+
+function clearActivePointer(): void {
+  try {
+    sessionStorage.removeItem(ACTIVE_CONVERSATION_KEY)
+  } catch {
+    // Non-fatal.
+  }
+}
 
 const QUICK_PROMPTS = [
   'Create a lead named Ada Lovelace at Acme',
@@ -218,6 +259,11 @@ export function ChatbotSidebar(): React.JSX.Element | null {
   // that's already streaming in. `pending` still covers action execution.
   const [sending, setSending] = useState(false)
   const [thinking, setThinking] = useState(false)
+  // The DB conversation this tab is attached to. Null until the first
+  // message creates one (the server returns its id in the `done` frame).
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  // True while the initial thread is being loaded from the DB on mount.
+  const [hydrating, setHydrating] = useState(true)
   const busy = pending || sending
 
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -252,34 +298,55 @@ export function ChatbotSidebar(): React.JSX.Element | null {
   // Abort any in-flight stream if the component unmounts.
   useEffect(() => () => abortRef.current?.abort(), [])
 
-  // Restore the conversation after a reload. sessionStorage (not local)
-  // keeps it alive across refreshes but wipes it when the tab closes, so
-  // a chat never lingers for the next person on a shared machine.
-  // Hydrating in an effect (not lazy state init) keeps SSR and the first
-  // client render identical, avoiding a hydration mismatch.
+  // Restore the thread from the DB on mount. If this tab has a pointer to
+  // a specific conversation we reopen that; otherwise we load the user's
+  // most recent one. Messages are durable server-side, so this survives
+  // refreshes, new tabs, and other devices — not just a single tab.
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(CONVERSATION_STORAGE_KEY)
-      if (!raw) return
-      const parsed: unknown = JSON.parse(raw)
-      if (Array.isArray(parsed)) setTurns(parsed as ChatTurn[])
-    } catch {
-      // Corrupt or unavailable storage — start fresh, never crash.
+    let cancelled = false
+
+    async function hydrate(): Promise<void> {
+      const pointer = readActivePointer()
+      const url = pointer
+        ? `/api/conversations/${pointer}`
+        : '/api/conversations/latest'
+      try {
+        const res = await fetch(url, {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+        if (!res.ok) {
+          // Stale pointer (deleted/foreign thread) or no AI access — drop
+          // the pointer and start clean rather than surfacing an error.
+          if (pointer) clearActivePointer()
+          return
+        }
+        const body = (await res.json().catch(() => ({}))) as {
+          data?: ConversationDetailResponse | null
+        }
+        const convo = body.data
+        if (cancelled || !convo) return
+        setConversationId(convo.id)
+        writeActivePointer(convo.id)
+        setTurns(
+          convo.messages.map((m) => ({
+            id: m.id,
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            content: m.content,
+          })),
+        )
+      } catch {
+        // Network error — leave the panel empty; a new chat still works.
+      } finally {
+        if (!cancelled) setHydrating(false)
+      }
+    }
+
+    void hydrate()
+    return () => {
+      cancelled = true
     }
   }, [])
-
-  // Persist on every change so an accidental refresh keeps the thread.
-  useEffect(() => {
-    try {
-      if (turns.length === 0) {
-        sessionStorage.removeItem(CONVERSATION_STORAGE_KEY)
-      } else {
-        sessionStorage.setItem(CONVERSATION_STORAGE_KEY, JSON.stringify(turns))
-      }
-    } catch {
-      // Quota exceeded or storage disabled — non-fatal, chat still works.
-    }
-  }, [turns])
 
   if (!open) return null
 
@@ -412,17 +479,6 @@ export function ChatbotSidebar(): React.JSX.Element | null {
     const trimmed = (text ?? input).trim()
     if (!trimmed || busy) return
 
-    // Snapshot prior turns as model context before appending this one.
-    // Error bubbles are dropped and only the last few exchanges are kept
-    // so the prompt stays bounded (the server caps this again at 20).
-    const history: ChatHistoryMessage[] = turns
-      .filter(
-        (t): t is ChatTurn & { role: 'user' | 'assistant' } =>
-          t.role === 'user' || t.role === 'assistant',
-      )
-      .slice(-10)
-      .map((t) => ({ role: t.role, content: t.content }))
-
     const userTurn: ChatTurn = {
       id: `u-${Date.now()}`,
       role: 'user',
@@ -431,7 +487,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
     setTurns((prev) => [...prev, userTurn])
     setInput('')
 
-    void streamReply(trimmed, history)
+    void streamReply(trimmed)
   }
 
   /** Aborts an in-flight reply; whatever streamed so far is kept. */
@@ -439,11 +495,18 @@ export function ChatbotSidebar(): React.JSX.Element | null {
     abortRef.current?.abort()
   }
 
-  /** Clears the thread (and its saved copy) to start a fresh chat. */
+  /**
+   * Starts a fresh chat. The current thread stays saved in the DB; we just
+   * detach this tab from it. A new conversation is created lazily on the
+   * next send (the server returns its id), so refreshing before sending
+   * won't strand an empty thread.
+   */
   function newChat(): void {
     abortRef.current?.abort()
     setTurns([])
     setInput('')
+    setConversationId(null)
+    clearActivePointer()
     textareaRef.current?.focus()
   }
 
@@ -454,10 +517,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
    * text is replaced with the server's authoritative cleaned message and
    * any proposed action is attached.
    */
-  async function streamReply(
-    message: string,
-    history: ChatHistoryMessage[],
-  ): Promise<void> {
+  async function streamReply(message: string): Promise<void> {
     const assistantId = `a-${Date.now()}`
     let assistantCreated = false
     let streamed = ''
@@ -494,7 +554,10 @@ export function ChatbotSidebar(): React.JSX.Element | null {
           Accept: 'text/event-stream',
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ message, history }),
+        body: JSON.stringify({
+          message,
+          conversationId: conversationId ?? undefined,
+        }),
         signal: controller.signal,
       })
 
@@ -528,6 +591,12 @@ export function ChatbotSidebar(): React.JSX.Element | null {
           )
         } else if (payload.type === 'done') {
           ensureAssistant()
+          // First turn of a brand-new thread: adopt the server's id so
+          // subsequent sends continue it and a refresh reopens it.
+          if (payload.conversationId && payload.conversationId !== conversationId) {
+            setConversationId(payload.conversationId)
+            writeActivePointer(payload.conversationId)
+          }
           finalAction = sanitizeAction(payload.action ?? null)
           const finalMessage = (payload.message ?? streamed).trim()
           const action = finalAction
@@ -671,7 +740,12 @@ export function ChatbotSidebar(): React.JSX.Element | null {
         aria-busy={busy || undefined}
         className="flex-1 space-y-3.5 overflow-y-auto p-[18px]"
       >
-        {turns.length === 0 ? (
+        {hydrating && turns.length === 0 ? (
+          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+            Loading your conversation…
+          </p>
+        ) : turns.length === 0 ? (
           <EmptyState onPrompt={(p) => send(p)} />
         ) : (
           turns.map((turn) => (

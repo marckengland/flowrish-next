@@ -106,6 +106,8 @@ model Organization {
   insights            Insight[]
   stepExecutionLogs   StepExecutionLog[]
   voiceConfig         VoiceConfig?
+  conversations       Conversation[]
+  conversationMessages ConversationMessage[]
 }
 
 /// Per-organization voice/calling credentials (bring-your-own).
@@ -234,6 +236,7 @@ model User {
   coachingComments        CoachingComment[]    @relation("coachingComments")
   forecastSubmissions     ForecastSubmission[] @relation("forecastSubmissions")
   deletionRequests        DeletionRequest[]    @relation("deletionRequests")
+  conversations           Conversation[]
 }
 
 // ─── Lead & Contact Models ───────────────────────────────────────────────────
@@ -965,4 +968,49 @@ model Waitlist {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+}
+
+// ─── AI Assistant Conversations ──────────────────────────────────────────────
+
+/// A persisted Airish (AI assistant) chat thread, scoped to one user
+/// within an organization. Durable across refreshes and devices — unlike
+/// the prior per-tab sessionStorage. `title` is derived from the first
+/// user message and may be renamed later.
+model Conversation {
+  id     String  @id @default(uuid())
+  title  String?
+  userId String
+  user   User    @relation(fields: [userId], references: [id])
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  messages ConversationMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([organizationId, userId, updatedAt])
+}
+
+/// A single turn in a Conversation. Append-only (only createdAt). We store
+/// just the plain user/assistant text exchange — ephemeral action cards
+/// and their statuses are never persisted, so a reloaded thread can't
+/// re-trigger a stale action.
+model ConversationMessage {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // "user" | "assistant"
+  content        String
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([conversationId, createdAt])
 }

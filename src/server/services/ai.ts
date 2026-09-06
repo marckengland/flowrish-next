@@ -202,15 +202,19 @@ const LLM_PRESETS: Record<string, { baseUrl: string; model: string }> = {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     model: 'gemini-3.1-flash-lite',
   },
-  openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-  deepseek: { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+  openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.6-luna' },
+  deepseek: { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash' },
   anthropic: {
     baseUrl: 'https://api.anthropic.com/v1',
-    model: 'claude-3-5-haiku-latest',
+    model: 'claude-sonnet-5',
   },
   openrouter: {
     baseUrl: 'https://openrouter.ai/api/v1',
     model: 'meta-llama/llama-3.3-70b-instruct',
+  },
+  tokenrouter: {
+    baseUrl: 'https://api.tokenrouter.com/v1',
+    model: 'z-ai/glm-5.3-free',
   },
 }
 

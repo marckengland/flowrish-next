@@ -32,6 +32,8 @@ export const TENANT_SCOPED_MODELS = [
   'FieldMapping',
   'StageTransition',
   'ScoreHistory',
+  'Conversation',
+  'ConversationMessage',
 ] as const
 
 export type TenantScopedModel = (typeof TENANT_SCOPED_MODELS)[number]
