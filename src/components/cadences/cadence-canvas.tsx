@@ -535,81 +535,52 @@ function FlowCanvas({
     [steps, layout, registries, readOnly, onReorder, onLayout, onValidityChange],
   )
 
-  // Materialise the connection lines after mount.
-  //
-  // The editor's onAllLayersRendered lifecycle callback does NOT fire in this
-  // setup, so anything placed there never ran. Instead we drive it from a
-  // React effect via a ref to the plugin context, which is guaranteed to run.
-  //
-  // Why it's needed: a line entity only exists once BOTH its ports do. Our
-  // nodes register their ports when the node paints (WorkflowPortRender),
-  // which is AFTER initialData loads — so the edges can't form lines on load
-  // and the lines layer stays empty until a drag materialises them. So once
-  // the ports have mounted we explicitly (re)create the linear chain — Start
-  // → each step → End — guarded by hasLine so it's idempotent, then recompute
-  // geometry and repaint. Retried across a few frames to catch port mount.
+  // Initial edges can load before their ports have mounted. Once the complete
+  // chain exists, fit the viewport first, then calculate line geometry from
+  // the measured ports. Flowgram otherwise keeps the initial empty paths until
+  // a node move triggers the same calculation.
   useEffect(() => {
     const chain = [START_NODE_ID, ...steps.map((s) => s.id), END_NODE_ID]
     const expectedLines = chain.length - 1
     let cancelled = false
     let painted = false
-    const ensure = (): void => {
+
+    const ensure = async (): Promise<void> => {
       const ctx = editorRef.current
-      if (!ctx || cancelled || ctx.document.disposed) return
+      if (!ctx || cancelled || painted || ctx.document.disposed) return
+
       try {
-        const lm = ctx.document.linesManager
-        for (let i = 0; i < chain.length - 1; i++) {
+        const lines = ctx.document.linesManager
+        for (let i = 0; i < expectedLines; i++) {
           const from = chain[i]
           const to = chain[i + 1]
-          if (!lm.hasLine({ from, to })) lm.createLine({ from, to })
+          if (!lines.hasLine({ from, to })) lines.createLine({ from, to })
         }
-        lm.getAllLines().forEach((line) =>
+        if (lines.getAllLines().length < expectedLines) return
+
+        painted = true
+        lines.forceUpdate()
+        await ctx.tools.fitView(false)
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+        if (cancelled || ctx.document.disposed) return
+        lines.getAllLines().forEach((line) =>
           line.getData(WorkflowLineRenderData).update(),
         )
-        lm.forceUpdate()
-
+        lines.forceUpdate()
         ctx.playground.flush()
-        void ctx.tools.fitView(false)
-
-        // The line elements mount in a placeholder state with an EMPTY path —
-        // flowgram only computes a line's actual geometry on a real node
-        // transform change (a drag). That's the true reason connections only
-        // appeared after moving a node. So once every line exists, replicate
-        // that transform change ONCE for each node: nudge +1px, then restore
-        // on the next frame. Each move makes the node's incident lines
-        // recompute their path and paint. Positions net out unchanged, and
-        // history.clear() afterwards keeps the undo stack clean (there's
-        // nothing meaningful to undo on a fresh load).
-        if (!painted && lm.getAllLines().length >= expectedLines) {
-          painted = true
-          const json = ctx.document.toJSON() as WorkflowJSON
-          const originals = json.nodes
-            .map((n, i) => ({ id: json.nodes[i].id, p: n.meta?.position }))
-            .filter(
-              (o): o is { id: string; p: { x: number; y: number } } =>
-                !!o.p && typeof o.p.x === 'number' && typeof o.p.y === 'number',
-            )
-          originals.forEach((o) =>
-            ctx.operation.updateNodePosition(o.id, { x: o.p.x + 1, y: o.p.y }),
-          )
-          requestAnimationFrame(() => {
-            if (ctx.document.disposed) return
-            originals.forEach((o) =>
-              ctx.operation.updateNodePosition(o.id, { x: o.p.x, y: o.p.y }),
-            )
-            ctx.history.clear()
-          })
-        }
       } catch {
         // Ports may not be mounted yet on an early pass — a later one covers it.
+        painted = false
       }
     }
-    const timers = [0, 120, 300, 600, 1000, 1600].map((d) =>
-      window.setTimeout(() => requestAnimationFrame(ensure), d),
+
+    const timers = [0, 120, 300, 600, 1000, 1600].map((delay) =>
+      window.setTimeout(() => requestAnimationFrame(() => void ensure()), delay),
     )
     return () => {
       cancelled = true
-      timers.forEach((t) => window.clearTimeout(t))
+      timers.forEach((timer) => window.clearTimeout(timer))
     }
   }, [steps])
 
