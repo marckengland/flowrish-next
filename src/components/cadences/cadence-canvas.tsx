@@ -558,17 +558,34 @@ function FlowCanvas({
         }
         if (lines.getAllLines().length < expectedLines) return
 
-        painted = true
         lines.forceUpdate()
         await ctx.tools.fitView(false)
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 
         if (cancelled || ctx.document.disposed) return
-        lines.getAllLines().forEach((line) =>
-          line.getData(WorkflowLineRenderData).update(),
-        )
+        const renderedLines = lines.getAllLines()
+        renderedLines.forEach((line) => {
+          const renderData = line.getData(WorkflowLineRenderData)
+          renderData.update()
+
+          // Flowgram can cache the measured coordinate version before its
+          // Bézier contribution is registered. In that state update() sees no
+          // coordinate change and leaves path empty forever. Briefly changing
+          // a non-persisted line UI value invalidates that version; restoring
+          // it immediately computes the final path without moving any nodes.
+          if (!renderData.path) {
+            const shrink = line.uiState.shrink
+            line.updateUIState({ shrink: shrink + 0.001 })
+            renderData.update()
+            line.updateUIState({ shrink })
+            renderData.update()
+          }
+        })
         lines.forceUpdate()
         ctx.playground.flush()
+        painted = renderedLines.every(
+          (line) => line.getData(WorkflowLineRenderData).path.length > 0,
+        )
       } catch {
         // Ports may not be mounted yet on an early pass — a later one covers it.
         painted = false
