@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { receptionistGreeting, type ReceptionistConfig } from '@/lib/receptionist'
 import { ReceptionistPreview } from './receptionist-preview'
+import { ReceptionistReadinessChecklist } from './receptionist-readiness-checklist'
 
 interface SettingsData {
   config: ReceptionistConfig | null
@@ -119,6 +120,7 @@ export function ReceptionistSettings(): React.JSX.Element {
           </form>
         </CardContent>
       </Card>
+      <ReceptionistReadinessChecklist key={`checklist:${JSON.stringify(data.config)}:${hasUnsavedChanges}`} hasUnsavedChanges={hasUnsavedChanges} />
       <ReceptionistPreview key={`${JSON.stringify(data.config)}:${hasUnsavedChanges}`} hasSavedSettings={Boolean(data.config)} hasUnsavedChanges={hasUnsavedChanges} />
       <Card>
         <CardHeader><CardTitle>Connect your incoming number</CardTitle></CardHeader>
