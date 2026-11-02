@@ -295,8 +295,9 @@ async function callAI(
       model,
       messages,
       temperature,
-      max_tokens: maxTokens,
-      ...(structuredOutput ? { response_format: responseFormat } : {}),
+      // Gemini's allowance includes thinking tokens; reserve space for the JSON reply.
+      max_tokens: structuredOutput ? Math.max(maxTokens, 2048) : maxTokens,
+      ...(structuredOutput ? { response_format: responseFormat, reasoning_effort: 'low' } : {}),
     }),
   })
 

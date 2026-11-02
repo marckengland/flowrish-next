@@ -50,3 +50,9 @@ Reviewing the real replies also exposed an outdated callback reason: an earlier 
 The earlier local success record predates this stronger reason check. The strengthened check reproduced that omission before the instruction fix. Production acceptance requires all six conversational turns to report AI mode, then deterministic confirmation with no additional AI request.
 
 The strengthened compiled-app run passed after both fixes: all six AI turns succeeded with valid structured replies, the callback reason remained “arranging a bicycle tune-up next week” through the name/number correction, confirmation used no AI, and cleanup restored the complete baseline. Final unit count is 1,224; all 41 database regressions, both typecheck engines, lint, and the production build passed. The prior full UI regression remains 36 passed with the five documented selector-guard skips.
+
+## Hosted truncation diagnosis
+
+The hosted run on `adde230` returned `invalid_json` with finite administrator diagnostics: provider `gemini`, structured output enabled, model-stage failure, and finish reason `length`. This identifies an incomplete model response rather than an unreadable HTTP envelope. Raw response content, model configuration, credentials, and prompts are excluded from diagnostics.
+
+The Gemini receptionist request now reserves 2,048 total tokens and selects `reasoning_effort: low`, following Google's [OpenAI-compatible thinking controls](https://ai.google.dev/gemini-api/docs/openai#thinking). This leaves room for thinking and the four-field JSON answer. It can increase provider usage compared with the previous 500-token ceiling. The eight-second timeout, extraction validation, and callback fallback remain in place. Other adapters and ordinary AI calls retain their previous token behavior. Rollback is a code revert; no migration or environment change is required.
