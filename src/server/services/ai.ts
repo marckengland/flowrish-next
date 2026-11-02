@@ -296,7 +296,7 @@ async function callAI(
       `[AI Service] API request failed (status ${response.status}, model "${model}"):`,
       detail,
     )
-    throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
+    throw Object.assign(new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503), { providerStatus: response.status })
   }
 
   const data = (await response.json()) as ChatCompletionResponse

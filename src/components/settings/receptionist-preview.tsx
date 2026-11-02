@@ -23,6 +23,7 @@ interface PreviewResult {
   finished: boolean
   callback: { fullName: string; phone: string; reason: string } | null
   sources: Array<{ id: string; title: string; revision: number }>
+  generation?: { mode: 'ai' | 'fallback'; reason?: string }
 }
 
 export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
@@ -156,6 +157,8 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
         {!supported && <p className="text-xs text-muted-foreground">Read-aloud is unavailable in this browser. You can still test the full conversation with text.</p>}
         {playbackFailed && <p className="text-xs text-muted-foreground">Read-aloud could not play. Continue using the text replies.</p>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {result?.generation?.mode === 'ai' && <p role="status" className="text-xs text-muted-foreground">AI request completed for this turn.</p>}
+        {result?.generation?.mode === 'fallback' && <p role="status" className="text-sm text-muted-foreground">{({ rate_limited: 'AI request limit reached.', timeout: 'The AI request timed out.', invalid_json: 'The AI response could not be read.', invalid_response: 'The AI response could not be read.', provider_unavailable: 'The AI provider is unavailable.', service_unavailable: 'The AI service is unavailable.' } as Record<string, string>)[result.generation.reason ?? ''] ?? 'The AI service is unavailable.'} This preview is collecting a callback message instead. End this preview and try again later to retry AI.</p>}
         {!result ? <Button disabled={busy || hasUnsavedChanges || !hasSavedSettings} onClick={() => { void send() }}>{busy ? 'Starting preview…' : 'Start browser preview'}</Button> : <>
           <div role="log" aria-label="Preview conversation" aria-live="polite" className="max-h-96 space-y-3 overflow-y-auto rounded-lg border p-4 text-sm">
             {messages.map((message, index) => <p key={index} className="whitespace-pre-wrap break-words"><span className="font-medium">{message.role}: </span>{message.content}</p>)}

@@ -25,7 +25,7 @@ export async function GET() {
         const state = callStateSchema.safeParse(call.state)
         return { id: call.id, status: call.status === 'active' && Date.now() - call.updatedAt.getTime() > 60 * 60 * 1000 ? 'incomplete' : call.status, createdAt: call.createdAt, leadId: call.leadId, fullName: state.success ? state.data.fullName : '', phone: state.success ? state.data.phone : '', reason: state.success ? state.data.reason : '', messages: state.success ? state.data.messages : [] }
       }),
-    }, { headers: { 'Cache-Control': 'no-store' } })
+    }, { headers: { 'Cache-Control': 'no-store', 'X-Receptionist-Conditional-Create': 'supported' } })
   } catch (error) { return errorResponse(error) }
 }
 
@@ -33,7 +33,10 @@ export async function PUT(request: NextRequest) {
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'admin:settings')
-    const config = await saveReceptionistConfig(session.organizationId, await request.json())
+    const input = await request.json()
+    const config = request.headers.get('if-none-match') === '*'
+      ? await saveReceptionistConfig(session.organizationId, input, { createOnly: true })
+      : await saveReceptionistConfig(session.organizationId, input)
     return NextResponse.json({ config })
   } catch (error) { return errorResponse(error) }
 }

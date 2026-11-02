@@ -53,6 +53,18 @@ export async function getReceptionistReadiness(organizationId: string, userId: s
   }
 }
 
+type PreviewGeneration = { mode: 'ai' | 'fallback'; reason?: ReturnType<typeof previewFailureReason> }
+
+function previewFailureReason(error: unknown) {
+  if (error instanceof AppError && error.code === 'AI_UNAVAILABLE') {
+    return 'providerStatus' in error && error.providerStatus === 429 ? 'rate_limited' as const : 'provider_unavailable' as const
+  }
+  if (error instanceof SyntaxError) return 'invalid_json' as const
+  if (error instanceof z.ZodError) return 'invalid_response' as const
+  if (error && typeof error === 'object' && 'name' in error && (error.name === 'TimeoutError' || error.name === 'AbortError')) return 'timeout' as const
+  return 'service_unavailable' as const
+}
+
 export async function previewReceptionist(organizationId: string, userId: string, rawInput: unknown) {
   await requireCurrentMembership(organizationId, userId)
   const input = previewInputSchema.parse(rawInput)
@@ -61,13 +73,20 @@ export async function previewReceptionist(organizationId: string, userId: string
   if (!stored || !config.success) throw new AppError('PREVIEW_NOT_CONFIGURED', 'Save your receptionist settings before starting a preview.', 409)
   const settingsVersion = stored.updatedAt.toISOString()
   if (input.state && input.settingsVersion !== settingsVersion) throw new AppError('PREVIEW_STALE', 'Saved settings changed. Start a new preview.', 409)
-  if (!input.state) return { state: initialCallState(''), settingsVersion, reply: receptionistGreeting(config.data.businessName), finished: false, callback: null, sources: [] }
+  if (!input.state) return { state: initialCallState(''), settingsVersion, reply: receptionistGreeting(config.data.businessName), finished: false, callback: null, sources: [], generation: undefined as PreviewGeneration | undefined }
 
   let sources: Array<{ id: string; title: string; revision: number }> = []
+  let generation: PreviewGeneration | undefined
   const result = await advanceCall(input.state, { speech: input.speech ?? '', digits: input.digits ?? '' }, config.data, async (state, currentConfig) => {
-    const generated = await generateApprovedReceptionistReply(organizationId, input.speech ?? '', state, currentConfig)
-    sources = generated.sources
-    return generated.extraction
+    try {
+      const generated = await generateApprovedReceptionistReply(organizationId, input.speech ?? '', state, currentConfig)
+      sources = generated.sources
+      generation = { mode: 'ai' }
+      return generated.extraction
+    } catch (error) {
+      generation = { mode: 'fallback', reason: previewFailureReason(error) }
+      throw error
+    }
   })
   const reply = result.capture
     ? 'Preview complete. This callback summary is for testing only; nothing was saved. Goodbye.'
@@ -78,6 +97,6 @@ export async function previewReceptionist(organizationId: string, userId: string
   return {
     state: result.state, settingsVersion, reply, finished: result.finish,
     callback: result.capture ? { fullName: result.state.fullName, phone: result.state.phone, reason: result.state.reason } : null,
-    sources,
+    sources, generation,
   }
 }
