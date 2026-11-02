@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { CallbackHandoff, CallbackHandoffSource } from './callback-handoff'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -281,6 +282,7 @@ export function WebsiteReceptionistSettings(): React.JSX.Element {
       <Card>
         <CardHeader className="flex-col items-start gap-2"><CardTitle>Website callback requests</CardTitle><p className="text-sm text-muted-foreground">Requests confirmed by visitors for your team to review. Reviewing or dismissing does not call, message, create a lead, or schedule a task.</p></CardHeader>
         <CardContent className="min-w-0 space-y-4">
+          <CallbackHandoffSource />
           <div className="flex flex-wrap items-end gap-3">
             <label className="block space-y-1.5 text-sm font-medium"><span>Callback status</span><select className={fieldClass} value={filter} disabled={callbacksBusy} onChange={event => setFilter(event.target.value as Filter)}><option value="pending">Pending</option><option value="reviewed">Reviewed</option><option value="dismissed">Dismissed</option><option value="all">All</option></select></label>
             <Button type="button" variant="outline" className="min-h-11 whitespace-normal" disabled={callbacksBusy} onClick={() => void loadCallbacks()}>{callbacksLoaded ? 'Reload callback requests' : 'Load callback requests'}</Button>
@@ -302,6 +304,7 @@ export function WebsiteReceptionistSettings(): React.JSX.Element {
                 <Button type="button" variant="outline" className="min-h-11" disabled={callbacksBusy || record.status === 'dismissed'} onClick={() => void changeCallback(record, 'dismiss')}>Dismiss callback</Button>
                 <Button type="button" variant="outline" className="min-h-11" disabled={callbacksBusy} onClick={() => setDeleteId(record.id)}>Delete callback request</Button>
               </div>
+              <CallbackHandoff callbackId={record.id} disabled={callbacksBusy} />
               {deleteId === record.id && <div className="space-y-2 rounded-md border p-3" role="alert"><p>Delete this callback request permanently? It will be removed from staff review.</p><div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" className="min-h-11" disabled={callbacksBusy} onClick={() => setDeleteId(null)}>Cancel deletion</Button>
                 <Button type="button" variant="destructive" className="min-h-11" disabled={callbacksBusy} onClick={() => void changeCallback(record, 'delete')}>Confirm deletion</Button>

@@ -24,7 +24,11 @@ An ambiguous message request can be retried manually with the same request ID. A
 
 Visitors enter their name, phone number, and request in a separate form. They review the details and consent to contact before submitting. A successful submission records one pending callback request. It does not create a lead, task, appointment, email, or phone call.
 
-Administrators select **Load callbacks** to review requests. They can mark a request reviewed, dismiss it, or explicitly delete it. Staff must arrange any contact separately. Confirmed callback requests remain until an administrator deletes them or the organization is removed.
+Administrators select **Load callbacks** to review requests. They can mark a request reviewed, dismiss it, or explicitly delete it. **Prepare CRM handoff** opens matching leads and contacts, an owner/deadline form, and a task preview. Staff explicitly confirm before CRM work is created. Staff must arrange any contact separately. Confirmed callback requests remain until an administrator deletes them or the organization is removed.
+
+Handoff matches international phone digits, including formatted numbers, within the current organization. It never silently picks among matches. Tasks require a lead: staff choose an existing active lead or create a lead in an existing open stage, optionally linked to a matching contact. Creating another lead when matches exist requires a separate acknowledgement. New leads receive the chosen owner; existing records and owners stay unchanged. Admin settings and CRM read/write permissions are required.
+
+The preview shows the exact visitor details copied into CRM, the destination, owner, deadline and Medium priority. Editing the form clears approval. A changed request or destination requires a fresh review. A durable receipt prevents duplicate work on retries, even after source/CRM deletion. Select **Show callback source** on the task, then **Open source callback**. The receipt-backed link opens **Source callback handoff** in Settings; select **Prepare CRM handoff** to load its current details or receipt. Deleting a source callback does not delete its approved lead or task. Reassign or create later tasks through the normal CRM screens.
 
 The service does not store visitor questions or conversation history. It retains only the latest public answer for retries, hashed session tokens and IP identifiers, and confirmed callback details. Scheduled cleanup removes sessions that expired over 24 hours ago and widget usage rows older than two UTC days. It preserves callback records and organization AI usage.
 
@@ -34,10 +38,11 @@ Run the repository's full unit, lint, type, Prisma, and build checks. Additional
 
 ```sh
 npx vitest run --config vitest.website-receptionist.config.ts
+npx vitest run --config vitest.callback-handoff.config.ts
 npx playwright test --config playwright.website-receptionist.config.ts
-PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/website-receptionist-admin.spec.ts --retries=0
+PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/website-receptionist-admin.spec.ts e2e/callback-handoff.spec.ts --retries=0
 ```
 
 The PostgreSQL suite requires Docker and the local `pgvector/pgvector:pg16` image. It starts a disposable database and does not load production credentials. The isolated iframe suite requires neither an application server nor credentials. The admin suite requires an authenticated application target and mocks all widget settings, callback, and AI operations. Do not enable a production widget or call a real provider to run these suites.
 
-Deferred: CAPTCHA, appointment booking, automatic CRM conversion, callback notifications, live phone service, and automatic callback deletion. Voice input remains in the authenticated browser test mode; the website widget uses typed questions.
+Deferred: CAPTCHA, appointment booking, bulk CRM conversion, callback notifications, live phone service, and automatic callback deletion. Voice input remains in the authenticated browser test mode; the website widget uses typed questions.
