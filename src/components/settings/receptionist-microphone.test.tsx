@@ -29,6 +29,8 @@ async function begin() {
  const view = render(<ReceptionistPreview hasSavedSettings hasUnsavedChanges={false} />)
  fireEvent.click(screen.getByRole('button', { name: 'Start browser preview' }))
  await screen.findByRole('textbox', { name: 'Caller message' })
+ const supportsRecognition = typeof Reflect.get(window, 'SpeechRecognition') === 'function' || typeof Reflect.get(window, 'webkitSpeechRecognition') === 'function'
+ if (supportsRecognition) await waitFor(() => expect(microphone()).toBeEnabled())
  return view
 }
 function microphone() { return screen.getByRole('button', { name: 'Use microphone' }) }
