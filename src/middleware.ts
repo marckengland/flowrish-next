@@ -198,14 +198,15 @@ export async function middleware(request: NextRequest) {
   }
 
   // Return 401 for unauthenticated API requests (except /api/auth,
-  // /api/inngest, and /api/voice/twiml — the last is a Twilio webhook that
-  // Twilio calls directly with no app session).
+  // /api/inngest and the Twilio voice webhooks, which validate requests
+  // separately because Twilio calls them without an app session).
   if (
     !user
     && isApiRoute
     && !path.startsWith('/api/auth')
     && !path.startsWith('/api/inngest')
     && !path.startsWith('/api/voice/twiml')
+    && !/^\/api\/voice\/receptionist\/[^/]+$/.test(path)
   ) {
     return NextResponse.json(
       { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },

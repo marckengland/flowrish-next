@@ -108,6 +108,35 @@ model Organization {
   voiceConfig         VoiceConfig?
   conversations       Conversation[]
   conversationMessages ConversationMessage[]
+  receptionistConfig ReceptionistConfig?
+  receptionistCalls ReceptionistCall[]
+}
+
+model ReceptionistConfig {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  settings       Json
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model ReceptionistCall {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  callSid        String
+  turn           Int          @default(0)
+  state          Json
+  response       String       @default("")
+  status         String       @default("active")
+  leadId         String?
+  taskId         String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, callSid])
+  @@index([organizationId, createdAt])
 }
 
 /// Per-organization voice/calling credentials (bring-your-own).

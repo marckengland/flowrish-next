@@ -57,6 +57,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm run typecheck:fast` | Type-check with no emit (`tsgo --noEmit`) |
 | `npm run test` | Run the unit/integration suite once |
 | `npm run test:watch` | Unit tests in watch mode |
+| `npm run test:receptionist:integration` | Receptionist migration, concurrency, and rollback checks on disposable PostgreSQL (Docker required) |
 | `npm run test:e2e` | Playwright e2e against a local dev server (auto-started on `:3100`) |
 | `npm run test:e2e:ui` | Playwright e2e in interactive UI mode |
 | `npm run test:e2e:prod` | Playwright e2e against a deployed URL (read-only smoke) |
@@ -115,6 +116,7 @@ prisma/
 - **Revenue Forecasting** — Pipeline metrics, AI predictions, and commit vs. actual tracking
 - **Email Integration** — Gmail **and Microsoft 365 / Outlook** (Microsoft Graph) with OAuth, personalization tags, inbox sync, threaded replies, and rich HTML emails. Encrypted tokens; cadence email steps work with either provider automatically
 - **Calling** — Bring-your-own **click-to-call**: free `tel:` dialer + call logging out of the box, and optional **in-browser calling via Twilio** (per-org credentials, encrypted at rest; TwiML webhook signature verification). A provider comparison (Twilio/Telnyx/SignalWire/Plivo/Bandwidth) with self-serve setup guides lives in Settings
+- **AI receptionist** — Optional inbound Twilio receptionist with approved FAQs, after-hours scheduling, confirmed callback capture, assigned tasks, and call history. Disabled by default; see the [setup guide](docs/AI_RECEPTIONIST.md)
 - **Marketing landing page** — public `/` landing (auth-aware CTAs); the authenticated app lives under `/dashboard`
 - **AI Features** — Email generation, account research, and **Airish**, the in-app AI chatbot assistant. Provider-agnostic: runs on any OpenAI-compatible LLM — OpenAI, Anthropic (Claude), DeepSeek, Google Gemini (default), or OpenRouter (open-weight models like Kimi, GLM, Llama, Qwen) — via `LLM_PROVIDER`
 - **CSV Import/Export** — Bulk lead import with duplicate detection and field mapping
