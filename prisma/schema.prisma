@@ -116,6 +116,7 @@ model Organization {
   followUpSuggestions FollowUpSuggestion[]
   knowledgeDocuments KnowledgeDocument[]
   knowledgeChunks KnowledgeChunk[]
+  rehearsalFaqDrafts RehearsalFaqDraft[]
 }
 
 model KnowledgeDocument {
@@ -142,6 +143,7 @@ model KnowledgeDocument {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   chunks KnowledgeChunk[]
+  rehearsalFaqDraft RehearsalFaqDraft?
   @@unique([id, organizationId])
   @@index([organizationId, archivedAt, createdAt])
 }
@@ -212,8 +214,26 @@ model ReceptionistRehearsal {
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 
+  faqDrafts RehearsalFaqDraft[]
+
+  @@unique([id, organizationId])
   @@unique([organizationId, clientId])
   @@index([organizationId, createdAt, id])
+}
+
+model RehearsalFaqDraft {
+  id             String                @id @default(uuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rehearsalId    String
+  rehearsal      ReceptionistRehearsal @relation(fields: [rehearsalId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  messageIndex   Int
+  documentId     String
+  document       KnowledgeDocument     @relation(fields: [documentId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  createdAt      DateTime              @default(now())
+
+  @@unique([organizationId, rehearsalId, messageIndex])
+  @@unique([documentId, organizationId])
 }
 
 model ReceptionistCall {
