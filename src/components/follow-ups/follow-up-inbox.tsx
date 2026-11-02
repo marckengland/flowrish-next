@@ -1,0 +1,149 @@
+'use client'
+
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { Check, Inbox, Mail, Phone, RotateCw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { EmailCompose } from '@/components/email/email-compose'
+import { cn } from '@/lib/utils'
+
+type FollowUpStatus = 'PENDING' | 'APPROVED' | 'DISMISSED'
+
+export interface FollowUpItem {
+  id: string
+  sourceType: 'EMAIL' | 'CALL'
+  sourceText: string
+  title: string
+  description: string
+  draftSubject: string | null
+  draftBody: string | null
+  status: FollowUpStatus
+  taskId: string | null
+  lead: { id: string; firstName: string; lastName: string; email: string | null }
+  createdAt: string
+}
+
+const tabs: { value: FollowUpStatus; label: string }[] = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'DISMISSED', label: 'Dismissed' },
+]
+const fieldClass = 'w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60'
+
+function draftHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\r?\n/g, '<br />')
+}
+
+async function responseData<T>(response: Response): Promise<T> {
+  const body = await response.json()
+  if (!response.ok) throw new Error(body.error?.message ?? 'Unable to update follow-ups. Please try again.')
+  return body.data as T
+}
+
+export function FollowUpInbox({ canWrite }: { canWrite: boolean }): React.JSX.Element {
+  const [status, setStatus] = useState<FollowUpStatus>('PENDING')
+  const [items, setItems] = useState<FollowUpItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [revision, setRevision] = useState(0)
+
+  useEffect(() => {
+    let current = true
+    setLoading(true)
+    setError(null)
+    setItems([])
+    fetch(`/api/follow-ups?status=${status}`)
+      .then(responseData<FollowUpItem[]>)
+      .then((data) => { if (current) setItems(data) })
+      .catch((cause) => { if (current) setError(cause instanceof Error ? cause.message : 'Unable to load follow-ups.') })
+      .finally(() => { if (current) setLoading(false) })
+    return () => { current = false }
+  }, [status, revision])
+
+  return (
+    <div className="flex min-w-0 flex-col gap-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="eyebrow text-muted-foreground">Your next steps</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Follow-up inbox</h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Review incoming replies and callback requests. Approve a task, or open a draft to review and send.</p>
+        </div>
+        <Button type="button" variant="outline" onClick={() => setRevision((value) => value + 1)} disabled={loading}>
+          <RotateCw className="mr-2 size-4" aria-hidden="true" />Refresh
+        </Button>
+      </div>
+      <div role="tablist" aria-label="Follow-up status" className="flex w-fit max-w-full gap-1 rounded-lg border bg-muted/40 p-1">
+        {tabs.map((tab) => <button key={tab.value} id={`follow-ups-${tab.value}`} type="button" role="tab" aria-selected={status === tab.value} aria-controls="follow-up-panel" tabIndex={status === tab.value ? 0 : -1} onKeyDown={(event) => {
+          const index = tabs.findIndex((value) => value.value === tab.value)
+          const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1
+          if (next < 0) return
+          event.preventDefault()
+          setStatus(tabs[next].value)
+          document.getElementById(`follow-ups-${tabs[next].value}`)?.focus()
+        }} onClick={() => setStatus(tab.value)} className={cn('rounded-md px-3 py-2 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring', status === tab.value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>{tab.label}</button>)}
+      </div>
+      {!canWrite && <p className="text-sm text-muted-foreground">You have read-only access. Ask a team member with lead editing permission to review these follow-ups.</p>}
+      <section id="follow-up-panel" role="tabpanel" aria-labelledby={`follow-ups-${status}`} aria-busy={loading} className="min-w-0">
+        {loading ? <p role="status" className="py-12 text-center text-sm text-muted-foreground">Loading follow-ups…</p> : error ? <div className="rounded-lg border bg-card p-6"><p role="alert" className="text-sm text-destructive">{error}</p><Button variant="outline" className="mt-3" onClick={() => setRevision((value) => value + 1)}>Try again</Button></div> : items.length === 0 ? <div className="flex flex-col items-center rounded-xl border border-dashed bg-card px-5 py-14 text-center"><Inbox className="mb-3 size-7 text-muted-foreground" aria-hidden="true" /><h2 className="font-medium">No {status.toLowerCase()} follow-ups</h2><p className="mt-1 max-w-md text-sm text-muted-foreground">{status === 'PENDING' ? 'New replies from synced sales conversations and confirmed receptionist callbacks will appear here.' : 'Reviewed follow-ups will appear here.'}</p></div> : <div className="grid min-w-0 gap-4">{items.map((item) => <FollowUpCard key={item.id} item={item} canWrite={canWrite} />)}</div>}
+      </section>
+      <p className="text-xs text-muted-foreground">Showing up to 100 recent items assigned to you. Email sources are previews, and draft text is a starting template. Approving a task does not send an email.</p>
+    </div>
+  )
+}
+
+function FollowUpCard({ item, canWrite }: { item: FollowUpItem; canWrite: boolean }): React.JSX.Element {
+  const [title, setTitle] = useState(item.title)
+  const [description, setDescription] = useState(item.description)
+  const [dueDate, setDueDate] = useState('')
+  const [result, setResult] = useState(item)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState('')
+  const [compose, setCompose] = useState(false)
+  const pending = result.status === 'PENDING'
+  const editable = pending && canWrite
+  const fullName = `${item.lead.firstName} ${item.lead.lastName}`.trim() || 'Lead'
+  const Icon = item.sourceType === 'CALL' ? Phone : Mail
+
+  async function review(action: 'approve' | 'dismiss'): Promise<void> {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const data = await responseData<FollowUpItem>(await fetch(`/api/follow-ups/${item.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(action === 'dismiss' ? { action } : { action, title: title.trim(), description: description.trim(), ...(dueDate ? { dueDate: new Date(`${dueDate}T00:00:00.000Z`).toISOString() } : {}) }),
+      }))
+      setResult(data)
+      if (action === 'dismiss') setCompose(false)
+      setNotice(action === 'approve' ? 'Follow-up approved. Your task is ready.' : 'Follow-up dismissed.')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to update this follow-up.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <article aria-label={`Follow-up for ${fullName}`} className="min-w-0 rounded-xl border bg-card p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2"><Icon className="size-4 shrink-0 text-brand" aria-hidden="true" /><Link className="break-words text-sm font-semibold underline-offset-4 hover:underline" href={`/leads/${item.lead.id}`}>{fullName}</Link><span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{result.status.toLowerCase()}</span></div>
+        <time dateTime={item.createdAt} className="text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleDateString()}</time>
+      </div>
+      <div className="mt-4 rounded-lg bg-muted/50 p-3"><h2 className="text-xs font-medium text-muted-foreground">{item.sourceType === 'CALL' ? 'Call summary' : 'Email preview'}</h2><p className="mt-1 whitespace-pre-wrap break-words text-sm">{item.sourceText || 'No preview available. Open the lead to review the conversation.'}</p></div>
+      {editable && !result.taskId ? <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px]">
+        <label className="grid gap-1.5 text-sm font-medium">Task title<input className={fieldClass} value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} disabled={busy} required /></label>
+        <label className="grid gap-1.5 text-sm font-medium">Due date<input className={fieldClass} type="date" aria-label="Due date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} disabled={busy} /><span className="text-xs font-normal text-muted-foreground">Optional · UTC date</span></label>
+        <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">Task description<textarea className={fieldClass} rows={3} value={description} maxLength={10000} onChange={(event) => setDescription(event.target.value)} disabled={busy} /></label>
+      </div> : <div className="mt-4"><h3 className="break-words text-sm font-medium">{result.title}</h3><p className="mt-1 whitespace-pre-wrap break-words text-sm text-muted-foreground">{result.description}</p>{result.taskId && pending && <p className="mt-2 text-xs text-muted-foreground">A callback task already exists. Marking this reviewed keeps the existing task.</p>}</div>}
+      {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+      {notice && <p role="status" className="mt-3 flex items-center gap-1.5 text-sm text-brand"><Check className="size-4" aria-hidden="true" />{notice}</p>}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {editable && <><Button type="button" disabled={busy || (!result.taskId && !title.trim())} onClick={() => void review('approve')}>{busy ? 'Saving…' : result.taskId ? 'Mark reviewed' : 'Approve task'}</Button><Button type="button" variant="outline" disabled={busy} onClick={() => void review('dismiss')}>Dismiss</Button></>}
+        {result.taskId && <Link className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/tasks/${result.taskId}`}>Open task</Link>}
+        {canWrite && result.status !== 'DISMISSED' && item.lead.email && item.draftBody && <Button type="button" variant="outline" disabled={busy} onClick={() => setCompose((value) => !value)}>{compose ? 'Close draft' : 'Review email draft'}</Button>}
+      </div>
+      {compose && canWrite && item.draftBody && item.lead.email && <div className="mt-5 min-w-0 border-t pt-5"><p className="mb-3 text-xs text-muted-foreground">Review and edit this template before sending. This starts a new email; check the subject and recipient.</p><EmailCompose leadId={item.lead.id} leadEmail={item.lead.email} leadName={fullName} defaultSubject={item.draftSubject ?? ''} defaultBody={draftHtml(item.draftBody)} onSent={() => { setCompose(false); setNotice('Email sent. Task review is tracked separately.') }} /></div>}
+    </article>
+  )
+}

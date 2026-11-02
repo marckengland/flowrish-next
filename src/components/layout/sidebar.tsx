@@ -20,6 +20,7 @@ import {
   ChevronDown,
   LogOut,
   Radar,
+  Inbox,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -96,6 +97,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
     label: 'Automation',
     items: [
       { href: '/rhythm', label: 'Rhythm', icon: Activity },
+      { href: '/follow-ups', label: 'Follow-up inbox', icon: Inbox, permissions: ['leads:read'] },
       {
         href: '/cadences',
         label: 'Cadences',

@@ -4,6 +4,8 @@ import { tenantData } from '@/server/db/types'
 import { refreshTokenIfNeeded } from '@/server/services/email'
 import { listMicrosoftMessages } from '@/server/services/microsoft-email'
 import { decrypt } from '@/lib/encryption'
+import { reconcileEmailReplies, type ReplyMessage } from '@/server/services/follow-ups'
+import type { Prisma } from '@prisma/client'
 
 const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1'
 
@@ -84,271 +86,110 @@ export const emailSyncFunction = inngest.createFunction(
   },
   async ({ event, step }) => {
     const { accountId, organizationId } = event.data as EmailSyncEventData
-
     const db = createTenantPrisma(organizationId)
-
-    // Step 1: Refresh token if needed and get account details
     const account = await step.run('refresh-token', async () => {
       await refreshTokenIfNeeded(accountId, organizationId)
-
-      const acc = await db.emailAccount.findFirst({
+      const found = await db.emailAccount.findFirst({
         where: { id: accountId },
-        select: {
-          id: true,
-          email: true,
-          accessToken: true,
-          provider: true,
-        },
+        select: { id: true, email: true, accessToken: true, provider: true, userId: true },
       })
-
-      if (!acc) {
-        throw new Error(`EmailAccount ${accountId} not found`)
-      }
-
-      return acc
+      if (!found) throw new Error(`EmailAccount ${accountId} not found`)
+      return found
     })
 
-    // Microsoft mailboxes use a separate Graph-based path; the Gmail flow
-    // that follows is left exactly as-is.
-    if (account.provider === 'microsoft') {
-      const accountEmail = account.email
-
-      const rows = await step.run('ms-fetch-messages', async () => {
-        const accessToken = decrypt(account.accessToken)
-        const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-        return listMicrosoftMessages(accessToken, sinceIso)
-      })
-
-      if (rows.length === 0) {
-        await step.run('ms-update-last-sync-empty', async () => {
-          await db.emailAccount.update({
-            where: { id: accountId },
-            data: { lastSyncAt: new Date() },
-          })
-        })
-        return { synced: 0, skipped: 0 }
-      }
-
-      const results = await step.run('ms-process-messages', async () => {
-        let synced = 0
-        let skipped = 0
-
-        const owner = await db.emailAccount.findFirst({
-          where: { id: accountId },
-          select: { userId: true },
-        })
-
-        for (const row of rows) {
-          const existing = await db.emailMessage.findFirst({
-            where: { externalId: row.externalId },
-            select: { id: true },
-          })
-          if (existing) {
-            skipped++
-            continue
-          }
-
-          const sentAt = new Date(row.sentAt)
-          const emailMessage = await db.emailMessage.create({
-            data: tenantData({
-              externalId: row.externalId,
-              threadId: row.threadId,
-              fromEmail: row.fromEmail,
-              toEmail: row.toEmail,
-              subject: row.subject,
-              bodyPreview: row.bodyPreview?.substring(0, 200) ?? null,
-              sentAt,
-            }),
-          })
-
-          const matchEmail =
-            row.fromEmail === accountEmail.toLowerCase() ? row.toEmail : row.fromEmail
-
-          if (matchEmail && owner) {
-            const lead = await db.lead.findFirst({
-              where: {
-                deletedAt: null,
-                OR: [
-                  { email: { equals: matchEmail, mode: 'insensitive' } },
-                  { altEmail: { equals: matchEmail, mode: 'insensitive' } },
-                ],
-              },
-              select: { id: true },
-            })
-            if (lead) {
-              await db.activity.create({
-                data: tenantData({
-                  type: 'EMAIL',
-                  leadId: lead.id,
-                  createdById: owner.userId,
-                  notes: row.subject ? `Email: ${row.subject}` : 'Email',
-                  emailMessageId: emailMessage.id,
-                }),
-              })
-              await db.lead.update({
-                where: { id: lead.id },
-                data: { lastActivityAt: sentAt },
-              })
-            }
-          }
-
-          synced++
-        }
-
-        return { synced, skipped }
-      })
-
-      await step.run('ms-update-last-sync', async () => {
-        await db.emailAccount.update({
-          where: { id: accountId },
-          data: { lastSyncAt: new Date() },
-        })
-      })
-
-      return results
-    }
-
-    // Step 2: Fetch recent message IDs from Gmail
-    const messageIds = await step.run('fetch-message-list', async () => {
+    // This step's output includes the persisted reply metadata. Inngest can
+    // replay reconciliation if it fails after message persistence committed.
+    const result = await step.run('process-messages', async () => {
       const accessToken = decrypt(account.accessToken)
-
-      const url = `${GMAIL_API_BASE}/users/me/messages?maxResults=50&q=newer_than:1d`
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Gmail messages.list failed: ${errorText}`)
-      }
-
-      const data = (await response.json()) as GmailMessageListResponse
-      return data.messages ?? []
-    })
-
-    if (messageIds.length === 0) {
-      // No new messages — update lastSyncAt and return
-      await step.run('update-last-sync-empty', async () => {
-        await db.emailAccount.update({
-          where: { id: accountId },
-          data: { lastSyncAt: new Date() },
-        })
-      })
-
-      return { synced: 0, skipped: 0 }
-    }
-
-    // Step 3: For each message, fetch metadata and create EmailMessage record
-    const results = await step.run('process-messages', async () => {
-      const accessToken = decrypt(account.accessToken)
-
       let synced = 0
       let skipped = 0
+      const replies: ReplyMessage[] = []
 
-      for (const msg of messageIds) {
-        // Check if we already have this message (skip duplicates by externalId)
-        const existing = await db.emailMessage.findFirst({
-          where: { externalId: msg.id },
-          select: { id: true },
-        })
-
-        if (existing) {
-          skipped++
-          continue
-        }
-
-        // Fetch message metadata from Gmail
-        const msgUrl = `${GMAIL_API_BASE}/users/me/messages/${msg.id}?format=metadata`
-        const msgResponse = await fetch(msgUrl, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
-
-        if (!msgResponse.ok) {
-          // Skip messages that fail to fetch — don't block the entire sync
-          skipped++
-          continue
-        }
-
-        const msgData = (await msgResponse.json()) as GmailMessageMetadataResponse
-
-        const fromEmail = extractEmailAddress(
-          getHeader(msgData.payload.headers, 'From'),
-        )
-        const toEmail = extractEmailAddress(
-          getHeader(msgData.payload.headers, 'To'),
-        )
-        const subject = getHeader(msgData.payload.headers, 'Subject')
-        const sentAt = new Date(parseInt(msgData.internalDate, 10))
-
-        // Create EmailMessage record first so we can link the activity
-        // back to it via the dedicated `emailMessageId` foreign key.
-        // Note: organizationId is auto-injected by the tenant middleware at runtime
-        const emailMessage = await db.emailMessage.create({
-          data: tenantData({
-            externalId: msgData.id,
-            threadId: msgData.threadId,
-            fromEmail,
-            toEmail,
-            subject,
-            bodyPreview: msgData.snippet?.substring(0, 200) ?? null,
-            sentAt,
-          }),
-        })
-
-        // Link to lead by matching email address (from or to)
-        const matchEmail = fromEmail === account.email.toLowerCase() ? toEmail : fromEmail
-        if (matchEmail) {
-          const lead = await db.lead.findFirst({
-            where: {
-              deletedAt: null,
-              OR: [
-                { email: { equals: matchEmail, mode: 'insensitive' } },
-                { altEmail: { equals: matchEmail, mode: 'insensitive' } },
-              ],
-            },
-            select: { id: true },
-          })
-
-          if (lead) {
-            // Create an EMAIL activity linked to this lead and to the
-            // EmailMessage we just persisted. The Activity model uses
-            // `notes` for free-form copy and `emailMessageId` to thread
-            // the activity to the actual message body.
-            await db.activity.create({
-              data: tenantData({
-                type: 'EMAIL',
-                leadId: lead.id,
-                createdById: (await db.emailAccount.findFirst({
-                  where: { id: accountId },
-                  select: { userId: true },
-                }))!.userId,
-                notes: subject ? `Email: ${subject}` : 'Email',
-                emailMessageId: emailMessage.id,
-              }),
-            })
-
-            // Update lead's lastActivityAt
-            await db.lead.update({
-              where: { id: lead.id },
-              data: { lastActivityAt: sentAt },
-            })
+      const persist = async (externalId: string, load: () => Promise<ReplyMessage | null>) => {
+        const saved = await db.$transaction(async (tx) => {
+          const existing = await tx.emailMessage.findFirst({ where: { accountId, externalId } })
+          if (existing) {
+            return { fresh: false, reply: existing.replyMetadata as unknown as ReplyMessage | null }
           }
-        }
-
-        synced++
+          const message = await load()
+          if (!message) return { fresh: false, reply: null }
+          const sentAt = new Date(message.sentAt)
+          if (!Number.isFinite(sentAt.getTime())) return { fresh: false, reply: null }
+          // Preserve pre-mailbox-identity history when the provider ID,
+          // thread and both endpoints match this mailbox exactly. Adoption
+          // replays reply detection without creating another activity.
+          if ([message.fromEmail, message.toEmail].some((email) => email.toLowerCase() === account.email.toLowerCase())) {
+            const legacy = await tx.emailMessage.findFirst({ where: { accountId: null, externalId, threadId: message.threadId, fromEmail: message.fromEmail, toEmail: message.toEmail, subject: message.subject } })
+            if (legacy) {
+              await tx.emailMessage.update({ where: { id: legacy.id }, data: { accountId, replyMetadata: message as unknown as Prisma.InputJsonValue } })
+              return { fresh: false, reply: message }
+            }
+          }
+          const emailMessage = await tx.emailMessage.create({
+            data: tenantData({
+              accountId, externalId,
+              threadId: message.threadId,
+              fromEmail: message.fromEmail,
+              toEmail: message.toEmail,
+              subject: message.subject,
+              bodyPreview: message.bodyPreview?.substring(0, 200) ?? null,
+              sentAt,
+              replyMetadata: message as unknown as Prisma.InputJsonValue,
+            }),
+          })
+          const matchEmail = message.fromEmail.toLowerCase() === account.email.toLowerCase() ? message.toEmail : message.fromEmail
+          if (matchEmail) {
+            const leads = await tx.lead.findMany({
+              where: { deletedAt: null, OR: [{ email: { equals: matchEmail, mode: 'insensitive' } }, { altEmail: { equals: matchEmail, mode: 'insensitive' } }] },
+              select: { id: true }, take: 2,
+            })
+            if (leads.length === 1) {
+              const lead = leads[0]
+              await tx.activity.create({ data: tenantData({ type: 'EMAIL', leadId: lead.id, createdById: account.userId, notes: message.subject ? `Email: ${message.subject}` : 'Email', emailMessageId: emailMessage.id }) })
+              await tx.lead.update({ where: { id: lead.id }, data: { lastActivityAt: sentAt } })
+            }
+          }
+          return { fresh: true, reply: message }
+        }, { timeout: 15000 })
+        if (saved.fresh) synced++
+        else skipped++
+        if (saved.reply) replies.push(saved.reply)
       }
 
-      return { synced, skipped }
+      if (account.provider === 'microsoft') {
+        const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        const messages = await listMicrosoftMessages(accessToken, sinceIso)
+        for (const message of messages) await persist(message.externalId, async () => message)
+      } else {
+        const response = await fetch(`${GMAIL_API_BASE}/users/me/messages?maxResults=50&q=newer_than:1d`, { headers: { Authorization: `Bearer ${accessToken}` } })
+        if (!response.ok) throw new Error(`Gmail messages.list failed: ${await response.text()}`)
+        const data = (await response.json()) as GmailMessageListResponse
+        for (const item of data.messages ?? []) {
+          await persist(item.id, async () => {
+            // Auto-response headers are necessary to avoid stopping outreach on
+            // vacation notices, delivery failures, and mailing-list messages.
+            const response = await fetch(`${GMAIL_API_BASE}/users/me/messages/${item.id}?format=metadata`, { headers: { Authorization: `Bearer ${accessToken}` } })
+            if (!response.ok) return null
+            const message = (await response.json()) as GmailMessageMetadataResponse
+            const headers = message.payload.headers
+            return {
+              externalId: message.id, threadId: message.threadId,
+              fromEmail: extractEmailAddress(getHeader(headers, 'From')),
+              toEmail: extractEmailAddress(getHeader(headers, 'To')),
+              recipientEmails: getHeader(headers, 'To').split(',').map(extractEmailAddress),
+              subject: getHeader(headers, 'Subject'),
+              bodyPreview: message.snippet?.substring(0, 200) ?? null,
+              sentAt: new Date(Number(message.internalDate)).toISOString(),
+              headers,
+            }
+          })
+        }
+      }
+      return { synced, skipped, replies }
     })
 
-    // Step 4: Update lastSyncAt on the EmailAccount
-    await step.run('update-last-sync', async () => {
-      await db.emailAccount.update({
-        where: { id: accountId },
-        data: { lastSyncAt: new Date() },
-      })
-    })
-
-    return results
+    await step.run('reconcile-replies', () => reconcileEmailReplies(organizationId, accountId, result.replies))
+    await step.run('update-last-sync', () => db.emailAccount.update({ where: { id: accountId }, data: { lastSyncAt: new Date() } }))
+    return { synced: result.synced, skipped: result.skipped }
   },
 )

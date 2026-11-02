@@ -561,6 +561,7 @@ export async function sendEmail(
   await db.emailMessage.create({
     data: tenantData({
       externalId,
+      accountId: updatedAccount.id,
       threadId: resultThreadId,
       fromEmail: updatedAccount.email,
       toEmail: lead.email,

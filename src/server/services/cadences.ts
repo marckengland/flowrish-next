@@ -984,7 +984,8 @@ export async function completeEnrollment(
   }
 
   const completed = await db.cadenceEnrollment.update({
-    where: { id: enrollmentId },
+    // A reply may have exited the enrollment after the status read.
+    where: { id: enrollmentId, status: 'ACTIVE' },
     data: {
       status: 'COMPLETED',
       completedAt: new Date(),
