@@ -53,7 +53,12 @@ export async function getReceptionistReadiness(organizationId: string, userId: s
   }
 }
 
-type PreviewGeneration = { mode: 'ai' | 'fallback'; reason?: ReturnType<typeof previewFailureReason> }
+const diagnosticSchema = z.object({
+  provider: z.enum(['gemini', 'openai', 'deepseek', 'openrouter', 'tokenrouter', 'anthropic', 'custom']),
+  structuredOutput: z.boolean(), finishReason: z.enum(['unknown', 'stop', 'length', 'other']),
+  stage: z.enum(['provider', 'model']),
+})
+type PreviewGeneration = { mode: 'ai' | 'fallback'; reason?: ReturnType<typeof previewFailureReason>; diagnostics?: z.infer<typeof diagnosticSchema> }
 
 function previewFailureReason(error: unknown) {
   if (error instanceof AppError && error.code === 'AI_UNAVAILABLE') {
@@ -84,7 +89,8 @@ export async function previewReceptionist(organizationId: string, userId: string
       generation = { mode: 'ai' }
       return generated.extraction
     } catch (error) {
-      generation = { mode: 'fallback', reason: previewFailureReason(error) }
+      const diagnostic = diagnosticSchema.safeParse(error && typeof error === 'object' && 'receptionistDiagnostic' in error ? error.receptionistDiagnostic : undefined)
+      generation = { mode: 'fallback', reason: previewFailureReason(error), ...(diagnostic.success ? { diagnostics: diagnostic.data } : {}) }
       throw error
     }
   })
