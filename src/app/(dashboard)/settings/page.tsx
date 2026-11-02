@@ -15,6 +15,7 @@ import { GmailConnect } from '@/components/email/gmail-connect'
 import { EmailSyncStatus } from '@/components/email/email-sync-status'
 import { MicrosoftConnect } from '@/components/email/microsoft-connect'
 import { CallingProviders } from '@/components/settings/calling-providers'
+import { ReceptionistSettings } from '@/components/settings/receptionist-settings'
 
 /**
  * Organization settings page.
@@ -37,6 +38,7 @@ type SettingsTab =
   | 'ai'
   | 'email'
   | 'calling'
+  | 'receptionist'
 
 const TABS: Array<{ id: SettingsTab; label: string; icon: typeof Target }> = [
   { id: 'scoring', label: 'Scoring rules', icon: Target },
@@ -45,6 +47,7 @@ const TABS: Array<{ id: SettingsTab; label: string; icon: typeof Target }> = [
   { id: 'ai', label: 'AI prompts', icon: Brain },
   { id: 'email', label: 'Email (Gmail)', icon: Mail },
   { id: 'calling', label: 'Calling & voice', icon: PhoneCall },
+  { id: 'receptionist', label: 'AI receptionist', icon: PhoneCall },
 ]
 
 export default function SettingsPage(): React.JSX.Element {
@@ -152,6 +155,7 @@ export default function SettingsPage(): React.JSX.Element {
             </div>
           )}
           {activeTab === 'calling' && <CallingProviders />}
+          {activeTab === 'receptionist' && <ReceptionistSettings />}
         </section>
       </div>
     </div>

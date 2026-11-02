@@ -10,6 +10,7 @@
     "typecheck:fast": "tsgo --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:receptionist:integration": "vitest run --config vitest.receptionist.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:install": "playwright install --with-deps chromium",
