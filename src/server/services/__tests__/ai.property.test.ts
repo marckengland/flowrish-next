@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import fc from 'fast-check'
 
+vi.mock('@/server/services/knowledge', () => ({ getAirishKnowledge: async () => ({ text: '', sources: [] }) }))
+
 // Every test here is property-based (`fc.assert` with numRuns: 30). Each run
 // mocks the DB/fetch and round-trips JSON, costing ~1-3s locally — which
 // intermittently exceeds Vitest's 5s default on slower/variable CI runners

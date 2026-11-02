@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { KnowledgeSources, type KnowledgeReference } from '@/components/ai/knowledge-sources'
 import { cn } from '@/lib/utils'
 import { useLayoutStore } from '@/stores/layout'
 
@@ -141,6 +142,7 @@ interface ChatTurn {
   action?: ChatAction
   actionStatus?: 'pending' | 'confirmed' | 'rejected' | 'executed' | 'failed'
   actionResult?: string
+  knowledgeSources?: KnowledgeReference[]
   /**
    * Optional follow-up path the executor returned (e.g. the new lead's
    * detail page). Surfaced under the action result as a "Open" link so
@@ -181,6 +183,7 @@ type StreamFrame =
       conversationId?: string
       message?: string
       action?: ChatAction | null
+      knowledgeSources?: KnowledgeReference[]
     }
   | { type: 'error'; message?: string }
 
@@ -608,6 +611,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
                     content: finalMessage,
                     action: action ?? undefined,
                     actionStatus: action ? 'pending' : undefined,
+                    knowledgeSources: Array.isArray(payload.knowledgeSources) ? payload.knowledgeSources.filter(source => source && typeof source.id === 'string' && typeof source.title === 'string' && typeof source.category === 'string' && Number.isInteger(source.revision) && source.revision > 0).slice(0, 6) : undefined,
                   }
                 : t,
             ),
@@ -988,6 +992,7 @@ function Turn({
           <div className="rounded-xl rounded-tl-[3px] bg-muted px-3 py-2.5 text-[13px] text-foreground">
             <Markdown source={turn.content} />
           </div>
+          <KnowledgeSources sources={turn.knowledgeSources ?? []} />
           {turn.action && turn.actionStatus === 'pending' && (
             <ActionCard
               action={turn.action}

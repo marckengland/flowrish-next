@@ -14,7 +14,7 @@ const params = { CallSid: `CA${'a'.repeat(32)}`, AccountSid: `AC${'a'.repeat(32)
 function request(changes: Partial<typeof params> = {}, signature = true, signedUrl = url) {
   const body = { ...params, ...changes }
   const data = signedUrl + Object.keys(body).sort().map((key) => key + body[key as keyof typeof body]).join('')
-  return new NextRequest(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(signature ? { 'x-twilio-signature': createHmac('sha1', 'test-auth-token').update(data).digest('base64') } : {}) }, body: new URLSearchParams(body) })
+  return new NextRequest(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(signature ? { 'x-twilio-signature': createHmac('sha1', 'test-auth-token').update(data).digest('base64') } : {}) }, body: new URLSearchParams(body).toString() })
 }
 const context = { params: Promise.resolve({ organizationId: orgId }) }
 beforeEach(() => {

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
 })
 vi.mock('@/server/db/client', () => ({ prisma: { ...mocks.db, $transaction: mocks.transaction } }))
 vi.mock('@/server/services/ai', () => ({ generateReceptionistReply: mocks.generate }))
+vi.mock('@/server/services/knowledge', () => ({ getReceptionistKnowledge: async () => ({ text: '', sources: [] }) }))
 vi.mock('@/server/services/voice', () => ({ getTwilioWebhookContext: vi.fn() }))
 
 import { saveReceptionistConfig, handleReceptionistCall } from '../receptionist'

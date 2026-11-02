@@ -21,6 +21,7 @@ import {
   LogOut,
   Radar,
   Inbox,
+  BookOpen,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -115,6 +116,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
   {
     label: 'Workspace',
     items: [
+      { href: '/knowledge', label: 'Knowledge library', icon: BookOpen, permissions: ['admin:settings'] },
       {
         href: '/csv',
         label: 'Import / Export',
