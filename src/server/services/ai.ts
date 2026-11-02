@@ -3,6 +3,7 @@ import type { EmailConversation } from '@/server/services/email-conversation'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { env } from '@/lib/env'
 import { AppError } from '@/lib/errors'
+import { resolveOrganizationAi, reserveAiUsage, finishAiUsage, type AiReservation } from './org-ai-provider'
 import { fetchSiteText } from '@/lib/web/fetch-site'
 import { receptionistExtractionSchema, type CallState, type ReceptionistConfig, type ReceptionistExtraction } from '@/lib/receptionist'
 
@@ -263,6 +264,33 @@ export interface ReceptionistDiagnostic {
   stage: 'provider' | 'model'
 }
 
+async function prepareAiRequest(organizationId: string | undefined, messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>, temperature: number, maxTokens: number, responseFormat?: Record<string, unknown>, stream = false) {
+  const organization = organizationId ? await resolveOrganizationAi(organizationId) : null
+  const endpoint = organization ? { baseUrl: organization.baseUrl, model: organization.model, headers: {} as Record<string, string> } : resolveAiEndpoint()
+  const apiKey = organization ? organization.apiKey : env.AI_API_KEY
+  if (!apiKey?.trim()) throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
+  const hostname = new URL(endpoint.baseUrl).hostname
+  const structuredOutput = Boolean(responseFormat && hostname === 'generativelanguage.googleapis.com')
+  const requestedTokens = structuredOutput ? Math.max(maxTokens, 2048) : maxTokens
+  const outputTokens = organization ? Math.min(requestedTokens, organization.maxOutputTokens) : requestedTokens
+  const body = {
+    model: endpoint.model, messages, temperature, max_tokens: outputTokens,
+    ...(stream ? { stream: true } : {}),
+    ...(structuredOutput ? { response_format: responseFormat, reasoning_effort: 'low' } : {}),
+    ...(hostname === 'api.deepseek.com' ? { thinking: { type: 'disabled' }, ...(responseFormat ? { response_format: { type: 'json_object' } } : {}) } : {}),
+  }
+  const encoded = JSON.stringify(body)
+  const reservation = organization ? await reserveAiUsage(organization, Buffer.byteLength(encoded, 'utf8'), outputTokens) : undefined
+  return { ...endpoint, apiKey, hostname, structuredOutput, encoded, reservation, organization: Boolean(organization) }
+}
+function reportedTokens(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 2147483647 ? value : undefined
+}
+async function recordAiUsage(reservation: AiReservation | undefined, success: boolean, totalTokens: number | undefined) {
+  if (!reservation) return
+  try { await finishAiUsage(reservation, { success, totalTokens }) } catch { console.error('[AI Service] Usage reporting unavailable; reserved allowance retained.') }
+}
+
 async function callAI(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   temperature = 0.7,
@@ -270,71 +298,47 @@ async function callAI(
   timeoutMs?: number,
   responseFormat?: Record<string, unknown>,
   onDiagnostic?: (diagnostic: ReceptionistDiagnostic) => void,
+  organizationId?: string,
+  externalSignal?: AbortSignal,
 ): Promise<string> {
-  const { baseUrl, model, headers: providerHeaders } = resolveAiEndpoint()
-  const url = `${baseUrl}/chat/completions`
-  const hostname = new URL(baseUrl).hostname
-  const structuredOutput = Boolean(responseFormat && hostname === 'generativelanguage.googleapis.com')
+  externalSignal?.throwIfAborted()
+  const prepared = await prepareAiRequest(organizationId, messages, temperature, maxTokens, responseFormat)
   const providers: Record<string, ReceptionistDiagnostic['provider']> = {
     'generativelanguage.googleapis.com': 'gemini', 'api.openai.com': 'openai',
     'api.deepseek.com': 'deepseek', 'openrouter.ai': 'openrouter',
     'api.tokenrouter.com': 'tokenrouter', 'api.anthropic.com': 'anthropic',
   }
-  const diagnostic: ReceptionistDiagnostic = { provider: providers[hostname] ?? 'custom', structuredOutput, finishReason: 'unknown', stage: 'provider' }
+  const diagnostic: ReceptionistDiagnostic = { provider: providers[prepared.hostname] ?? 'custom', structuredOutput: prepared.structuredOutput, finishReason: 'unknown', stage: 'provider' }
   onDiagnostic?.(diagnostic)
-
-  const response = await fetch(url, {
-    signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${env.AI_API_KEY}`,
-      ...providerHeaders,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature,
-      // Gemini's allowance includes thinking tokens; reserve space for the JSON reply.
-      max_tokens: structuredOutput ? Math.max(maxTokens, 2048) : maxTokens,
-      ...(structuredOutput ? { response_format: responseFormat, reasoning_effort: 'low' } : {}),
-    }),
-  })
-
-  if (!response.ok) {
-    // Log the provider's actual error internally (server-side only) so
-    // misconfigurations — missing/placeholder API key, deprecated model
-    // name, quota — are diagnosable from the logs. The client still only
-    // ever sees the generic AI_UNAVAILABLE_MESSAGE.
-    let detail = ''
-    try {
-      if (!timeoutMs) detail = (await response.text()).slice(0, 500)
-    } catch {
-      // ignore — body already consumed or unavailable
+  let success = false
+  let totalTokens: number | undefined
+  try {
+    const timeout = timeoutMs ?? (prepared.organization ? 30000 : undefined)
+    const signals = [externalSignal, timeout ? AbortSignal.timeout(timeout) : undefined].filter((signal): signal is AbortSignal => Boolean(signal))
+    const response = await fetch(`${prepared.baseUrl}/chat/completions`, {
+      signal: signals.length ? AbortSignal.any(signals) : undefined,
+      redirect: 'error', method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${prepared.apiKey}`, ...prepared.headers },
+      body: prepared.encoded,
+    })
+    if (!response.ok) {
+      console.error('[AI Service] Provider request failed.', response.status)
+      throw Object.assign(new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503), { providerStatus: response.status })
     }
-    console.error(
-      `[AI Service] API request failed (status ${response.status}, model "${model}"):`,
-      detail,
-    )
-    throw Object.assign(new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503), { providerStatus: response.status })
-  }
-
-  const data = (await response.json()) as ChatCompletionResponse
-  const finishReason = data.choices?.[0]?.finish_reason
-  diagnostic.finishReason = finishReason === 'stop' || finishReason === 'length' ? finishReason : 'other'
-  onDiagnostic?.(diagnostic)
-
-  const content = data.choices?.[0]?.message?.content
-  if (!content) {
-    console.error('[AI Service] Empty response from AI API')
-    throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
-  }
-
-  return content
+    const data = (await response.json()) as ChatCompletionResponse & { usage?: { total_tokens?: unknown } }
+    totalTokens = reportedTokens(data.usage?.total_tokens)
+    const finishReason = data.choices?.[0]?.finish_reason
+    diagnostic.finishReason = finishReason === 'stop' || finishReason === 'length' ? finishReason : 'other'
+    onDiagnostic?.(diagnostic)
+    const content = data.choices?.[0]?.message?.content
+    if (typeof content !== 'string' || !content.trim()) throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
+    success = true
+    return content
+  } finally { await recordAiUsage(prepared.reservation, success, totalTokens) }
 }
 
 /** Draft from untrusted conversation data without granting tools or send access. */
-export async function generateConversationFollowUp(conversation: EmailConversation, instructions?: string): Promise<GeneratedEmail> {
+export async function generateConversationFollowUp(conversation: EmailConversation, instructions?: string, organizationId?: string): Promise<GeneratedEmail> {
   const outputSchema = z.object({ subject: z.string().trim().min(1).max(200).refine((text) => !/[\r\n]/.test(text)), body: z.string().trim().min(1).max(16000).refine((text) => !/<\/?[a-z][^>]*>/i.test(text)) }).strict()
   try {
     const system = [PLATFORM_GUARDRAIL,
@@ -344,7 +348,7 @@ export async function generateConversationFollowUp(conversation: EmailConversati
       'You have no tools and cannot send an email, change CRM records, or approve a task. A person separately edits and sends this draft.',
       'Return JSON only with exactly subject and body, both plain text. Do not use HTML, markdown fences, or action blocks.',
     ].join('\n')
-    const raw = await callAI([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify({ instructions: instructions ?? '', conversation: { subject: conversation.subject, mailboxEmail: conversation.mailboxEmail, recipientEmail: conversation.recipientEmail, messages: conversation.messages } }) }], 0.2, 3000, 30000)
+    const raw = await callAI([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify({ instructions: instructions ?? '', conversation: { subject: conversation.subject, mailboxEmail: conversation.mailboxEmail, recipientEmail: conversation.recipientEmail, messages: conversation.messages } }) }], 0.2, 3000, 30000, undefined, undefined, organizationId)
     return outputSchema.parse(JSON.parse(raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()))
   } catch { throw new AppError('AI_DRAFT_FAILED', 'A conversation draft could not be generated. Try again shortly.', 503) }
 }
@@ -352,6 +356,7 @@ export async function generateConversationFollowUp(conversation: EmailConversati
 export async function generateReceptionistReply(
   state: CallState,
   config: ReceptionistConfig,
+  organizationId?: string,
 ): Promise<ReceptionistExtraction> {
   const system = [
     'You are the public-facing AI receptionist for the business described below.',
@@ -385,7 +390,7 @@ export async function generateReceptionistReply(
         required: ['fullName', 'phone', 'reason', 'reply'],
       },
     },
-  }, value => { diagnostic = { ...value } })
+  }, value => { diagnostic = { ...value } }, organizationId)
   if (diagnostic) diagnostic.stage = 'model'
   return receptionistExtractionSchema.parse(JSON.parse(raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()))
   } catch (error) {
@@ -408,74 +413,63 @@ async function* callAIStream(
   temperature = 0.7,
   maxTokens = 2000,
   timeoutMs?: number,
+  organizationId?: string,
+  externalSignal?: AbortSignal,
 ): AsyncGenerator<string, void, void> {
-  const { baseUrl, model, headers: providerHeaders } = resolveAiEndpoint()
-  const url = `${baseUrl}/chat/completions`
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${env.AI_API_KEY}`,
-      ...providerHeaders,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-      stream: true,
-    }),
-    signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
-  })
-
-  if (!response.ok || !response.body) {
-    let detail = ''
-    try {
-      if (!timeoutMs) detail = (await response.text()).slice(0, 500)
-    } catch {
-      // ignore — body already consumed or unavailable
-    }
-    console.error(
-      `[AI Service] Streaming request failed (status ${response.status}, model "${model}"):`,
-      detail,
-    )
-    throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
+  externalSignal?.throwIfAborted()
+  const prepared = await prepareAiRequest(organizationId, messages, temperature, maxTokens, undefined, true)
+  const controller = new AbortController()
+  const timeout = timeoutMs ?? (prepared.organization ? 30000 : undefined)
+  const signals = [controller.signal, externalSignal, timeout ? AbortSignal.timeout(timeout) : undefined].filter((signal): signal is AbortSignal => Boolean(signal))
+  const signal = AbortSignal.any(signals)
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  const cancelRead = () => { void reader?.cancel().catch(() => {}) }
+  signal.addEventListener('abort', cancelRead, { once: true })
+  let success = false
+  let totalTokens: number | undefined
   try {
+    const response = await fetch(`${prepared.baseUrl}/chat/completions`, {
+      method: 'POST', redirect: 'error', signal,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${prepared.apiKey}`, ...prepared.headers },
+      body: prepared.encoded,
+    })
+    if (!response.ok || !response.body) throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
+    reader = response.body.getReader()
+    if (signal.aborted) cancelRead()
+    signal.throwIfAborted()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let completionSeen = false
     while (true) {
       const { done, value } = await reader.read()
-      if (done) break
+      signal.throwIfAborted()
+      if (done) {
+        if (!completionSeen) throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
+        success = true
+        break
+      }
       buffer += decoder.decode(value, { stream: true })
-
-      // SSE frames are newline-delimited; a single `read()` may span
-      // several frames or split one mid-line, so drain complete lines
-      // and keep any trailing partial in the buffer.
+      if (buffer.length > 1000000) throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
       let newlineIdx: number
       while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
         const line = buffer.slice(0, newlineIdx).trim()
         buffer = buffer.slice(newlineIdx + 1)
         if (!line.startsWith('data:')) continue
         const payload = line.slice(5).trim()
-        if (payload === '[DONE]') return
-        try {
-          const parsed = JSON.parse(payload) as {
-            choices?: Array<{ delta?: { content?: string } }>
-          }
-          const delta = parsed.choices?.[0]?.delta?.content
-          if (typeof delta === 'string' && delta) yield delta
-        } catch {
-          // Ignore keep-alive comments and any non-JSON frame.
-        }
+        if (payload === '[DONE]') { success = true; return }
+        let parsed: { choices?: Array<{ delta?: { content?: string }; finish_reason?: string }>; usage?: { total_tokens?: unknown } }
+        try { parsed = JSON.parse(payload) } catch { continue }
+        completionSeen ||= parsed.choices?.some(choice => ['stop', 'length', 'content_filter', 'tool_calls', 'function_call'].includes(choice.finish_reason ?? '')) ?? false
+        totalTokens = reportedTokens(parsed.usage?.total_tokens) ?? totalTokens
+        const delta = parsed.choices?.[0]?.delta?.content
+        if (typeof delta === 'string' && delta) yield delta
       }
     }
   } finally {
-    reader.releaseLock()
+    signal.removeEventListener('abort', cancelRead)
+    controller.abort()
+    if (reader) { try { await reader.cancel() } catch { /* The response may already be closed. */ } reader.releaseLock() }
+    await recordAiUsage(prepared.reservation, success, totalTokens)
   }
 }
 
@@ -574,6 +568,7 @@ export async function* chatMessageStream(
   userId: string,
   orgId: string,
   history: ChatHistoryEntry[] = [],
+  signal?: AbortSignal,
 ): AsyncGenerator<{ type: 'delta'; text: string; knowledgeAnswer?: boolean }, ChatResponse, void> {
   try {
     const context = await chatKnowledge(message, userId, orgId)
@@ -583,11 +578,11 @@ export async function* chatMessageStream(
         { role: 'system', content: composeSystemPrompt(CHATBOT_ROLE, adminPrompt) },
         ...history.filter(turn => turn.role === 'user'),
         { role: 'user', content: message + CHAT_ACTION_HINT },
-      ], 0.5, 1000, 15000))
+      ], 0.5, 1000, 15000, undefined, undefined, orgId, signal))
       if (planner.action) return planner
       let full = ''
       let emitted = 0
-      for await (const delta of callAIStream(answerMessages(message, adminPrompt, history, context), 0.3, 1000, 15000)) {
+      for await (const delta of callAIStream(answerMessages(message, adminPrompt, history, context), 0.3, 1000, 15000, orgId, signal)) {
         full += delta
         const boundary = safeStreamBoundary(full)
         if (boundary > emitted) { yield { type: 'delta', text: full.slice(emitted, boundary), knowledgeAnswer: true }; emitted = boundary }
@@ -611,7 +606,7 @@ export async function* chatMessageStream(
     let full = ''
     let emitted = 0
 
-    for await (const delta of callAIStream(messages, 0.5, 1000)) {
+    for await (const delta of callAIStream(messages, 0.5, 1000, undefined, orgId, signal)) {
       full += delta
       const boundary = safeStreamBoundary(full)
       if (boundary > emitted) {
@@ -625,7 +620,7 @@ export async function* chatMessageStream(
     if (error instanceof AppError) {
       throw error
     }
-    console.error('[AI Service] chatMessageStream failed:', error)
+    console.error('[AI Service] chatMessageStream failed:')
     throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
   }
 }
@@ -764,7 +759,7 @@ export async function generateEmail(
       { role: 'user', content: userPrompt },
     ]
 
-    const raw = await callAI(messages)
+    const raw = await callAI(messages, undefined, undefined, undefined, undefined, undefined, orgId)
 
     // Parse JSON response
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
@@ -787,7 +782,7 @@ export async function generateEmail(
       throw error
     }
     // All other errors: log internally, return generic message
-    console.error('[AI Service] generateEmail failed:', error)
+    console.error('[AI Service] generateEmail failed:')
     throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
   }
 }
@@ -864,7 +859,7 @@ export async function researchAccount(
       { role: 'user', content: userPrompt },
     ]
 
-    const raw = await callAI(messages)
+    const raw = await callAI(messages, undefined, undefined, undefined, undefined, undefined, orgId)
 
     // Parse JSON response
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
@@ -899,7 +894,7 @@ export async function researchAccount(
     if (error instanceof AppError) {
       throw error
     }
-    console.error('[AI Service] researchAccount failed:', error)
+    console.error('[AI Service] researchAccount failed:')
     throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
   }
 }
@@ -1064,11 +1059,11 @@ export async function chatMessage(
       { role: 'user', content: message + CHAT_ACTION_HINT },
     ]
 
-    const responseText = await callAI(messages, 0.5, 1000)
+    const responseText = await callAI(messages, 0.5, 1000, undefined, undefined, undefined, orgId)
     if (context) {
       const planned = extractActionBlock(responseText)
       if (planned.action) return planned
-      return knowledgeAnswer(await callAI(answerMessages(message, adminPrompt, [], context), 0.3, 1000, 15000), context)
+      return knowledgeAnswer(await callAI(answerMessages(message, adminPrompt, [], context), 0.3, 1000, 15000, undefined, undefined, orgId), context)
     }
 
     const { message: cleaned, action } = extractActionBlock(responseText)
@@ -1077,7 +1072,7 @@ export async function chatMessage(
     if (error instanceof AppError) {
       throw error
     }
-    console.error('[AI Service] chatMessage failed:', error)
+    console.error('[AI Service] chatMessage failed:')
     throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
   }
 }
@@ -1434,7 +1429,7 @@ export async function summarizeMeeting(
     let actionItems: string[] = []
     let sentiment: MeetingSummary['sentiment'] = null
 
-    const raw = await callAI(messages, 0.3, 1500)
+    const raw = await callAI(messages, 0.3, 1500, undefined, undefined, undefined, orgId)
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]) as {
@@ -1479,7 +1474,7 @@ export async function summarizeMeeting(
     if (error instanceof AppError) {
       throw error
     }
-    console.error('[AI Service] summarizeMeeting failed:', error)
+    console.error('[AI Service] summarizeMeeting failed:')
     throw new AppError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, 503)
   }
 }
@@ -1830,7 +1825,7 @@ export async function executeChatAction(
     if (error instanceof AppError) {
       return { success: false, message: error.message }
     }
-    console.error('[AI Service] executeChatAction failed:', error)
+    console.error('[AI Service] executeChatAction failed:')
     return {
       success: false,
       message: 'Action failed. Please try again or perform it manually.',

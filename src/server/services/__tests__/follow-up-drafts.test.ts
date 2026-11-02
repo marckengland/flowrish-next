@@ -28,7 +28,7 @@ describe('conversation follow-up drafts', () => {
     expect(result.subject).toBe('Re: Proposal')
     expect(result.context.recipientEmail).toBe('alternate@example.invalid')
     expect(mocks.fetchConversation).toHaveBeenCalledWith({ accountId: 'account', organizationId: 'org', userId: 'user', threadId: 'thread', sourceMessageId: 'source', leadEmails: ['primary@example.invalid', 'alternate@example.invalid'] })
-    expect(mocks.generate).toHaveBeenCalledWith(conversation, 'Ask for a time')
+    expect(mocks.generate).toHaveBeenCalledWith(conversation, 'Ask for a time', 'org')
     const update = mocks.suggestion.updateMany.mock.calls[0][0]
     expect(update.where).toMatchObject({ id: 'suggestion', organizationId: 'org', assigneeId: 'user', updatedAt: suggestion.updatedAt, status: { not: 'DISMISSED' } })
     expect(update.data.draftContext).toEqual(context)

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/server/services/org-ai-provider', () => ({ resolveOrganizationAi: async () => null }))
 const mocks = vi.hoisted(() => ({ knowledge: vi.fn(), prompt: vi.fn(), fetch: vi.fn() }))
 vi.mock('@/server/services/knowledge', () => ({ getAirishKnowledge: mocks.knowledge }))
 vi.mock('@/server/db/middleware', () => ({ createTenantPrisma: () => ({ aiPromptConfig: { findFirst: mocks.prompt } }) }))

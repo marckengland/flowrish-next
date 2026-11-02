@@ -106,9 +106,15 @@ describe('env validation schema', () => {
   it('fails when a required key var is empty string', () => {
     const result = envSchema.safeParse({
       ...validEnv,
-      AI_API_KEY: '',
+      SUPABASE_SECRET_KEY: '',
     })
     expect(result.success).toBe(false)
+  })
+
+  it.each(['', undefined])('allows an organization key without a global AI key (%s)', (key) => {
+    const result = envSchema.safeParse({ ...validEnv, AI_API_KEY: key })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.AI_API_KEY).toBe('')
   })
 
   it('fails when a required var is missing', () => {
@@ -134,7 +140,7 @@ describe('env validation schema', () => {
       ...validEnv,
       NEXT_PUBLIC_SUPABASE_URL: 'bad',
       UPSTASH_REDIS_REST_URL: 'bad',
-      AI_API_KEY: '',
+      SUPABASE_SECRET_KEY: '',
     })
     expect(result.success).toBe(false)
     if (!result.success) {

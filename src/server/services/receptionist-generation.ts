@@ -11,6 +11,7 @@ export async function generateApprovedReceptionistReply(organizationId: string, 
   const extraction = await generateReceptionistReply(
     { ...state, messages: state.messages.filter(message => message.role === 'user') },
     { ...config, knowledge },
+    organizationId,
   )
   return { extraction, sources: context.sources.map(({ id, title, revision }) => ({ id, title, revision })) }
 }

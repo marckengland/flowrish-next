@@ -28,6 +28,8 @@ export const TENANT_SCOPED_MODELS = [
   'ForecastSnapshot',
   'CoachingComment',
   'AiPromptConfig',
+  'AiProviderConfig',
+  'AiUsageDay',
   'DeletionRequest',
   'FieldMapping',
   'StageTransition',

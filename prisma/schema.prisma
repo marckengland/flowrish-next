@@ -90,6 +90,8 @@ model Organization {
   scoringRules      ScoringRule[]
   assignmentRules   AssignmentRule[]
   aiPromptConfigs   AiPromptConfig[]
+  aiProviderConfig AiProviderConfig?
+  aiUsageDays AiUsageDay[]
   scoreDecayConfigs ScoreDecayConfig[]
   emailAccounts     EmailAccount[]
   emailMessages     EmailMessage[]
@@ -988,6 +990,37 @@ model ForecastSnapshot {
 }
 
 // ─── AI & Coaching Models ────────────────────────────────────────────────────
+
+model AiProviderConfig {
+  organizationId    String       @id
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  provider          String
+  model             String
+  apiKeyCiphertext  String
+  enabled           Boolean      @default(true)
+  dailyRequestLimit Int          @default(20)
+  dailyTokenLimit   Int          @default(50000)
+  maxOutputTokens   Int          @default(2048)
+  maxInputBytes     Int          @default(16000)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+model AiUsageDay {
+  id                String       @id @default(uuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  day               DateTime     @db.Date
+  requests          Int          @default(0)
+  reservedTokens    Int          @default(0)
+  reportedTokens    Int          @default(0)
+  completedRequests Int          @default(0)
+  failedRequests    Int          @default(0)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([organizationId, day])
+}
 
 model AiPromptConfig {
   id           String  @id @default(uuid())

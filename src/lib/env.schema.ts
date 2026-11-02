@@ -35,8 +35,8 @@ export const envSchema = z.object({
     .length(64, 'EMAIL_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)')
     .regex(/^[0-9a-fA-F]+$/, 'EMAIL_ENCRYPTION_KEY must be a valid hex string'),
 
-  // AI (Gemini)
-  AI_API_KEY: z.string().min(1, 'AI_API_KEY is required'),
+  // Optional deployment fallback; organizations can supply their own encrypted key.
+  AI_API_KEY: z.string().default(''),
 
   // Optional with defaults
   AI_API_URL: z
