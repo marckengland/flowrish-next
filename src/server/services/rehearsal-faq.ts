@@ -1,4 +1,5 @@
 import 'server-only'
+import type { Prisma } from '@prisma/client'
 import { z, ZodError } from 'zod'
 import { AppError } from '@/lib/errors'
 import { faqDraftInputSchema, type FaqDraftResult, type FaqOrigin } from '@/lib/rehearsal-faq'
@@ -24,7 +25,12 @@ export async function createRehearsalFaq(organizationId: string, userId: string,
   return withAdmin(organizationId, userId, async () => {
     idSchema.parse(rehearsalId)
     const input = faqDraftInputSchema.parse(raw)
-    return prisma.$transaction(async tx => {
+    return prisma.$transaction(tx => createRehearsalFaqInTransaction(tx, organizationId, userId, rehearsalId, input))
+  })
+}
+
+// Callers authenticate first and share this transaction so creation and origin stay atomic.
+export async function createRehearsalFaqInTransaction(tx: Prisma.TransactionClient, organizationId: string, userId: string, rehearsalId: string, input: z.infer<typeof faqDraftInputSchema>): Promise<FaqDraftResult> {
       // Use the same organization lock as ordinary library creation for the shared cap.
       await tx.$queryRaw`SELECT "id" FROM "Organization" WHERE "id"=${organizationId} FOR UPDATE`
       const [rehearsal] = await tx.$queryRaw<LockedRehearsal[]>`SELECT "id", "updatedAt", "snapshot", "unansweredMessageIndexes" FROM "ReceptionistRehearsal" WHERE "id"=${rehearsalId} AND "organizationId"=${organizationId} FOR UPDATE`
@@ -42,8 +48,6 @@ export async function createRehearsalFaq(organizationId: string, userId: string,
       await tx.rehearsalFaqDraft.create({ data: { organizationId, rehearsalId, messageIndex: input.messageIndex, documentId: document.id } })
       await tx.auditEntry.create({ data: { organizationId, userId, action: 'CREATE', entityType: 'KnowledgeDocument', entityId: document.id, changes: { revision: document.revision } } })
       return { documentId: document.id, knowledgeUrl: `/knowledge?document=${document.id}`, created: true }
-    })
-  })
 }
 
 export async function getRehearsalFaqOrigin(organizationId: string, userId: string, documentId: string): Promise<FaqOrigin | null> {

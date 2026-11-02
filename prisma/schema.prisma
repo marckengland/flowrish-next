@@ -117,6 +117,7 @@ model Organization {
   knowledgeDocuments KnowledgeDocument[]
   knowledgeChunks KnowledgeChunk[]
   rehearsalFaqDrafts RehearsalFaqDraft[]
+  knowledgeGapReviews KnowledgeGapReview[]
 }
 
 model KnowledgeDocument {
@@ -219,6 +220,19 @@ model ReceptionistRehearsal {
   @@unique([id, organizationId])
   @@unique([organizationId, clientId])
   @@index([organizationId, createdAt, id])
+}
+
+model KnowledgeGapReview {
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  questionKey         String
+  resolvedFingerprint String?
+  resolvedAt          DateTime?
+  resolvedById        String?
+  notes               String       @default("")
+  updatedAt           DateTime     @updatedAt
+
+  @@id([organizationId, questionKey])
 }
 
 model RehearsalFaqDraft {
