@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { type CallState } from '@/lib/receptionist'
 import { ReceptionistMicrophone } from './receptionist-microphone'
+import { ReceptionistScenarios } from './receptionist-scenarios'
 
 interface Readiness {
   saved: boolean
@@ -168,6 +169,7 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
           </div>
           {!!result.sources.length && <details className="text-xs text-muted-foreground" open><summary className="cursor-pointer">Sources for the latest reply · admin only</summary><ul className="mt-2 space-y-1">{result.sources.map((source) => <li key={source.id} className="break-words">{source.title} · revision {source.revision}</li>)}</ul></details>}
           {result.finished ? <p className="text-sm font-medium">Conversation tested in browser. Phone routing has not been verified.</p> : <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); if (speech.trim()) void send({ speech: speech.trim() }) }}>
+            <ReceptionistScenarios disabled={busy || dictating || hasUnsavedChanges || !hasSavedSettings} awaitingConfirmation={Boolean(result.state.awaitingConfirmation)} onSelect={setSpeech} />
             <label className="block space-y-1.5 text-sm font-medium"><span>Caller message</span><Input value={speech} maxLength={2000} disabled={busy || dictating || hasUnsavedChanges || !hasSavedSettings} onChange={(event) => setSpeech(event.target.value)} placeholder="Type what a caller would say" /></label>
             <ReceptionistMicrophone value={speech} onChange={setSpeech} disabled={busy || hasUnsavedChanges || !hasSavedSettings} onActiveChange={setDictating} />
             <div className="flex flex-wrap gap-2">
