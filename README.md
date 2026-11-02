@@ -116,6 +116,7 @@ prisma/
 - **Revenue Forecasting** — Pipeline metrics, AI predictions, and commit vs. actual tracking
 - **Email Integration** — Gmail **and Microsoft 365 / Outlook** (Microsoft Graph) with OAuth, personalization tags, inbox sync, threaded replies, and rich HTML emails. Encrypted tokens; cadence email steps work with either provider automatically
 - **Calling** — Bring-your-own **click-to-call**: free `tel:` dialer + call logging out of the box, and optional **in-browser calling via Twilio** (per-org credentials, encrypted at rest; TwiML webhook signature verification). A provider comparison (Twilio/Telnyx/SignalWire/Plivo/Bandwidth) with self-serve setup guides lives in Settings
+- **Automatic mailbox sync** — Five-minute Gmail/Microsoft checks via Inngest, paginated checkpoint recovery, per-mailbox sync health, and failure alerts. Requires registered production background jobs; see the [guide](docs/AUTOMATIC_MAILBOX_SYNC.md)
 - **Follow-up inbox** — Review matched sales replies and confirmed callbacks, edit and approve tasks, dismiss suggestions, and open email drafts for explicit sending. Qualifying synced replies stop their cadence; see the [guide](docs/FOLLOW_UP_INBOX.md)
 - **AI receptionist** — Optional inbound Twilio receptionist with approved FAQs, after-hours scheduling, confirmed callback capture, assigned tasks, and call history. Disabled by default; see the [setup guide](docs/AI_RECEPTIONIST.md)
 - **Marketing landing page** — public `/` landing (auth-aware CTAs); the authenticated app lives under `/dashboard`

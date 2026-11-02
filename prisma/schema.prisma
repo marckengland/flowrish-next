@@ -719,6 +719,11 @@ model EmailAccount {
   refreshToken String    // encrypted
   tokenExpiry  DateTime
   lastSyncAt   DateTime?
+  syncStatus   String    @default("idle")
+  syncRequestedAt DateTime?
+  syncAttemptAt DateTime?
+  syncRunId    String?
+  syncError    String?
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])

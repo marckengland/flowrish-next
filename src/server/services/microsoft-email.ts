@@ -318,20 +318,48 @@ export async function listMicrosoftMessages(
   accessToken: string,
   sinceIso: string,
 ): Promise<NormalizedMicrosoftMessage[]> {
+  const messages: NormalizedMicrosoftMessage[] = []
+  let cursor: string | undefined
+  const seen = new Set<string>()
+  for (let page = 0; page < 100; page++) {
+    const result = await listMicrosoftMessagesPage(accessToken, sinceIso, cursor)
+    messages.push(...result.messages)
+    if (!result.nextLink) return messages
+    if (seen.has(result.nextLink)) throw new Error('Invalid Microsoft mailbox continuation')
+    seen.add(result.nextLink)
+    cursor = result.nextLink
+  }
+  throw new Error('Mailbox sync page limit reached. Contact support to resume this mailbox.')
+}
+
+export async function listMicrosoftMessagesPage(
+  accessToken: string,
+  sinceIso: string,
+  cursor?: string,
+): Promise<{ messages: NormalizedMicrosoftMessage[]; nextLink?: string }> {
   const params = new URLSearchParams({
     $top: '50',
     $select: 'id,conversationId,subject,from,toRecipients,receivedDateTime,bodyPreview,internetMessageHeaders',
     $orderby: 'receivedDateTime desc',
     $filter: `receivedDateTime ge ${sinceIso}`,
   })
-  const res = await fetch(`${MS_GRAPH}/me/messages?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Graph messages list failed: ${text}`)
+  const initial = `${MS_GRAPH}/me/messages?${params.toString()}`
+  const validate = (value: string) => {
+    let url: URL
+    try { url = new URL(value) } catch { throw new Error('Invalid Microsoft mailbox continuation') }
+    if (url.protocol !== 'https:' || url.hostname !== 'graph.microsoft.com'
+      || url.port || url.username || url.password || url.hash
+      || url.pathname !== '/v1.0/me/messages') throw new Error('Invalid Microsoft mailbox continuation')
+    return url.toString()
   }
+  const res = await fetch(cursor ? validate(cursor) : initial, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(15_000),
+    redirect: 'error',
+  })
+  if (!res.ok) throw new Error(`Microsoft mailbox request failed (${res.status}). Reconnect the mailbox if this persists.`)
   const data = (await res.json()) as {
+    '@odata.nextLink'?: string
     value?: Array<{
       id: string
       conversationId?: string
@@ -343,16 +371,19 @@ export async function listMicrosoftMessages(
       toRecipients?: Array<{ emailAddress?: { address?: string } }>
     }>
   }
-
-  return (data.value ?? []).map((m) => ({
-    externalId: m.id,
-    headers: m.internetMessageHeaders ?? [],
-    recipientEmails: (m.toRecipients ?? []).map((r) => (r.emailAddress?.address ?? '').toLowerCase()),
-    threadId: m.conversationId ?? m.id,
-    fromEmail: (m.from?.emailAddress?.address ?? '').toLowerCase(),
-    toEmail: (m.toRecipients?.[0]?.emailAddress?.address ?? '').toLowerCase(),
-    subject: m.subject ?? '',
-    bodyPreview: m.bodyPreview ?? null,
-    sentAt: m.receivedDateTime ?? new Date().toISOString(),
-  }))
+  const nextLink = data['@odata.nextLink'] ? validate(data['@odata.nextLink']) : undefined
+  return {
+    nextLink,
+    messages: (data.value ?? []).map((m) => ({
+      externalId: m.id,
+      headers: m.internetMessageHeaders ?? [],
+      recipientEmails: (m.toRecipients ?? []).map((r) => (r.emailAddress?.address ?? '').toLowerCase()),
+      threadId: m.conversationId ?? m.id,
+      fromEmail: (m.from?.emailAddress?.address ?? '').toLowerCase(),
+      toEmail: (m.toRecipients?.[0]?.emailAddress?.address ?? '').toLowerCase(),
+      subject: m.subject ?? '',
+      bodyPreview: m.bodyPreview ?? null,
+      sentAt: m.receivedDateTime ?? new Date().toISOString(),
+    })),
+  }
 }

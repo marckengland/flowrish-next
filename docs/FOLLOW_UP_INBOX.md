@@ -20,7 +20,7 @@ Reverting code does not undo tasks that users approved or emails they explicitly
 
 Before-state captured read-only on 2026-11-02: 2 organizations, 10 leads, 7 tasks, 9 activities, 0 email messages; FollowUpSuggestion table absent. No message rows need identity backfill in this deployment. Older installations retain nullable legacy mailbox identities and reconcile them safely during sync.
 
-Mailbox detection uses the existing on-demand sync window (up to 50 messages from the past day). Sync the connected mailbox to detect replies; this release does not add continuous provider webhooks or a historical mailbox backfill. A send already handed to the email provider cannot be recalled when a reply arrives.
+Mailbox detection runs during automatic or manual sync. Automatic checks run every five minutes when Inngest is configured and registered; the Mailbox sync panel shows health and last success. Providers are paginated from the previous successful checkpoint with overlap; the first sync covers the past day. See [automatic mailbox sync](AUTOMATIC_MAILBOX_SYNC.md). A send already handed to the email provider cannot be recalled when a reply arrives.
 
 The migration was applied successfully to the configured database after disposable database verification. After-state remained 2 organizations, 10 leads, 7 tasks, 9 activities, 0 messages and 0 suggestions. Inbox RLS is enabled; anon SELECT and authenticated TRUNCATE are denied.
 

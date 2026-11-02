@@ -2,6 +2,7 @@ import { serve } from 'inngest/next'
 import { inngest } from '@/server/inngest/client'
 import { cadenceStepFunction } from '@/server/inngest/cadence-step'
 import { emailSyncFunction } from '@/server/inngest/email-sync'
+import { mailboxSyncScheduleFunction } from '@/server/inngest/mailbox-sync-schedule'
 import { scoreDecayFunction } from '@/server/inngest/score-decay'
 import { taskReminderFunction } from '@/server/inngest/task-reminder'
 import { forecastSnapshotFunction } from '@/server/inngest/forecast-snapshot'
@@ -28,11 +29,14 @@ import { forecastSnapshotFunction } from '@/server/inngest/forecast-snapshot'
  *
  * Validates: Requirements 14.6, 14.7
  */
+export const maxDuration = 300
+
 export const { GET, POST, PUT } = serve({
   client: inngest,
   functions: [
     cadenceStepFunction,
     emailSyncFunction,
+    mailboxSyncScheduleFunction,
     scoreDecayFunction,
     taskReminderFunction,
     forecastSnapshotFunction,
