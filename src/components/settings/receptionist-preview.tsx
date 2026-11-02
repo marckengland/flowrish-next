@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { type CallState } from '@/lib/receptionist'
 import { ReceptionistMicrophone } from './receptionist-microphone'
 import { ReceptionistScenarios } from './receptionist-scenarios'
+import { ReceptionistRehearsalReports } from './receptionist-rehearsal-reports'
+import type { RehearsalMessage, RehearsalSnapshot } from '@/lib/receptionist-rehearsal'
 
 interface Readiness {
   saved: boolean
@@ -35,7 +37,8 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
   const [readiness, setReadiness] = useState<Readiness | null>(null)
   const [checking, setChecking] = useState(false)
   const [result, setResult] = useState<PreviewResult | null>(null)
-  const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([])
+  const [messages, setMessages] = useState<RehearsalMessage[]>([])
+  const [snapshotId, setSnapshotId] = useState<string | null>(null)
   const [speech, setSpeech] = useState('')
   const [dictating, setDictating] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -46,6 +49,7 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
   const readAloudRef = useRef(false)
   const request = useRef<AbortController | null>(null)
   const readinessRequest = useRef<AbortController | null>(null)
+  const snapshot = useMemo<RehearsalSnapshot | null>(() => result && snapshotId ? { clientId: snapshotId, settingsVersion: result.settingsVersion, finished: result.finished, messages } : null, [result, snapshotId, messages])
 
   useEffect(() => {
     setSupported(Boolean(window.speechSynthesis && window.SpeechSynthesisUtterance))
@@ -61,6 +65,7 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
     window.speechSynthesis?.cancel()
     setResult(null)
     setMessages([])
+    setSnapshotId(null)
     setSpeech('')
     setDictating(false)
     setBusy(false)
@@ -106,10 +111,11 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
       }
       const next = body.data as PreviewResult
       setResult(next)
+      setSnapshotId(crypto.randomUUID())
       setMessages((previous) => [
         ...(input ? previous : []),
-        ...(input ? [{ role: 'Caller', content: input.speech ?? 'Pressed 1 to confirm' }] : []),
-        { role: 'Receptionist', content: next.reply },
+        ...(input ? [{ role: 'caller' as const, content: input.speech ?? 'Pressed 1 to confirm', sources: [], generation: 'scripted' as const }] : []),
+        { role: 'receptionist', content: next.reply, sources: next.sources, generation: next.generation?.mode ?? 'scripted' },
       ])
       setSpeech('')
       if (readAloudRef.current && window.speechSynthesis) {
@@ -165,7 +171,7 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
         {result?.generation?.mode === 'fallback' && <p role="status" className="text-sm text-muted-foreground">{({ rate_limited: 'AI request limit reached.', timeout: 'The AI request timed out.', invalid_json: 'The AI response could not be read.', invalid_response: 'The AI response could not be read.', provider_unavailable: 'The AI provider is unavailable.', service_unavailable: 'The AI service is unavailable.' } as Record<string, string>)[result.generation.reason ?? ''] ?? 'The AI service is unavailable.'} This preview is collecting a callback message instead. End this preview and try again later to retry AI.</p>}
         {!result ? <Button disabled={busy || hasUnsavedChanges || !hasSavedSettings} onClick={() => { void send() }}>{busy ? 'Starting preview…' : 'Start browser preview'}</Button> : <>
           <div role="log" aria-label="Preview conversation" aria-live="polite" className="max-h-96 space-y-3 overflow-y-auto rounded-lg border p-4 text-sm">
-            {messages.map((message, index) => <p key={index} className="whitespace-pre-wrap break-words"><span className="font-medium">{message.role}: </span>{message.content}</p>)}
+            {messages.map((message, index) => <p key={index} className="whitespace-pre-wrap break-words"><span className="font-medium">{message.role === 'caller' ? 'Caller' : 'Receptionist'}: </span>{message.content}</p>)}
           </div>
           {!!result.sources.length && <details className="text-xs text-muted-foreground" open><summary className="cursor-pointer">Sources for the latest reply · admin only</summary><ul className="mt-2 space-y-1">{result.sources.map((source) => <li key={source.id} className="break-words">{source.title} · revision {source.revision}</li>)}</ul></details>}
           {result.finished ? <p className="text-sm font-medium">Conversation tested in browser. Phone routing has not been verified.</p> : <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); if (speech.trim()) void send({ speech: speech.trim() }) }}>
@@ -180,6 +186,7 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
           {result.callback && <div className="space-y-2 rounded-lg border p-4 text-sm"><p className="font-medium">Preview-only callback summary</p><dl className="space-y-2"><div><dt className="text-muted-foreground">Name</dt><dd>{result.callback.fullName}</dd></div><div><dt className="text-muted-foreground">Phone</dt><dd>{result.callback.phone}</dd></div><div><dt className="text-muted-foreground">Reason</dt><dd className="whitespace-pre-wrap break-words">{result.callback.reason}</dd></div></dl><p>Nothing was saved to your CRM. No callback was scheduled.</p></div>}
           <Button variant="outline" onClick={endPreview}>{result.finished ? 'Reset preview' : 'End preview'}</Button>
         </>}
+        <ReceptionistRehearsalReports snapshot={snapshot} disabled={busy || dictating || hasUnsavedChanges} />
       </CardContent>
     </Card>
   )
