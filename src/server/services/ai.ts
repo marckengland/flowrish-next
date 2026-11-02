@@ -177,7 +177,7 @@ export interface MeetingSummary {
 }
 
 interface ChatCompletionResponse {
-  choices: Array<{ message: { content: string } }>
+  choices: Array<{ message: { content: string }; finish_reason?: string }>
 }
 
 // ─── Generic error message ───────────────────────────────────────────────────
@@ -256,15 +256,32 @@ function resolveAiEndpoint(): {
  * Calls the AI API (OpenAI-compatible chat completions endpoint).
  * Throws AppError with generic message on any failure.
  */
+export interface ReceptionistDiagnostic {
+  provider: 'gemini' | 'openai' | 'deepseek' | 'openrouter' | 'tokenrouter' | 'anthropic' | 'custom'
+  structuredOutput: boolean
+  finishReason: 'unknown' | 'stop' | 'length' | 'other'
+  stage: 'provider' | 'model'
+}
+
 async function callAI(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   temperature = 0.7,
   maxTokens = 2000,
   timeoutMs?: number,
   responseFormat?: Record<string, unknown>,
+  onDiagnostic?: (diagnostic: ReceptionistDiagnostic) => void,
 ): Promise<string> {
   const { baseUrl, model, headers: providerHeaders } = resolveAiEndpoint()
   const url = `${baseUrl}/chat/completions`
+  const hostname = new URL(baseUrl).hostname
+  const structuredOutput = Boolean(responseFormat && hostname === 'generativelanguage.googleapis.com')
+  const providers: Record<string, ReceptionistDiagnostic['provider']> = {
+    'generativelanguage.googleapis.com': 'gemini', 'api.openai.com': 'openai',
+    'api.deepseek.com': 'deepseek', 'openrouter.ai': 'openrouter',
+    'api.tokenrouter.com': 'tokenrouter', 'api.anthropic.com': 'anthropic',
+  }
+  const diagnostic: ReceptionistDiagnostic = { provider: providers[hostname] ?? 'custom', structuredOutput, finishReason: 'unknown', stage: 'provider' }
+  onDiagnostic?.(diagnostic)
 
   const response = await fetch(url, {
     signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
@@ -279,7 +296,7 @@ async function callAI(
       messages,
       temperature,
       max_tokens: maxTokens,
-      ...(responseFormat && new URL(baseUrl).hostname === 'generativelanguage.googleapis.com' ? { response_format: responseFormat } : {}),
+      ...(structuredOutput ? { response_format: responseFormat } : {}),
     }),
   })
 
@@ -302,6 +319,9 @@ async function callAI(
   }
 
   const data = (await response.json()) as ChatCompletionResponse
+  const finishReason = data.choices?.[0]?.finish_reason
+  diagnostic.finishReason = finishReason === 'stop' || finishReason === 'length' ? finishReason : 'other'
+  onDiagnostic?.(diagnostic)
 
   const content = data.choices?.[0]?.message?.content
   if (!content) {
@@ -347,6 +367,8 @@ export async function generateReceptionistReply(
     `Business information: ${JSON.stringify({ name: config.businessName, information: config.knowledge })}`,
     `Known caller details: ${JSON.stringify({ fullName: state.fullName, phone: state.phone, reason: state.reason })}`,
   ].join('\n')
+  let diagnostic: ReceptionistDiagnostic | undefined
+  try {
   const raw = await callAI([{ role: 'system', content: system }, ...state.messages], 0.2, 500, 8000, {
     type: 'json_schema',
     json_schema: {
@@ -362,8 +384,13 @@ export async function generateReceptionistReply(
         required: ['fullName', 'phone', 'reason', 'reply'],
       },
     },
-  })
+  }, value => { diagnostic = { ...value } })
+  if (diagnostic) diagnostic.stage = 'model'
   return receptionistExtractionSchema.parse(JSON.parse(raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()))
+  } catch (error) {
+    if (error instanceof Error && diagnostic) Object.assign(error, { receptionistDiagnostic: diagnostic })
+    throw error
+  }
 }
 
 /**
