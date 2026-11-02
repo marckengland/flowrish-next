@@ -39,6 +39,14 @@ Revert the merge commit containing the receptionist with `git revert -m 1 MERGE_
 
 The code revert is checked against a disposable copy before merge. Disabling is immediate for subsequent webhook requests; a request already in progress can finish. The code rollback takes one normal deployment. Previously confirmed leads, activities, tasks, and audit entries remain and are not silently deleted.
 
+## Deployment verification
+
+Migration `20261102020000_add_ai_receptionist` was applied through Prisma on 2026-11-02. The post-change counts remain 2 organizations, 10 leads, 7 tasks, and 9 activities. Both receptionist tables are empty, both have RLS enabled, and the Data API roles have no read or truncate access to call records. No workspace was enabled and no phone routing was changed.
+
+The application reverse patch was applied to a disposable archive of commit `4750b58`; all 26 affected paths matched base commit `3095401` exactly afterward. The disposable PostgreSQL recovery tests also passed. Do not apply the reverse patch to the live database or remove its additive tables.
+
+The authenticated receptionist settings and unsigned webhook/admin boundaries were verified against the connected application. All 962 unit tests and 4 disposable PostgreSQL tests pass. The compiled-app smoke run has 18 passes and 5 legacy guard skips; the skipped navigation paths were checked manually without creating records. Phone activation remains disabled because no Twilio account has been connected.
+
 ## Tested database recovery
 
 Run `npm run test:receptionist:integration` with Docker running and the existing `pgvector/pgvector:pg16` image available. The test never pulls an image, binds PostgreSQL only to localhost, uses synthetic data, and removes its disposable container afterward.

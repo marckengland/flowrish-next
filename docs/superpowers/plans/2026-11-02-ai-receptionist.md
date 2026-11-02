@@ -45,3 +45,12 @@ The user requested completion and merge on 2026-11-02, and explicitly approved c
 - Added read-only application e2e coverage for the receptionist settings and public webhook authentication boundary.
 - Rollback evidence and pre-change database counts are recorded in `docs/AI_RECEPTIONIST_ROLLBACK.md`.
 - Live phone activation is unavailable because the application has no stored Twilio voice configurations. Vercel CLI authentication is also expired; neither a real call nor CLI deployment can be represented as verified.
+
+### Final application verification
+
+- Applied the one pending Prisma migration to the connected Supabase database. Existing counts stayed at 2 organizations, 10 leads, 7 tasks, and 9 activities. Both new tables are empty and have RLS enabled; direct Data API access is denied.
+- Confirmed the code inverse patch restores all 26 feature paths to base commit `3095401` in a disposable archive.
+- Authenticated receptionist settings and logged-out webhook/admin boundaries passed all 3 focused Playwright checks, including authentication setup.
+- The compiled production app passed 18 browser checks with no failures. Five legacy checks skipped: contact, company, cadence, and task navigation, plus the New lead CTA. The navigation guards check link counts before streamed content settles; the New lead control has a button role while the legacy test searches for a link. No legacy E2E assertion or skip condition was changed.
+- Manually verified the skipped navigation paths against the compiled app after waiting for their controls. Cadence detail loaded in 1.8 seconds with no page errors. The New lead button opens the create form.
+- An earlier development smoke run hit transient webpack module errors and a 5-second cold cadence navigation timeout. A fresh build on the already-installed Node 22 eliminated the module errors; compiled-app navigation passed without changing test assertions or timeouts.

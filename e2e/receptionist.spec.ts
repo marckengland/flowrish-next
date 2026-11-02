@@ -15,7 +15,7 @@ test('receptionist settings load from the authenticated workspace', async ({ pag
 })
 
 test('public voice webhook requires Twilio verification and admin settings require login', async ({ playwright, baseURL }) => {
-  const external = await playwright.request.newContext({ baseURL })
+  const external = await playwright.request.newContext({ baseURL, storageState: { cookies: [], origins: [] } })
   try {
     const voice = await external.post('/api/voice/receptionist/11111111-1111-4111-8111-111111111111', { form: { CallSid: `CA${'a'.repeat(32)}`, Direction: 'inbound' } })
     expect(voice.status()).toBe(403)
