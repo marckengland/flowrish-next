@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { type CallState } from '@/lib/receptionist'
+import { ReceptionistMicrophone } from './receptionist-microphone'
 
 interface Readiness {
   saved: boolean
@@ -35,6 +36,7 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
   const [result, setResult] = useState<PreviewResult | null>(null)
   const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([])
   const [speech, setSpeech] = useState('')
+  const [dictating, setDictating] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [supported, setSupported] = useState(false)
@@ -59,6 +61,7 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
     setResult(null)
     setMessages([])
     setSpeech('')
+    setDictating(false)
     setBusy(false)
     setError('')
   }
@@ -84,7 +87,7 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
   }
 
   async function send(input?: { speech?: string; digits?: string }) {
-    if (busy || hasUnsavedChanges || !hasSavedSettings) return
+    if (busy || dictating || hasUnsavedChanges || !hasSavedSettings) return
     const controller = new AbortController()
     request.current = controller
     setBusy(true)
@@ -131,7 +134,7 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
     <Card id="receptionist-browser-preview">
       <CardHeader className="flex-col items-start gap-2">
         <CardTitle>Check knowledge and test</CardTitle>
-        <p className="text-sm text-muted-foreground">Try a typed conversation using saved settings, even with reception off and no phone connected. Existing AI usage rules apply.</p>
+        <p className="text-sm text-muted-foreground">Try a conversation with text or microphone input using saved settings, even with reception off and no phone connected. Existing AI usage rules apply.</p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2 rounded-lg border p-4 text-sm">
@@ -146,10 +149,10 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
           </div>}
         </div>
         <p className="text-sm font-medium">3. Test in your browser</p>
-        <p className="text-sm text-muted-foreground">Preview only: no microphone, phone call, recording, or saved transcript. Preview never saves leads, tasks, or activities to your CRM.</p>
+        <p className="text-sm text-muted-foreground">Preview only: no phone call or audio recording stored by Flowrish. Preview never saves leads, tasks, or activities to your CRM.</p>
         {hasUnsavedChanges && <p className="text-sm font-medium">Save your changes before testing. The greeting above reflects your current edits; conversations use saved settings.</p>}
         {!hasSavedSettings && !hasUnsavedChanges && <p className="text-sm font-medium">Save receptionist settings before testing.</p>}
-        <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="size-4 accent-primary" checked={readAloud} disabled={!supported} onChange={(event) => {
+        <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="size-4 accent-primary" checked={readAloud} disabled={!supported || dictating} onChange={(event) => {
           readAloudRef.current = event.target.checked
           setReadAloud(event.target.checked)
           if (!event.target.checked) window.speechSynthesis?.cancel()
@@ -165,10 +168,11 @@ export function ReceptionistPreview({ hasSavedSettings, hasUnsavedChanges }: {
           </div>
           {!!result.sources.length && <details className="text-xs text-muted-foreground" open><summary className="cursor-pointer">Sources for the latest reply · admin only</summary><ul className="mt-2 space-y-1">{result.sources.map((source) => <li key={source.id} className="break-words">{source.title} · revision {source.revision}</li>)}</ul></details>}
           {result.finished ? <p className="text-sm font-medium">Conversation tested in browser. Phone routing has not been verified.</p> : <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); if (speech.trim()) void send({ speech: speech.trim() }) }}>
-            <label className="block space-y-1.5 text-sm font-medium"><span>Caller message</span><Input value={speech} maxLength={2000} disabled={busy} onChange={(event) => setSpeech(event.target.value)} placeholder="Type what a caller would say" /></label>
+            <label className="block space-y-1.5 text-sm font-medium"><span>Caller message</span><Input value={speech} maxLength={2000} disabled={busy || dictating || hasUnsavedChanges || !hasSavedSettings} onChange={(event) => setSpeech(event.target.value)} placeholder="Type what a caller would say" /></label>
+            <ReceptionistMicrophone value={speech} onChange={setSpeech} disabled={busy || hasUnsavedChanges || !hasSavedSettings} onActiveChange={setDictating} />
             <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={busy || !speech.trim()}>{busy ? 'Waiting for reply…' : 'Send caller message'}</Button>
-              {result.state.awaitingConfirmation && <Button type="button" variant="outline" disabled={busy} onClick={() => { void send({ digits: '1' }) }}>Press 1 to confirm</Button>}
+              <Button type="submit" disabled={busy || dictating || hasUnsavedChanges || !hasSavedSettings || !speech.trim()}>{busy ? 'Waiting for reply…' : 'Send caller message'}</Button>
+              {result.state.awaitingConfirmation && <Button type="button" variant="outline" disabled={busy || dictating || hasUnsavedChanges || !hasSavedSettings} onClick={() => { void send({ digits: '1' }) }}>Press 1 to confirm</Button>}
             </div>
           </form>}
           {result.callback && <div className="space-y-2 rounded-lg border p-4 text-sm"><p className="font-medium">Preview-only callback summary</p><dl className="space-y-2"><div><dt className="text-muted-foreground">Name</dt><dd>{result.callback.fullName}</dd></div><div><dt className="text-muted-foreground">Phone</dt><dd>{result.callback.phone}</dd></div><div><dt className="text-muted-foreground">Reason</dt><dd className="whitespace-pre-wrap break-words">{result.callback.reason}</dd></div></dl><p>Nothing was saved to your CRM. No callback was scheduled.</p></div>}

@@ -94,7 +94,8 @@ export async function middleware(request: NextRequest) {
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.headers.set(
     'Permissions-Policy',
-    'camera=(), microphone=(), geolocation=(), payment=()'
+    // Documents keep their policy across client navigation to the microphone preview.
+    'camera=(), microphone=(self), geolocation=(), payment=()'
   )
 
   // 2. Rate limiting (skip entirely when Redis isn't configured — see
