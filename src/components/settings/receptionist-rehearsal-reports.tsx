@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { RehearsalFaqAction } from './rehearsal-faq-action'
 import { rehearsalReviewSchema, rehearsalSnapshotSchema } from '@/lib/receptionist-rehearsal'
 import type { RehearsalReport, RehearsalReview, RehearsalSnapshot, RehearsalSummary } from '@/lib/receptionist-rehearsal'
 
@@ -46,6 +47,38 @@ export function ReceptionistRehearsalReports({ snapshot, disabled }: { snapshot:
     setConfirmDelete(false)
     return () => { request.current?.abort() }
   }, [snapshot, disabled])
+
+  const linkedReportLoaded = useRef(false)
+  useEffect(() => {
+    if (disabled || linkedReportLoaded.current || window.location.search.length > 256) return
+    const query = new URLSearchParams(window.location.search)
+    if (query.getAll('section').length !== 1 || query.get('section') !== 'receptionist' || query.getAll('rehearsal').length !== 1) return
+    const parsed = z.string().uuid().safeParse(query.get('rehearsal'))
+    if (!parsed.success) return
+    const id = parsed.data
+    const controller = new AbortController()
+    request.current = controller
+    setBusy('detail')
+    async function loadLinkedReport(): Promise<void> {
+      try {
+        const response = await fetch(`${endpoint}/${id}`, { method: 'GET', cache: 'no-store', signal: controller.signal })
+        if (!response.ok) throw new Error('Request failed')
+        const next = parseReport((await response.json())?.data)
+        if (next.id !== id) throw new Error('Invalid report')
+        if (!controller.signal.aborted && request.current === controller) {
+          linkedReportLoaded.current = true
+          setDetail(next)
+          setReview({ verdict: next.verdict, notes: next.notes, unansweredMessageIndexes: [...next.unansweredMessageIndexes] })
+        }
+      } catch {
+        if (!controller.signal.aborted && request.current === controller) setError({ message: 'Could not open the linked rehearsal. Please try again.', retry: 'detail', id })
+      } finally {
+        if (!controller.signal.aborted && request.current === controller) setBusy(null)
+      }
+    }
+    void loadLinkedReport()
+    return () => { controller.abort() }
+  }, [disabled, snapshot])
 
   function showDetail(next: RehearsalReport) {
     setDetail(next)
@@ -146,6 +179,7 @@ export function ReceptionistRehearsalReports({ snapshot, disabled }: { snapshot:
   }
 
   const locked = disabled || !!busy
+  const reviewDirty = Boolean(detail && (review.verdict !== detail.verdict || review.notes !== detail.notes || review.unansweredMessageIndexes.length !== detail.unansweredMessageIndexes.length || review.unansweredMessageIndexes.some(index => !detail.unansweredMessageIndexes.includes(index))))
   return (
     <Card aria-labelledby={`${ids}-heading`}>
       <CardHeader className="flex-col items-start gap-2">
@@ -185,6 +219,7 @@ export function ReceptionistRehearsalReports({ snapshot, disabled }: { snapshot:
             <p className="text-xs text-muted-foreground break-words">Saved settings version: {detail.snapshot.settingsVersion}</p>
             <p className="text-sm text-muted-foreground">Sources show knowledge supplied at rehearsal time. They do not verify an answer or current approval. Manual FAQs may also have been available.</p>
           </div>
+          {reviewDirty && detail.unansweredMessageIndexes.length > 0 && <p className="text-sm text-muted-foreground">Save review first to create FAQ drafts from the saved knowledge gaps.</p>}
           <ol aria-label="Saved rehearsal transcript" className="space-y-4">
             {detail.snapshot.messages.map((item, index) => <li key={index} className="space-y-2 text-sm">
               <p className="font-medium">{item.role === 'caller' ? 'Caller' : 'Receptionist'} · Generation: {item.generation}</p>
@@ -196,6 +231,7 @@ export function ReceptionistRehearsalReports({ snapshot, disabled }: { snapshot:
                 <input type="checkbox" checked={review.unansweredMessageIndexes.includes(index)} disabled={locked} onChange={event => setReview(previous => ({ ...previous, unansweredMessageIndexes: event.target.checked ? [...previous.unansweredMessageIndexes, index] : previous.unansweredMessageIndexes.filter(value => value !== index) }))} />
                 Needs knowledge<span className="sr-only"> for caller message {index + 1}</span>
               </label>}
+              {item.role === 'caller' && detail.unansweredMessageIndexes.includes(index) && <RehearsalFaqAction key={`${detail.id}:${index}`} rehearsalId={detail.id} messageIndex={index} expectedUpdatedAt={detail.updatedAt} disabled={locked || reviewDirty || !!error?.conflict} />}
             </li>)}
           </ol>
           <a href="/knowledge" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">Open knowledge library</a>

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, FileUp, Plus, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { z } from 'zod'
+import { KnowledgeRehearsalOrigin } from './knowledge-rehearsal-origin'
 
 const categories = ['PRICING', 'SERVICES', 'FAQ', 'GENERAL'] as const
 type Category = typeof categories[number]
@@ -32,7 +34,9 @@ async function responseData<T>(response: Response): Promise<T> {
   return body.data as T
 }
 
-export function KnowledgeLibrary(): React.JSX.Element {
+export function KnowledgeLibrary({ initialDocumentId }: { initialDocumentId?: string } = {}): React.JSX.Element {
+  const incomingDocumentId = useRef(z.string().uuid().safeParse(initialDocumentId).success ? initialDocumentId : undefined)
+  const [autoLoadOrigin, setAutoLoadOrigin] = useState(Boolean(incomingDocumentId.current))
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
   const [selected, setSelected] = useState<KnowledgeDocument | null>(null)
   const [editing, setEditing] = useState(false)
@@ -51,8 +55,25 @@ export function KnowledgeLibrary(): React.JSX.Element {
   useEffect(() => {
     mounted.current = true
     let current = true
-    fetch('/api/knowledge').then(responseData<KnowledgeDocument[]>).then(data => { if (current) setDocuments(data) }).catch(cause => { if (current) setError(cause instanceof Error ? cause.message : 'Unable to load knowledge.') }).finally(() => { if (current) setLoading(false) })
-    return () => { current = false; mounted.current = false }
+    const controller = new AbortController()
+    async function load(): Promise<void> {
+      try {
+        const rows = await responseData<KnowledgeDocument[]>(await fetch('/api/knowledge'))
+        if (!current) return
+        setDocuments(rows)
+        const id = incomingDocumentId.current
+        if (id) {
+          const response = await fetch(`/api/knowledge/${id}`, { method: 'GET', cache: 'no-store', signal: controller.signal })
+          if (!response.ok) throw new Error('Unable to open the linked document. Reload or choose a document to continue.')
+          const document = (await response.json())?.data as KnowledgeDocument | undefined
+          if (!document || document.id !== id) throw new Error('Unable to open the linked document. Reload or choose a document to continue.')
+          if (current) { setSelected(document); setEditing(true); setDraft(draftOf(document)); setDocuments(previous => previous.some(row => row.id === id) ? previous.map(row => row.id === id ? document : row) : [document, ...previous]) }
+        }
+      } catch (cause) { if (current) setError(cause instanceof Error ? cause.message : 'Unable to load knowledge.') }
+      finally { if (current) setLoading(false) }
+    }
+    void load()
+    return () => { current = false; mounted.current = false; controller.abort() }
   }, [])
 
   function apply(document: KnowledgeDocument, preserveEdits = false): void {
@@ -68,6 +89,7 @@ export function KnowledgeLibrary(): React.JSX.Element {
     if (busy || loading) return
     if (dirty && !discard) { setNavigation(target); return }
     setNavigation(null)
+    setAutoLoadOrigin(false)
     setError(null)
     setNotice('')
     setWarnings([])
@@ -135,6 +157,7 @@ export function KnowledgeLibrary(): React.JSX.Element {
     {navigation && <section aria-label="Unsaved draft confirmation" className="rounded-lg border bg-card p-4"><p className="text-sm">You have unsaved edits. Discard them to continue?</p><div className="mt-3 flex gap-2"><Button type="button" variant="outline" onClick={() => setNavigation(null)}>Keep editing</Button><Button type="button" onClick={() => void navigate(navigation, true)}>Discard and continue</Button></div></section>}
     <div className="grid min-w-0 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]"><aside aria-label="Knowledge documents" className="min-w-0 rounded-xl border bg-card p-3">{loading ? <p role="status" className="p-4 text-sm text-muted-foreground">Loading knowledge…</p> : documents.length === 0 ? <p className="p-4 text-sm text-muted-foreground">No documents yet. Add pricing, services, or FAQs to get started.</p> : <ul className="grid gap-2">{documents.map(document => <li key={document.id}><button type="button" aria-label={document.title} aria-pressed={selected?.id === document.id} disabled={busy} onClick={() => void navigate(document.id)} className={`w-full min-w-0 rounded-lg border p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected?.id === document.id ? 'border-brand bg-brand/5' : 'hover:bg-muted'}`}><span className="block break-words text-sm font-medium">{document.title}</span><span className="mt-1 block text-xs text-muted-foreground">{document.category} · {document.archivedAt ? 'Archived' : document.publishedAt ? 'Published' : 'Draft'}</span>{document.publishedAt && !document.archivedAt && <span className="mt-1 block text-xs text-muted-foreground">{document.receptionistApprovedRevision === document.publishedRevision ? 'Public receptionist approved' : 'Airish only'}</span>}</button></li>)}</ul>}</aside>
     {editing ? <section aria-label="Knowledge editor" className="min-w-0 rounded-xl border bg-card p-4 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">{archived ? 'Archived document' : selected ? 'Edit draft' : 'New draft'}</h2><span className="text-xs text-muted-foreground">{selected ? `Draft revision ${selected.revision}` : 'Not saved yet'}</span></div>
+      {selected && <KnowledgeRehearsalOrigin key={selected.id} documentId={selected.id} autoLoad={autoLoadOrigin && selected.id === incomingDocumentId.current} disabled={busy} hasUnsavedChanges={dirty} />}
       {unpublishedChanges && <p className="mt-3 rounded-md bg-muted p-3 text-sm">Unpublished changes. Airish and the receptionist continue using the published snapshot.</p>}
       <div className="mt-4 grid gap-4"><label className="grid gap-1.5 text-sm font-medium">Document title<input className={field} value={draft.title} maxLength={160} disabled={busy || archived} onChange={event => change({ title: event.target.value })} /></label><label className="grid gap-1.5 text-sm font-medium">Category<select className={field} value={draft.category} disabled={busy || archived} onChange={event => change({ category: event.target.value as Category })}>{categories.map(category => <option key={category} value={category}>{category}</option>)}</select></label>
       {!archived && <div className="rounded-lg border border-dashed p-3"><label className="grid gap-2 text-sm font-medium"><span className="flex items-center gap-2"><FileUp className="size-4" aria-hidden="true" />Upload document</span><input type="file" aria-label="Upload document" accept=".txt,.md,.csv,.pdf,.docx,text/plain,text/markdown,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={busy} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void extract(file) }} /></label><p className="mt-2 text-xs text-muted-foreground">TXT, Markdown, CSV, PDF or DOCX · 2 MB maximum. A successful upload replaces the draft text for review. Original files are not retained. Scanned PDFs need OCR elsewhere.</p></div>}

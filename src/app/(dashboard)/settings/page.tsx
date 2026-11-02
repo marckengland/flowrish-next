@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Zap, Target, Brain, Timer, Mail, PhoneCall } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -55,6 +55,15 @@ const TABS: Array<{ id: SettingsTab; label: string; icon: typeof Target }> = [
 
 export default function SettingsPage(): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<SettingsTab>('scoring')
+  const [sectionReady, setSectionReady] = useState(false)
+
+  useEffect(() => {
+    if (window.location.search.length <= 256) {
+      const query = new URLSearchParams(window.location.search)
+      if (query.getAll('section').length === 1 && query.get('section') === 'receptionist') setActiveTab('receptionist')
+    }
+    setSectionReady(true)
+  }, [])
 
   return (
     <div className="mx-auto flex w-full max-w-[1000px] flex-col gap-5">
@@ -94,6 +103,7 @@ export default function SettingsPage(): React.JSX.Element {
 
         {/* Content panel */}
         <section className="min-w-0" aria-label={`${activeTab} settings`}>
+          {sectionReady && <>
           {activeTab === 'scoring' && (
             <div className="flex flex-col gap-[18px]">
               <ScoringRules />
@@ -149,6 +159,7 @@ export default function SettingsPage(): React.JSX.Element {
           )}
           {activeTab === 'calling' && <CallingProviders />}
           {activeTab === 'receptionist' && <ReceptionistSettings />}
+          </>}
         </section>
       </div>
     </div>
