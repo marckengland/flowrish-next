@@ -1,55 +1,30 @@
-import { NextResponse } from 'next/server'
-
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireSession } from '@/server/auth/session'
-import { requirePermission } from '@/server/auth/permissions'
-import { createTenantPrisma } from '@/server/db/middleware'
-import { inngest } from '@/server/inngest/client'
+import { hasPermission, requirePermission } from '@/server/auth/permissions'
+import { listMailboxSyncHealth, requestMailboxSync } from '@/server/services/mailbox-sync'
 import { AppError, errorResponse } from '@/lib/errors'
 
-/**
- * POST /api/email/sync — Trigger an on-demand Gmail sync for the
- * caller's connected email account.
- *
- * The actual sync runs asynchronously inside the `email-sync` Inngest
- * function (see `src/server/inngest/email-sync.ts`). This route only
- * resolves the caller's EmailAccount and emits the `email/sync.requested`
- * event. We return immediately so the UI can show "sync started" without
- * blocking on Gmail API latency or pagination.
- *
- * Validates: Requirements 7.5
- */
-export async function POST() {
+const requestSchema = z.object({ provider: z.enum(['gmail', 'microsoft']).optional() })
+
+export async function GET() {
+  try {
+    const session = await requireSession()
+    requirePermission(session.dbUser, 'leads:read')
+    return NextResponse.json({ data: await listMailboxSyncHealth(session.organizationId, session.dbUser.id), capabilities: { canWrite: hasPermission(session.dbUser, 'leads:write') } })
+  } catch (error) { return errorResponse(error) }
+}
+
+export async function POST(request: NextRequest) {
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'leads:write')
-
-    const db = createTenantPrisma(session.organizationId)
-    const account = await db.emailAccount.findFirst({
-      where: { userId: session.dbUser.id },
-      orderBy: { updatedAt: 'desc' },
-      select: { id: true },
-    })
-
-    if (!account) {
-      throw new AppError(
-        'NO_EMAIL_ACCOUNT',
-        'No connected email account. Connect Gmail or Outlook before running sync.',
-        400,
-      )
+    const text = await request.text()
+    let payload: unknown = {}
+    if (text.trim()) {
+      try { payload = JSON.parse(text) } catch { throw new AppError('VALIDATION_ERROR', 'Invalid sync request.', 400) }
     }
-
-    await inngest.send({
-      name: 'email/sync.requested',
-      data: {
-        accountId: account.id,
-        organizationId: session.organizationId,
-      },
-    })
-
-    return NextResponse.json({
-      data: { accountId: account.id, status: 'queued' },
-    })
-  } catch (error) {
-    return errorResponse(error)
-  }
+    const { provider } = requestSchema.parse(payload)
+    return NextResponse.json({ data: await requestMailboxSync(session.organizationId, session.dbUser.id, provider) })
+  } catch (error) { return errorResponse(error) }
 }

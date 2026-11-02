@@ -32,6 +32,7 @@ const mockDb = {
   lead: {
     findMany: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   activity: {
     create: vi.fn(),
@@ -58,7 +59,8 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 const mockRefreshTokenIfNeeded = vi.fn()
-vi.mock('@/server/services/microsoft-email', () => ({ listMicrosoftMessages: vi.fn() }))
+vi.mock('@/server/services/microsoft-email', () => ({ listMicrosoftMessagesPage: vi.fn() }))
+vi.mock('@/server/services/mailbox-sync', () => ({ beginMailboxSync: vi.fn(), completeMailboxSync: vi.fn(), failMailboxSync: vi.fn(), heartbeatMailboxSync: vi.fn() }))
 vi.mock('@/server/services/follow-ups', () => ({ reconcileEmailReplies: vi.fn() }))
 
 vi.mock('@/server/services/email', () => ({
@@ -84,7 +86,8 @@ vi.stubGlobal('fetch', mockFetch)
 // Import after mocks
 import { emailSyncFunction } from '../email-sync'
 import { reconcileEmailReplies } from '@/server/services/follow-ups'
-import { listMicrosoftMessages } from '@/server/services/microsoft-email'
+import { listMicrosoftMessagesPage as listMicrosoftMessages } from '@/server/services/microsoft-email'
+import { beginMailboxSync, completeMailboxSync, failMailboxSync, heartbeatMailboxSync } from '@/server/services/mailbox-sync'
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
@@ -94,6 +97,7 @@ const userId = 'usr00000-0000-0000-0000-000000000001'
 
 function createMockEvent(overrides: Partial<Record<string, unknown>> = {}) {
   return {
+    id: 'sync-event-id',
     data: {
       accountId,
       organizationId: orgId,
@@ -152,6 +156,7 @@ const handler = (emailSyncFunction as any).handler
 describe('Email Sync Function', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(beginMailboxSync).mockResolvedValue(new Date('2026-11-02T04:00:00.000Z'))
     mockDb.$transaction.mockImplementation(async (fn: (db: typeof mockDb) => unknown) => fn(mockDb))
   })
 
@@ -203,7 +208,7 @@ describe('Email Sync Function', () => {
   })
 
   describe('message list fetching', () => {
-    it('should fetch messages with maxResults=50 and newer_than:1d query', async () => {
+    it('fetches 50 messages per page from the initial checkpoint window', async () => {
       const mockStep = createMockStep()
       mockRefreshTokenIfNeeded.mockResolvedValue(undefined)
       mockDb.emailAccount.findFirst.mockResolvedValue({
@@ -222,7 +227,7 @@ describe('Email Sync Function', () => {
       await handler({ event: createMockEvent(), step: mockStep })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('maxResults=50&q=newer_than:1d'),
+        expect.stringMatching(/maxResults=50&q=after%3A\d+/),
         expect.objectContaining({
           headers: { Authorization: 'Bearer decrypted_encrypted_token' },
         }),
@@ -262,12 +267,13 @@ describe('Email Sync Function', () => {
       mockFetch.mockResolvedValue({
         ok: false,
         json: async () => ({}),
+        status: 401,
         text: async () => 'Unauthorized',
       })
 
       await expect(
         handler({ event: createMockEvent(), step: mockStep }),
-      ).rejects.toThrow('Gmail messages.list failed: Unauthorized')
+      ).rejects.toThrow('Gmail mailbox request failed (401)')
     })
   })
 
@@ -391,8 +397,8 @@ describe('Email Sync Function', () => {
           createdById: userId,
         }),
       })
-      expect(mockDb.lead.update).toHaveBeenCalledWith({
-        where: { id: leadId },
+      expect(mockDb.lead.updateMany).toHaveBeenCalledWith({
+        where: { id: leadId, OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: expect.any(Date) } }] },
         data: { lastActivityAt: expect.any(Date) },
       })
     })
@@ -443,7 +449,7 @@ describe('Email Sync Function', () => {
       })
     })
 
-    it('should skip messages that fail to fetch metadata', async () => {
+    it('skips metadata only when the provider reports the message was deleted', async () => {
       const mockStep = createMockStep()
       mockRefreshTokenIfNeeded.mockResolvedValue(undefined)
       mockDb.emailAccount.findFirst.mockResolvedValue({
@@ -459,6 +465,7 @@ describe('Email Sync Function', () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         json: async () => ({}),
+        status: 404,
         text: async () => 'Not Found',
       })
       // msg-2 metadata succeeds
@@ -497,7 +504,7 @@ describe('Email Sync Function', () => {
     })
     it('adopts exact legacy inbound history without duplicating the email or activity', async () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({ id: accountId, email: 'rep@example.com', userId, provider: 'microsoft', accessToken: 'encrypted' })
-      vi.mocked(listMicrosoftMessages).mockResolvedValue([reply])
+      vi.mocked(listMicrosoftMessages).mockResolvedValue({ messages: [reply] })
       mockDb.emailMessage.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'legacy', accountId: null })
       mockDb.emailMessage.update.mockResolvedValue({ id: 'legacy' })
       await handler({ event: createMockEvent(), step: createMockStep() })
@@ -508,7 +515,7 @@ describe('Email Sync Function', () => {
     })
     it('feeds Microsoft headers and recipients through the same normalized reply processor', async () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({ id: accountId, email: 'rep@example.com', userId, provider: 'microsoft', accessToken: 'encrypted' })
-      vi.mocked(listMicrosoftMessages).mockResolvedValue([{ ...reply, recipientEmails: ['rep@example.com'] }])
+      vi.mocked(listMicrosoftMessages).mockResolvedValue({ messages: [{ ...reply, recipientEmails: ['rep@example.com'] }] })
       mockDb.emailMessage.findFirst.mockResolvedValue(null)
       mockDb.emailMessage.create.mockResolvedValue({ id: 'saved' })
       mockDb.lead.findMany.mockResolvedValue([])
@@ -518,7 +525,7 @@ describe('Email Sync Function', () => {
     })
     it('does not attach an ambiguous lead or create duplicate activities', async () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({ id: accountId, email: 'rep@example.com', userId, provider: 'microsoft', accessToken: 'encrypted' })
-      vi.mocked(listMicrosoftMessages).mockResolvedValue([reply])
+      vi.mocked(listMicrosoftMessages).mockResolvedValue({ messages: [reply] })
       mockDb.emailMessage.findFirst.mockResolvedValue(null)
       mockDb.emailMessage.create.mockResolvedValue({ id: 'saved' })
       mockDb.lead.findMany.mockResolvedValue([{ id: 'one' }, { id: 'two' }])
@@ -555,10 +562,7 @@ describe('Email Sync Function', () => {
 
       await handler({ event: createMockEvent(), step: mockStep })
 
-      expect(mockDb.emailAccount.update).toHaveBeenCalledWith({
-        where: { id: accountId },
-        data: { lastSyncAt: expect.any(Date) },
-      })
+      expect(completeMailboxSync).toHaveBeenCalledWith(orgId, accountId, 'sync-event-id', new Date('2026-11-02T04:00:00.000Z'))
     })
 
     it('should update lastSyncAt even when no messages found', async () => {
@@ -579,10 +583,118 @@ describe('Email Sync Function', () => {
 
       await handler({ event: createMockEvent(), step: mockStep })
 
-      expect(mockDb.emailAccount.update).toHaveBeenCalledWith({
-        where: { id: accountId },
-        data: { lastSyncAt: expect.any(Date) },
-      })
+      expect(completeMailboxSync).toHaveBeenCalledWith(orgId, accountId, 'sync-event-id', new Date('2026-11-02T04:00:00.000Z'))
     })
+  })
+})
+
+describe('automatic sync checkpoints and page failures', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(beginMailboxSync).mockResolvedValue(new Date('2026-11-02T04:00:00.000Z'))
+    mockDb.$transaction.mockImplementation(async (fn: (db: typeof mockDb) => unknown) => fn(mockDb))
+    mockDb.emailAccount.findFirst.mockResolvedValue({ id: accountId, email: 'rep@example.com', userId, provider: 'gmail', accessToken: 'encrypted', lastSyncAt: new Date('2026-11-02T03:00:00Z') })
+    mockDb.emailMessage.findFirst.mockResolvedValue(null)
+    mockDb.emailMessage.create.mockResolvedValue({ id: 'saved' })
+    mockDb.lead.findMany.mockResolvedValue([])
+  })
+  it('persists and reconciles all Gmail pages before advancing to the stable run start', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [{ id: 'first' }], nextPageToken: 'next' }) })
+      .mockResolvedValueOnce(createGmailMessageMetadataResponse('first', 'lead@example.com', 'rep@example.com', 'First'))
+      .mockResolvedValueOnce(createGmailMessageListResponse(['second']))
+      .mockResolvedValueOnce(createGmailMessageMetadataResponse('second', 'lead@example.com', 'rep@example.com', 'Second'))
+    const step = createMockStep()
+    expect(await handler({ event: createMockEvent(), step })).toEqual({ synced: 2, skipped: 0 })
+    expect(mockDb.emailMessage.create).toHaveBeenCalledTimes(2)
+    expect(reconcileEmailReplies).toHaveBeenCalledTimes(2)
+    expect(mockFetch.mock.calls[0][0]).toContain('q=after%3A1793588100')
+    expect(mockFetch.mock.calls[2][0]).toContain('pageToken=next')
+    expect(completeMailboxSync).toHaveBeenCalledWith(orgId, accountId, 'sync-event-id', new Date('2026-11-02T04:00:00.000Z'))
+    expect(step.run.mock.calls.map(c => c[0])).toContain('sync-page-1')
+  })
+  it('does not advance the checkpoint on a transient message fetch failure', async () => {
+    mockFetch.mockResolvedValueOnce(createGmailMessageListResponse(['first'])).mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'sensitive provider body' })
+    await expect(handler({ event: createMockEvent(), step: createMockStep() })).rejects.toThrow('Gmail mailbox request failed (503)')
+    expect(completeMailboxSync).not.toHaveBeenCalled()
+  })
+  it('does not advance the checkpoint when reply reconciliation fails', async () => {
+    mockFetch.mockResolvedValueOnce(createGmailMessageListResponse([]))
+    vi.mocked(reconcileEmailReplies).mockRejectedValueOnce(new Error('Synthetic reply write failure'))
+    await expect(handler({ event: createMockEvent(), step: createMockStep() })).rejects.toThrow('Synthetic reply write failure')
+    expect(completeMailboxSync).not.toHaveBeenCalled()
+  })
+  it('records final failure against the original run without exposing provider details', async () => {
+    await (emailSyncFunction as any).config.onFailure({ event: { data: { event: createMockEvent() } }, error: new Error('secret-token') })
+    expect(failMailboxSync).toHaveBeenCalledWith(orgId, accountId, 'sync-event-id')
+  })
+  it('ignores a queued event whose lease was superseded', async () => {
+    vi.mocked(beginMailboxSync).mockRejectedValueOnce(Object.assign(new Error('Superseded'), { code: 'SYNC_SUPERSEDED' }))
+    expect(await handler({ event: createMockEvent(), step: createMockStep() })).toEqual({ skipped: true, reason: 'sync_superseded' })
+    expect(mockRefreshTokenIfNeeded).not.toHaveBeenCalled()
+    expect(completeMailboxSync).not.toHaveBeenCalled()
+  })
+})
+
+describe('durable pagination retry', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(beginMailboxSync).mockResolvedValue(new Date('2026-11-02T04:00:00.000Z'))
+    mockDb.$transaction.mockImplementation(async (fn: (db: typeof mockDb) => unknown) => fn(mockDb))
+    mockDb.emailAccount.findFirst.mockResolvedValue({ id: accountId, email: 'rep@example.com', userId, provider: 'gmail', accessToken: 'encrypted', lastSyncAt: null })
+    mockDb.emailMessage.findFirst.mockResolvedValue(null)
+    mockDb.emailMessage.create.mockResolvedValue({ id: 'saved' })
+    mockDb.lead.findMany.mockResolvedValue([])
+  })
+  it('replays a failed page without repeating already committed pages or skipping its reply', async () => {
+    const completed = new Map<string, unknown>()
+    const step = { run: vi.fn(async (name: string, fn: () => Promise<unknown>) => {
+      if (completed.has(name)) return completed.get(name)
+      const result = await fn()
+      // Inngest durable boundaries serialize data between invocations.
+      completed.set(name, result === undefined ? undefined : JSON.parse(JSON.stringify(result)))
+      return result
+    }) }
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [{ id: 'first' }], nextPageToken: 'next' }) })
+      .mockResolvedValueOnce(createGmailMessageMetadataResponse('first', 'lead@example.com', 'rep@example.com', 'First'))
+      .mockRejectedValueOnce(new Error('Temporary page failure'))
+    await expect(handler({ event: createMockEvent(), step })).rejects.toThrow('Temporary page failure')
+    expect(completeMailboxSync).not.toHaveBeenCalled()
+    mockFetch.mockResolvedValueOnce(createGmailMessageListResponse(['second']))
+      .mockResolvedValueOnce(createGmailMessageMetadataResponse('second', 'lead@example.com', 'rep@example.com', 'Second'))
+    expect(await handler({ event: createMockEvent(), step })).toEqual({ synced: 2, skipped: 0 })
+    expect(mockDb.emailMessage.create).toHaveBeenCalledTimes(2)
+    expect(reconcileEmailReplies).toHaveBeenCalledTimes(2)
+    expect(completeMailboxSync).toHaveBeenCalledTimes(1)
+    expect(mockFetch).toHaveBeenCalledTimes(5)
+  })
+  it('fails visibly without advancing the checkpoint when Gmail exceeds the page cap', async () => {
+    let page = 0
+    mockFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ messages: [], nextPageToken: `page-${page++}` }) }))
+    await expect(handler({ event: createMockEvent(), step: createMockStep() })).rejects.toThrow('Mailbox sync page limit reached')
+    expect(mockFetch).toHaveBeenCalledTimes(100)
+    expect(completeMailboxSync).not.toHaveBeenCalled()
+  })
+})
+
+describe('mailbox execution lease heartbeats', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(beginMailboxSync).mockResolvedValue(new Date('2026-11-02T04:00:00.000Z'))
+    mockDb.$transaction.mockImplementation(async (fn: (db: typeof mockDb) => unknown) => fn(mockDb))
+    mockDb.emailAccount.findFirst.mockResolvedValue({ id: accountId, email: 'rep@example.com', userId, provider: 'gmail', accessToken: 'encrypted', lastSyncAt: null })
+  })
+  it('refreshes the lease before and after each executed page while retaining the run-start checkpoint', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [], nextPageToken: 'next' }) })
+      .mockResolvedValueOnce(createGmailMessageListResponse([]))
+    expect(await handler({ event: createMockEvent(), step: createMockStep() })).toEqual({ synced: 0, skipped: 0 })
+    expect(heartbeatMailboxSync).toHaveBeenCalledTimes(4)
+    expect(heartbeatMailboxSync).toHaveBeenCalledWith(orgId, accountId, 'sync-event-id')
+    expect(completeMailboxSync).toHaveBeenCalledWith(orgId, accountId, 'sync-event-id', new Date('2026-11-02T04:00:00.000Z'))
+  })
+  it('does not fetch or advance a checkpoint after losing its lease before a page', async () => {
+    vi.mocked(heartbeatMailboxSync).mockRejectedValueOnce(Object.assign(new Error('Sync superseded'), { code: 'SYNC_SUPERSEDED' }))
+    await expect(handler({ event: createMockEvent(), step: createMockStep() })).rejects.toThrow('Sync superseded')
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(completeMailboxSync).not.toHaveBeenCalled()
   })
 })

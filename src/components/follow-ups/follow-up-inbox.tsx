@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Check, Inbox, Mail, Phone, RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EmailCompose } from '@/components/email/email-compose'
@@ -40,7 +40,7 @@ async function responseData<T>(response: Response): Promise<T> {
   return body.data as T
 }
 
-export function FollowUpInbox({ canWrite }: { canWrite: boolean }): React.JSX.Element {
+export function FollowUpInbox({ canWrite, children }: { canWrite: boolean; children?: ReactNode }): React.JSX.Element {
   const [status, setStatus] = useState<FollowUpStatus>('PENDING')
   const [items, setItems] = useState<FollowUpItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,6 +72,7 @@ export function FollowUpInbox({ canWrite }: { canWrite: boolean }): React.JSX.El
           <RotateCw className="mr-2 size-4" aria-hidden="true" />Refresh
         </Button>
       </div>
+      {children}
       <div role="tablist" aria-label="Follow-up status" className="flex w-fit max-w-full gap-1 rounded-lg border bg-muted/40 p-1">
         {tabs.map((tab) => <button key={tab.value} id={`follow-ups-${tab.value}`} type="button" role="tab" aria-selected={status === tab.value} aria-controls="follow-up-panel" tabIndex={status === tab.value ? 0 : -1} onKeyDown={(event) => {
           const index = tabs.findIndex((value) => value.value === tab.value)

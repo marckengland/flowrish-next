@@ -122,18 +122,7 @@ export default function SettingsPage(): React.JSX.Element {
                 redirectUri={typeof window !== 'undefined' ? `${window.location.origin}/api/email/callback` : '/api/email/callback'}
               />
               <Card>
-                <CardContent className="flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <h3 className="text-[13.5px] font-semibold text-foreground">
-                      Inbox sync
-                    </h3>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Pulls the latest replies from your connected mailbox into
-                      the activity timeline.
-                    </p>
-                  </div>
-                  <EmailSyncStatus className="shrink-0" />
-                </CardContent>
+                <CardContent><EmailSyncStatus /></CardContent>
               </Card>
 
               <div className="pt-1">
