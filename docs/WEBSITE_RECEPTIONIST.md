@@ -30,6 +30,16 @@ Handoff matches international phone digits, including formatted numbers, within 
 
 The preview shows the exact visitor details copied into CRM, the destination, owner, deadline and Medium priority. Editing the form clears approval. A changed request or destination requires a fresh review. A durable receipt prevents duplicate work on retries, even after source/CRM deletion. Select **Show callback source** on the task, then **Open source callback**. The receipt-backed link opens **Source callback handoff** in Settings; select **Prepare CRM handoff** to load its current details or receipt. Deleting a source callback does not delete its approved lead or task. Reassign or create later tasks through the normal CRM screens.
 
+## Track callback outcomes
+
+Assigned staff can open **Tasks → Callback work queue** or **Track callback outcome** on the task. Organization administrators can also use the queue in **Settings → AI receptionist** or the tracker on a loaded handoff receipt. Loading and filtering are explicit. Staff see their assigned requests; admins see the organization’s requests. CRM read/write permission and current organization membership are required.
+
+Record **Reached**, **No answer**, or **Needs another attempt**, with optional team notes. Select **Record result only**, **Reschedule existing task**, or **Close callback and complete task**, then preview and explicitly approve. Editing clears approval. Recording a result alone does not complete the task. Rescheduling reuses the same task, changes its owner/deadline, and explicitly reopens it if completed. Closing completes the task, marks an existing source callback reviewed, and closes the request lifecycle without closing the lead. A closed request is final in this workflow.
+
+The overdue view shows unclosed requests with incomplete tasks whose deadlines have passed. Open requests also include tasks manually completed elsewhere, since task completion does not invent a call result or close the request. The queue shows 20 rows per page; history has latest/older pages of 20 outcomes. Results and notes are staff reports stored as CRM history; Flowrish places no call or message. Exact retries reuse one confirmation ID and cannot add duplicate events or notes. Changed tasks, requests or history require reloading and another review.
+
+History survives source callback and CRM target deletion. A missing or inactive task/lead becomes read-only; it is never recreated. Closing after source removal resolves the retained request and existing task. Reassignment may remove the previous owner’s access; a successful confirmation remains acknowledged. Outcomes/history editing, bulk management, and reopening a closed request are outside this release.
+
 The service does not store visitor questions or conversation history. It retains only the latest public answer for retries, hashed session tokens and IP identifiers, and confirmed callback details. Scheduled cleanup removes sessions that expired over 24 hours ago and widget usage rows older than two UTC days. It preserves callback records and organization AI usage.
 
 ## Verification
@@ -39,8 +49,9 @@ Run the repository's full unit, lint, type, Prisma, and build checks. Additional
 ```sh
 npx vitest run --config vitest.website-receptionist.config.ts
 npx vitest run --config vitest.callback-handoff.config.ts
+npx vitest run --config vitest.callback-outcomes.config.ts
 npx playwright test --config playwright.website-receptionist.config.ts
-PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/website-receptionist-admin.spec.ts e2e/callback-handoff.spec.ts --retries=0
+PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/website-receptionist-admin.spec.ts e2e/callback-handoff.spec.ts e2e/callback-outcomes.spec.ts --retries=0
 ```
 
 The PostgreSQL suite requires Docker and the local `pgvector/pgvector:pg16` image. It starts a disposable database and does not load production credentials. The isolated iframe suite requires neither an application server nor credentials. The admin suite requires an authenticated application target and mocks all widget settings, callback, and AI operations. Do not enable a production widget or call a real provider to run these suites.

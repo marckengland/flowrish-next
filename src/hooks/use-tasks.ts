@@ -1,6 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { taskQueryRoot } from '@/lib/task-query-root'
 
 /**
  * TanStack Query hooks for task data.
@@ -57,7 +58,7 @@ export interface TaskListFilters {
 }
 
 export const tasksKeys = {
-  all: ['tasks'] as const,
+  all: taskQueryRoot,
   list: (filters: TaskListFilters) =>
     [...tasksKeys.all, 'list', filters] as const,
 }

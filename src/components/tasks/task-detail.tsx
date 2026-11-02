@@ -23,6 +23,7 @@ import {
 } from '@/hooks/use-tasks'
 import { TaskReassign } from '@/components/tasks/task-reassign'
 import { CallbackTaskSource } from './callback-task-source'
+import { CallbackOutcomeTracker } from '@/components/settings/callback-outcomes'
 
 export interface TaskDetailViewProps {
   task: TaskItem
@@ -209,7 +210,7 @@ export function TaskDetailView({
           <p className="whitespace-pre-wrap text-sm text-muted-foreground">
             {task.description}
           </p>
-          {task.description.includes('Source callback: ') && <CallbackTaskSource taskId={task.id} />}
+          {task.description.includes('Source callback: ') && <><CallbackTaskSource key={`source-${task.id}`} taskId={task.id} /><CallbackOutcomeTracker key={`outcome-${task.id}`} taskId={task.id} onSaved={() => router.refresh()} /></>}
         </section>
       ) : null}
 

@@ -8,6 +8,7 @@ import type {
   TaskFormLeadOption,
 } from '@/components/tasks/task-form'
 import { TaskList } from '@/components/tasks/task-list'
+import { CallbackOutcomeQueue } from '@/components/settings/callback-outcomes'
 import type { TaskItem, TaskListFilters } from '@/hooks/use-tasks'
 import { hasPermission } from '@/server/auth/permissions'
 import { requireSession } from '@/server/auth/session'
@@ -124,6 +125,7 @@ export default async function TasksPage(): Promise<React.JSX.Element> {
             initialTasks={initialTasks}
             canComplete={canWrite}
           />
+          {canWrite && <CallbackOutcomeQueue />}
         </section>
 
         {canWrite ? (
