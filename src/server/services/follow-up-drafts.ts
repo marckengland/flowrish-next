@@ -56,7 +56,7 @@ export async function generateFollowUpDraft(organizationId: string, userId: stri
   const source = await authorizedSource(organizationId, userId, id, true)
   const conversation = await fetchEmailConversation({ accountId: source.accountId, organizationId, userId, threadId: source.suggestion.sourceThreadId!, sourceMessageId: source.suggestion.sourceId, leadEmails: source.leadEmails })
   const subject = canonicalReplySubject(conversation)
-  const generated = await generateConversationFollowUp(conversation, checkedInstructions)
+  const generated = await generateConversationFollowUp(conversation, checkedInstructions, organizationId)
   const context = metadata(conversation)
   // Recheck access after network calls; dismissal and newer drafts also change
   // updatedAt, which is used as the optimistic write fence below.

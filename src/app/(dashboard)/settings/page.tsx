@@ -16,6 +16,7 @@ import { EmailSyncStatus } from '@/components/email/email-sync-status'
 import { MicrosoftConnect } from '@/components/email/microsoft-connect'
 import { CallingProviders } from '@/components/settings/calling-providers'
 import { ReceptionistSettings } from '@/components/settings/receptionist-settings'
+import { AiProviderSettings } from '@/components/settings/ai-provider-settings'
 
 /**
  * Organization settings page.
@@ -36,6 +37,7 @@ type SettingsTab =
   | 'decay'
   | 'assignment'
   | 'ai'
+  | 'ai-provider'
   | 'email'
   | 'calling'
   | 'receptionist'
@@ -45,6 +47,7 @@ const TABS: Array<{ id: SettingsTab; label: string; icon: typeof Target }> = [
   { id: 'decay', label: 'Score decay', icon: Timer },
   { id: 'assignment', label: 'Assignment rules', icon: Zap },
   { id: 'ai', label: 'AI prompts', icon: Brain },
+  { id: 'ai-provider', label: 'AI provider', icon: Brain },
   { id: 'email', label: 'Email (Gmail)', icon: Mail },
   { id: 'calling', label: 'Calling & voice', icon: PhoneCall },
   { id: 'receptionist', label: 'AI receptionist', icon: PhoneCall },
@@ -107,6 +110,7 @@ export default function SettingsPage(): React.JSX.Element {
           {activeTab === 'decay' && <ScoreDecayConfig />}
           {activeTab === 'assignment' && <AssignmentRules />}
           {activeTab === 'ai' && <AiPromptConfig />}
+          {activeTab === 'ai-provider' && <AiProviderSettings />}
           {activeTab === 'email' && (
             <div className="flex max-w-[620px] flex-col gap-[14px]">
               <div>
