@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  serverExternalPackages: ['unpdf', 'mammoth'],
+  outputFileTracingIncludes: {
+    '/api/knowledge/extract': ['./src/server/services/knowledge-parser-worker.cjs', './node_modules/unpdf/**/*', './node_modules/mammoth/**/*'],
+  },
 };
 
 export default nextConfig;

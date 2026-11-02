@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22
 - A Supabase project (free tier works)
 - An Upstash Redis database (for rate limiting)
 - An Inngest account (for background jobs)

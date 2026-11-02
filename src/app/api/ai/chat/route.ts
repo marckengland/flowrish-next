@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { requireSession } from '@/server/auth/session'
 import { requireEntitlement } from '@/server/auth/entitlements'
-import { chatMessageStream } from '@/server/services/ai'
+import { chatMessageStream, KNOWLEDGE_HISTORY_MARKER } from '@/server/services/ai'
 import {
   createConversation,
   getConversationHistory,
@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let assistantText = ''
+      let assistantKnowledge = false
       let saved = false
 
       // Persist the assistant turn exactly once — on clean completion with
@@ -99,8 +100,9 @@ export async function POST(request: NextRequest) {
       const persistAssistant = async (text: string): Promise<void> => {
         if (saved) return
         saved = true
-        const trimmed = text.trim()
+        let trimmed = text.trim()
         if (!trimmed) return
+        if (assistantKnowledge && !trimmed.includes(KNOWLEDGE_HISTORY_MARKER)) trimmed += KNOWLEDGE_HISTORY_MARKER + 'Answer interrupted; regenerate to review the references.'
         try {
           await appendMessage(conversationId, 'assistant', trimmed, userId, orgId)
         } catch (err) {
@@ -118,6 +120,7 @@ export async function POST(request: NextRequest) {
             result = next.value
             break
           }
+          assistantKnowledge ||= next.value.knowledgeAnswer === true
           assistantText += next.value.text
           controller.enqueue(send(next.value))
         }
@@ -129,6 +132,7 @@ export async function POST(request: NextRequest) {
             conversationId,
             message: result.message,
             action: result.action ?? null,
+            ...(result.knowledgeSources?.length ? { knowledgeSources: result.knowledgeSources } : {}),
           }),
         )
       } catch (error) {

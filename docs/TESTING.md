@@ -67,6 +67,12 @@ npm run test:e2e
 
 ---
 
+## Business knowledge checks
+
+Run `node_modules/.bin/vitest run --config vitest.knowledge.config.ts` for disposable PostgreSQL checks of published snapshots, public approval, revisions, concurrency, tenant isolation, RLS, and rollback preservation. Use Node 22.
+
+`e2e/knowledge.spec.ts` tests management flows with intercepted synthetic responses. Its real PDF and DOCX requests exercise the compiled extraction endpoint without saving documents. The suite checks that library IDs stay unchanged. No test sends customer content to an AI provider or places phone calls.
+
 ## What CI runs
 
 `.github/workflows/ci.yml` runs on every push/PR: lint, `tsc --noEmit`, and the full Vitest suite. **Playwright is not run in CI** — it needs a live Supabase project and a seeded test user, so e2e is a local/manual gate. On merge to `main`, a separate job applies Prisma migrations (gated on the `SUPABASE_DB_URL` secret).

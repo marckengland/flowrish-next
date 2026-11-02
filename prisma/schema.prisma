@@ -111,6 +111,52 @@ model Organization {
   receptionistConfig ReceptionistConfig?
   receptionistCalls ReceptionistCall[]
   followUpSuggestions FollowUpSuggestion[]
+  knowledgeDocuments KnowledgeDocument[]
+  knowledgeChunks KnowledgeChunk[]
+}
+
+model KnowledgeDocument {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title String
+  category String
+  contentText String
+  sourceName String?
+  sourceMime String?
+  revision Int @default(1)
+  publishedTitle String?
+  publishedCategory String?
+  publishedText String?
+  publishedRevision Int?
+  publishedAt DateTime?
+  publishedById String?
+  receptionistApprovedRevision Int?
+  receptionistApprovedAt DateTime?
+  receptionistApprovedById String?
+  archivedAt DateTime?
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  chunks KnowledgeChunk[]
+  @@unique([id, organizationId])
+  @@index([organizationId, archivedAt, createdAt])
+}
+
+model KnowledgeChunk {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documentId String
+  document KnowledgeDocument @relation(fields: [documentId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  revision Int
+  ordinal Int
+  content String
+  title String
+  category String
+  searchVector Unsupported("tsvector") @default(dbgenerated("''::tsvector"))
+  @@unique([documentId, revision, ordinal])
+  @@index([organizationId, documentId, revision])
 }
 
 model FollowUpSuggestion {
