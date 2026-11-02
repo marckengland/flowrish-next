@@ -550,7 +550,7 @@ describe('Cadence Enrollment Service', () => {
       expect(result.status).toBe('COMPLETED')
       expect(result.completedAt).toBeInstanceOf(Date)
       expect(mockDb.cadenceEnrollment.update).toHaveBeenCalledWith({
-        where: { id: enrollmentId },
+        where: { id: enrollmentId, status: 'ACTIVE' },
         data: {
           status: 'COMPLETED',
           completedAt: expect.any(Date),

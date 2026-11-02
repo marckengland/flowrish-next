@@ -84,6 +84,10 @@ export const cadenceStepFunction = inngest.createFunction(
 
     // Step 2: Execute the step action
     const stepRecord = await step.run('execute-action', async () => {
+      // Durable verification may be cached across a sleep or retry. Re-read
+      // immediately before effects so replies can cancel queued outreach.
+      const current = await db.cadenceEnrollment.findFirst({ where: { id: enrollmentId }, select: { status: true } })
+      if (!current || current.status !== 'ACTIVE') return null
       const cadenceStep = await db.cadenceStep.findFirst({
         where: { id: stepId },
         select: {
@@ -246,6 +250,8 @@ export const cadenceStepFunction = inngest.createFunction(
 
       return cadenceStep
     })
+
+    if (!stepRecord) return { skipped: true, reason: 'enrollment_not_active' }
 
     // Step 3: Create StepExecutionLog entry with outcome SUCCESS
     await step.run('create-execution-log', async () => {

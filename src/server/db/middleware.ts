@@ -36,6 +36,7 @@ export const TENANT_SCOPED_MODELS = [
   'ConversationMessage',
   'ReceptionistConfig',
   'ReceptionistCall',
+  'FollowUpSuggestion',
 ] as const
 
 export type TenantScopedModel = (typeof TENANT_SCOPED_MODELS)[number]

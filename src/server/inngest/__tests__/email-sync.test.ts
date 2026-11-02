@@ -19,6 +19,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
 const mockDb = {
+  $transaction: vi.fn(),
   emailAccount: {
     findFirst: vi.fn(),
     update: vi.fn(),
@@ -26,9 +27,10 @@ const mockDb = {
   emailMessage: {
     findFirst: vi.fn(),
     create: vi.fn(),
+    update: vi.fn(),
   },
   lead: {
-    findFirst: vi.fn(),
+    findMany: vi.fn(),
     update: vi.fn(),
   },
   activity: {
@@ -56,6 +58,9 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 const mockRefreshTokenIfNeeded = vi.fn()
+vi.mock('@/server/services/microsoft-email', () => ({ listMicrosoftMessages: vi.fn() }))
+vi.mock('@/server/services/follow-ups', () => ({ reconcileEmailReplies: vi.fn() }))
+
 vi.mock('@/server/services/email', () => ({
   refreshTokenIfNeeded: (...args: unknown[]) => mockRefreshTokenIfNeeded(...args),
 }))
@@ -78,6 +83,8 @@ vi.stubGlobal('fetch', mockFetch)
 
 // Import after mocks
 import { emailSyncFunction } from '../email-sync'
+import { reconcileEmailReplies } from '@/server/services/follow-ups'
+import { listMicrosoftMessages } from '@/server/services/microsoft-email'
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
@@ -145,6 +152,7 @@ const handler = (emailSyncFunction as any).handler
 describe('Email Sync Function', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockDb.$transaction.mockImplementation(async (fn: (db: typeof mockDb) => unknown) => fn(mockDb))
   })
 
   describe('function configuration', () => {
@@ -313,7 +321,7 @@ describe('Email Sync Function', () => {
       mockDb.emailMessage.findFirst.mockResolvedValueOnce(null)
       mockDb.emailMessage.create.mockResolvedValue({ id: 'new-msg-id' })
       // No matching lead
-      mockDb.lead.findFirst.mockResolvedValue(null)
+      mockDb.lead.findMany.mockResolvedValue([])
       mockDb.emailAccount.update.mockResolvedValue({})
 
       const result = await handler({ event: createMockEvent(), step: mockStep })
@@ -321,6 +329,7 @@ describe('Email Sync Function', () => {
       expect(result).toEqual({ synced: 1, skipped: 0 })
       expect(mockDb.emailMessage.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
+          accountId,
           externalId: 'msg-1',
           threadId: 'thread_msg-1',
           fromEmail: 'sender@example.com',
@@ -357,7 +366,7 @@ describe('Email Sync Function', () => {
       mockDb.emailMessage.findFirst.mockResolvedValueOnce(null)
       mockDb.emailMessage.create.mockResolvedValue({ id: 'new-msg-id' })
       // Lead matches by email
-      mockDb.lead.findFirst.mockResolvedValue({ id: leadId })
+      mockDb.lead.findMany.mockResolvedValue([{ id: leadId }])
       mockDb.activity.create.mockResolvedValue({ id: 'activity-1' })
       mockDb.lead.update.mockResolvedValue({})
       mockDb.emailAccount.update.mockResolvedValue({})
@@ -365,7 +374,7 @@ describe('Email Sync Function', () => {
       const result = await handler({ event: createMockEvent(), step: mockStep })
 
       expect(result).toEqual({ synced: 1, skipped: 0 })
-      expect(mockDb.lead.findFirst).toHaveBeenCalledWith({
+      expect(mockDb.lead.findMany).toHaveBeenCalledWith({
         where: expect.objectContaining({
           deletedAt: null,
           OR: [
@@ -373,7 +382,7 @@ describe('Email Sync Function', () => {
             { altEmail: { equals: 'lead@company.com', mode: 'insensitive' } },
           ],
         }),
-        select: { id: true },
+        select: { id: true }, take: 2,
       })
       expect(mockDb.activity.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -415,7 +424,7 @@ describe('Email Sync Function', () => {
       mockDb.emailMessage.findFirst.mockResolvedValueOnce(null)
       mockDb.emailMessage.create.mockResolvedValue({ id: 'new-msg-id' })
       // Lead matches by email
-      mockDb.lead.findFirst.mockResolvedValue({ id: leadId })
+      mockDb.lead.findMany.mockResolvedValue([{ id: leadId }])
       mockDb.activity.create.mockResolvedValue({ id: 'activity-2' })
       mockDb.lead.update.mockResolvedValue({})
       mockDb.emailAccount.update.mockResolvedValue({})
@@ -423,14 +432,14 @@ describe('Email Sync Function', () => {
       await handler({ event: createMockEvent(), step: mockStep })
 
       // For outgoing emails (from = account email), should match by toEmail
-      expect(mockDb.lead.findFirst).toHaveBeenCalledWith({
+      expect(mockDb.lead.findMany).toHaveBeenCalledWith({
         where: expect.objectContaining({
           OR: [
             { email: { equals: 'lead@company.com', mode: 'insensitive' } },
             { altEmail: { equals: 'lead@company.com', mode: 'insensitive' } },
           ],
         }),
-        select: { id: true },
+        select: { id: true }, take: 2,
       })
     })
 
@@ -465,12 +474,56 @@ describe('Email Sync Function', () => {
       // Neither message exists
       mockDb.emailMessage.findFirst.mockResolvedValue(null)
       mockDb.emailMessage.create.mockResolvedValue({ id: 'new-msg-id' })
-      mockDb.lead.findFirst.mockResolvedValue(null)
+      mockDb.lead.findMany.mockResolvedValue([])
       mockDb.emailAccount.update.mockResolvedValue({})
 
       const result = await handler({ event: createMockEvent(), step: mockStep })
 
       expect(result).toEqual({ synced: 1, skipped: 1 })
+    })
+  })
+
+  describe('reply reconciliation', () => {
+    const reply = { externalId: 'message', threadId: 'thread', fromEmail: 'lead@example.com', toEmail: 'rep@example.com', subject: 'Re: Meeting', bodyPreview: 'Tomorrow works', sentAt: '2026-11-02T03:00:00Z', headers: [{ name: 'Auto-Submitted', value: 'no' }] }
+    it('replays persisted metadata after a previous sync committed before reply processing', async () => {
+      mockDb.emailAccount.findFirst.mockResolvedValue({ id: accountId, email: 'rep@example.com', userId, provider: 'gmail', accessToken: 'encrypted' })
+      mockFetch.mockResolvedValueOnce(createGmailMessageListResponse(['message']))
+      mockDb.emailMessage.findFirst.mockResolvedValueOnce({ id: 'saved', replyMetadata: reply })
+      const result = await handler({ event: createMockEvent(), step: createMockStep() })
+      expect(result).toEqual({ synced: 0, skipped: 1 })
+      expect(mockDb.emailMessage.findFirst).toHaveBeenCalledWith({ where: { accountId, externalId: 'message' } })
+      expect(reconcileEmailReplies).toHaveBeenCalledWith(orgId, accountId, [reply])
+      expect(mockDb.activity.create).not.toHaveBeenCalled()
+    })
+    it('adopts exact legacy inbound history without duplicating the email or activity', async () => {
+      mockDb.emailAccount.findFirst.mockResolvedValue({ id: accountId, email: 'rep@example.com', userId, provider: 'microsoft', accessToken: 'encrypted' })
+      vi.mocked(listMicrosoftMessages).mockResolvedValue([reply])
+      mockDb.emailMessage.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'legacy', accountId: null })
+      mockDb.emailMessage.update.mockResolvedValue({ id: 'legacy' })
+      await handler({ event: createMockEvent(), step: createMockStep() })
+      expect(mockDb.emailMessage.update).toHaveBeenCalledWith({ where: { id: 'legacy' }, data: { accountId, replyMetadata: reply } })
+      expect(mockDb.emailMessage.create).not.toHaveBeenCalled()
+      expect(mockDb.activity.create).not.toHaveBeenCalled()
+      expect(reconcileEmailReplies).toHaveBeenCalledWith(orgId, accountId, [reply])
+    })
+    it('feeds Microsoft headers and recipients through the same normalized reply processor', async () => {
+      mockDb.emailAccount.findFirst.mockResolvedValue({ id: accountId, email: 'rep@example.com', userId, provider: 'microsoft', accessToken: 'encrypted' })
+      vi.mocked(listMicrosoftMessages).mockResolvedValue([{ ...reply, recipientEmails: ['rep@example.com'] }])
+      mockDb.emailMessage.findFirst.mockResolvedValue(null)
+      mockDb.emailMessage.create.mockResolvedValue({ id: 'saved' })
+      mockDb.lead.findMany.mockResolvedValue([])
+      await handler({ event: createMockEvent(), step: createMockStep() })
+      expect(reconcileEmailReplies).toHaveBeenCalledWith(orgId, accountId, [{ ...reply, recipientEmails: ['rep@example.com'] }])
+      expect(mockDb.emailMessage.create).toHaveBeenCalledWith({ data: expect.objectContaining({ accountId, replyMetadata: expect.objectContaining({ headers: reply.headers }) }) })
+    })
+    it('does not attach an ambiguous lead or create duplicate activities', async () => {
+      mockDb.emailAccount.findFirst.mockResolvedValue({ id: accountId, email: 'rep@example.com', userId, provider: 'microsoft', accessToken: 'encrypted' })
+      vi.mocked(listMicrosoftMessages).mockResolvedValue([reply])
+      mockDb.emailMessage.findFirst.mockResolvedValue(null)
+      mockDb.emailMessage.create.mockResolvedValue({ id: 'saved' })
+      mockDb.lead.findMany.mockResolvedValue([{ id: 'one' }, { id: 'two' }])
+      await handler({ event: createMockEvent(), step: createMockStep() })
+      expect(mockDb.activity.create).not.toHaveBeenCalled()
     })
   })
 
@@ -497,7 +550,7 @@ describe('Email Sync Function', () => {
 
       mockDb.emailMessage.findFirst.mockResolvedValueOnce(null)
       mockDb.emailMessage.create.mockResolvedValue({ id: 'new-msg-id' })
-      mockDb.lead.findFirst.mockResolvedValue(null)
+      mockDb.lead.findMany.mockResolvedValue([])
       mockDb.emailAccount.update.mockResolvedValue({})
 
       await handler({ event: createMockEvent(), step: mockStep })

@@ -110,6 +110,31 @@ model Organization {
   conversationMessages ConversationMessage[]
   receptionistConfig ReceptionistConfig?
   receptionistCalls ReceptionistCall[]
+  followUpSuggestions FollowUpSuggestion[]
+}
+
+model FollowUpSuggestion {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assigneeId     String
+  leadId         String
+  sourceKey      String
+  sourceType     String
+  sourceId       String
+  sourceThreadId String?
+  sourceText     String
+  title          String
+  description    String
+  draftSubject   String       @default("")
+  draftBody      String       @default("")
+  status         String       @default("PENDING")
+  taskId         String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, sourceKey])
+  @@index([organizationId, assigneeId, status, createdAt])
 }
 
 model ReceptionistConfig {
@@ -652,7 +677,9 @@ model CadenceEnrollment {
 
   updatedAt DateTime @updatedAt
 
-  @@unique([cadenceId, leadId, status])
+  // Nonterminal per-status uniqueness is enforced by a partial SQL index;
+  // terminal enrollment history may contain repeated outcomes.
+  @@index([cadenceId, leadId, status])
   @@index([organizationId])
   @@index([cadenceId, status])
   @@index([leadId])
@@ -705,7 +732,9 @@ model EmailAccount {
 
 model EmailMessage {
   id          String    @id @default(uuid())
-  externalId  String    @unique // provider message ID
+  externalId  String    // provider message ID, scoped to the connected mailbox
+  accountId   String?
+  replyMetadata Json?
   threadId    String?   // provider thread ID for reply-in-thread
   fromEmail   String
   toEmail     String
@@ -722,6 +751,8 @@ model EmailMessage {
 
   @@index([organizationId])
   @@index([threadId])
+  @@unique([organizationId, accountId, externalId])
+  @@index([organizationId, externalId])
 }
 
 // ─── File Storage ────────────────────────────────────────────────────────────

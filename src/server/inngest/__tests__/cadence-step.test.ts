@@ -221,6 +221,16 @@ describe('Cadence Step Execution Function', () => {
   })
 
   describe('step execution', () => {
+    it('does not execute a queued action after the enrollment exits', async () => {
+      const mockStep = createMockStep()
+      mockDb.cadenceEnrollment.findFirst.mockResolvedValueOnce({ id: enrollmentId, status: 'ACTIVE', currentStepOrder: 1 }).mockResolvedValue({ id: enrollmentId, status: 'EXITED' })
+      mockDb.cadenceStep.findFirst.mockResolvedValue({ id: stepId, actionType: 'EMAIL' })
+      const result = await handler({ event: createMockEvent(), step: mockStep })
+      expect(result).toEqual({ skipped: true, reason: 'enrollment_not_active' })
+      expect(mockSendEmail).not.toHaveBeenCalled()
+      expect(mockDb.stepExecutionLog.create).not.toHaveBeenCalled()
+    })
+
     it('should execute EMAIL action and create execution log', async () => {
       const mockStep = createMockStep()
       // First call: enrollment verification
@@ -230,8 +240,9 @@ describe('Cadence Step Execution Function', () => {
           status: 'ACTIVE',
           currentStepOrder: 1,
         })
-        // Second call: inside EMAIL action handler to get enrolledById
-        .mockResolvedValueOnce({ enrolledById: 'user-1' })
+        // Live recheck before the EMAIL action, then mailbox owner.
+        .mockResolvedValueOnce({ status: 'ACTIVE' })
+        .mockResolvedValue({ enrolledById: 'user-1', status: 'ACTIVE' })
       mockDb.cadenceStep.findFirst
         .mockResolvedValueOnce({
           id: stepId,

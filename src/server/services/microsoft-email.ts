@@ -44,6 +44,8 @@ interface OutgoingAttachment {
  * string (not a Date) so it survives Inngest step JSON serialization.
  */
 export interface NormalizedMicrosoftMessage {
+  recipientEmails?: string[]
+  headers?: Array<{ name: string; value: string }>
   externalId: string
   threadId: string
   fromEmail: string
@@ -318,7 +320,7 @@ export async function listMicrosoftMessages(
 ): Promise<NormalizedMicrosoftMessage[]> {
   const params = new URLSearchParams({
     $top: '50',
-    $select: 'id,conversationId,subject,from,toRecipients,receivedDateTime,bodyPreview',
+    $select: 'id,conversationId,subject,from,toRecipients,receivedDateTime,bodyPreview,internetMessageHeaders',
     $orderby: 'receivedDateTime desc',
     $filter: `receivedDateTime ge ${sinceIso}`,
   })
@@ -333,6 +335,7 @@ export async function listMicrosoftMessages(
     value?: Array<{
       id: string
       conversationId?: string
+      internetMessageHeaders?: Array<{ name: string; value: string }>
       subject?: string
       bodyPreview?: string
       receivedDateTime?: string
@@ -343,6 +346,8 @@ export async function listMicrosoftMessages(
 
   return (data.value ?? []).map((m) => ({
     externalId: m.id,
+    headers: m.internetMessageHeaders ?? [],
+    recipientEmails: (m.toRecipients ?? []).map((r) => (r.emailAddress?.address ?? '').toLowerCase()),
     threadId: m.conversationId ?? m.id,
     fromEmail: (m.from?.emailAddress?.address ?? '').toLowerCase(),
     toEmail: (m.toRecipients?.[0]?.emailAddress?.address ?? '').toLowerCase(),
