@@ -109,7 +109,11 @@ describe('TaskForm', () => {
     expect(fieldByName(container, 'title').tagName).toBe('INPUT')
     expect(fieldByName(container, 'description').tagName).toBe('TEXTAREA')
     expect(fieldByName(container, 'dueDate').tagName).toBe('INPUT')
-    expect(fieldByName(container, 'priority').tagName).toBe('SELECT')
+    const priority = container.querySelector('[role="radiogroup"][aria-label="Priority"]')
+    expect(priority).not.toBeNull()
+    expect(Array.from(priority!.querySelectorAll('[role="radio"]')).map((option) => option.textContent)).toEqual(['Low', 'Medium', 'High'])
+    expect(priority!.querySelector('[aria-checked="true"]')?.textContent).toBe('Medium')
+    expect(fieldByName<HTMLInputElement>(container, 'priority').value).toBe('MEDIUM')
     expect(fieldByName(container, 'leadId').tagName).toBe('SELECT')
     expect(fieldByName(container, 'assigneeId').tagName).toBe('SELECT')
 
@@ -267,6 +271,21 @@ describe('TaskForm', () => {
     expect(submitted.get('id')).toBeNull()
 
     expect(onSuccess).toHaveBeenCalledWith('new-task')
+    unmount()
+  })
+
+  it('submits the priority selected with the accessible chips', async () => {
+    createTaskMock.mockResolvedValueOnce({ data: { id: 'new-task' } })
+    const { container, unmount } = mount(<TaskForm leads={LEADS} assignees={ASSIGNEES} />)
+    const high = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="radio"]')).find((button) => button.textContent === 'High')!
+    act(() => { high.click() })
+    expect(high.getAttribute('aria-checked')).toBe('true')
+    expect(fieldByName<HTMLInputElement>(container, 'priority').value).toBe('HIGH')
+    fieldByName<HTMLInputElement>(container, 'title').value = 'Call Ada'
+    fieldByName<HTMLInputElement>(container, 'dueDate').value = '2100-01-15T10:00'
+    await act(async () => { (container.querySelector('form') as HTMLFormElement).requestSubmit() })
+    expect(createTaskMock).toHaveBeenCalledTimes(1)
+    expect(createTaskMock.mock.calls[0]![0].get('priority')).toBe('HIGH')
     unmount()
   })
 
