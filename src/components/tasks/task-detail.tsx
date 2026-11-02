@@ -22,6 +22,7 @@ import {
   type TaskItem,
 } from '@/hooks/use-tasks'
 import { TaskReassign } from '@/components/tasks/task-reassign'
+import { CallbackTaskSource } from './callback-task-source'
 
 export interface TaskDetailViewProps {
   task: TaskItem
@@ -208,6 +209,7 @@ export function TaskDetailView({
           <p className="whitespace-pre-wrap text-sm text-muted-foreground">
             {task.description}
           </p>
+          {task.description.includes('Source callback: ') && <CallbackTaskSource taskId={task.id} />}
         </section>
       ) : null}
 
