@@ -86,10 +86,13 @@ const PUBLIC_ROUTES = ['/login', '/auth/callback', '/auth/confirm']
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next()
+  const website = /^\/api\/public\/website-receptionist\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/(embed|session|message|callback)$/i.exec(request.nextUrl.pathname)
+  const publicWebsite = Boolean(website && (website[1] === 'embed' ? ['GET', 'HEAD'].includes(request.method) : request.method === 'POST'))
+  const embeddedWebsite = publicWebsite && website?.[1] === 'embed'
 
   // 1. Security headers
   response.headers.set('X-Content-Type-Options', 'nosniff')
-  response.headers.set('X-Frame-Options', 'DENY')
+  if (!embeddedWebsite) response.headers.set('X-Frame-Options', 'DENY')
   response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.headers.set(
@@ -165,6 +168,10 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
+
+  // The exact widget endpoints validate their own short-lived sessions and durable quotas.
+  // The embed route supplies its tenant-specific frame-ancestors policy in Node.
+  if (publicWebsite) return response
 
   // 3. Auth check via Supabase (skip for auth callback/confirm — they handle their own session)
   const isAuthCallback = path.startsWith('/auth/callback') || path.startsWith('/auth/confirm')

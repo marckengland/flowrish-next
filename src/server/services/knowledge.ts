@@ -103,13 +103,13 @@ function queryTerms(query: string) {
   return [...new Set((query.slice(0,2000).toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((term) => term.length>=2 && term.length<=40 && !stopWords.has(term)))].slice(0,12).map((term) => `${term}:*`).join(' | ')
 }
 
-async function retrieve(organizationId: string, query: string, publicOnly: boolean): Promise<KnowledgeContext> {
+async function retrieve(organizationId: string, query: string, publicOnly: boolean, completeParagraphs = false): Promise<KnowledgeContext> {
   const terms = queryTerms(query)
   if (!terms) return {text:'',sources:[]}
-  type Row = {id:string,title:string,revision:number,category:string,content:string}
+  type Row = {id:string,title:string,revision:number,category:string,content:string,publishedText?:string|null}
   const approved = publicOnly ? Prisma.sql`AND d."receptionistApprovedRevision"=d."publishedRevision"` : Prisma.empty
   const rows = await prisma.$queryRaw<Row[]>(Prisma.sql`
-    SELECT d."id", c."title", c."revision", c."category", c."content"
+    SELECT d."id", c."title", c."revision", c."category", c."content"${completeParagraphs ? Prisma.sql`, d."publishedText"` : Prisma.empty}
     FROM "KnowledgeChunk" c
     JOIN "KnowledgeDocument" d ON d."id"=c."documentId" AND d."organizationId"=c."organizationId"
     WHERE c."organizationId"=${organizationId} AND d."organizationId"=${organizationId}
@@ -118,6 +118,27 @@ async function retrieve(organizationId: string, query: string, publicOnly: boole
       AND c."searchVector" @@ to_tsquery('simple',${terms})
     ORDER BY ts_rank_cd(c."searchVector",to_tsquery('simple',${terms})) DESC,d."id",c."ordinal"
     LIMIT 6`)
+  if (completeParagraphs) {
+    // Chunks locate approved documents; only whole published paragraphs become public facts.
+    const words = terms.split(' | ').map(term => term.slice(0, -2))
+    const seen = new Set<string>()
+    const candidates = rows.flatMap(row => {
+      if (seen.has(row.id)) return []
+      seen.add(row.id)
+      return (row.publishedText ?? '').split(/\n\s*\n/).map(text => text.trim()).filter(Boolean).map(text => ({ row, text, score: words.filter(word => text.toLowerCase().includes(word)).length }))
+    }).filter(item => item.score > 0).sort((left, right) => right.score - left.score)
+    const sources: KnowledgeContext['sources'] = []
+    let remainingBytes = 2200
+    for (const { row, text } of candidates) {
+      const size = Buffer.byteLength(text, 'utf8') + 2
+      if (size > remainingBytes) continue
+      remainingBytes -= size
+      const source = sources.find(item => item.id === row.id)
+      if (source) source.excerpt += `\n\n${text}`
+      else sources.push({ id: row.id, title: row.title, revision: row.revision, category: row.category, excerpt: text })
+    }
+    return { text: sources.map(source => source.excerpt).join('\n\n'), sources }
+  }
   const sources: KnowledgeContext['sources'] = []
   const sections: string[] = []
   let remaining = 8000
@@ -143,6 +164,6 @@ export async function getAirishKnowledge(organizationId: string, userId: string,
   await authorize(organizationId,userId,false)
   return retrieve(organizationId,query,false)
 }
-export async function getReceptionistKnowledge(organizationId: string, query: string): Promise<KnowledgeContext> {
-  return retrieve(organizationId,query,true)
+export async function getReceptionistKnowledge(organizationId: string, query: string, options: { completeParagraphs?: boolean } = {}): Promise<KnowledgeContext> {
+  return retrieve(organizationId,query,true,options.completeParagraphs)
 }
