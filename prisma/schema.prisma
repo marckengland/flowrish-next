@@ -123,6 +123,7 @@ model Organization {
   websiteReceptionistSessions WebsiteReceptionistSession[]
   websiteReceptionistCallbacks WebsiteReceptionistCallback[]
   callbackCrmHandoffs CallbackCrmHandoff[]
+  callbackOutcomeEvents CallbackOutcomeEvent[]
 }
 
 model KnowledgeDocument {
@@ -1270,6 +1271,27 @@ model WebsiteReceptionistSession {
 }
 
 // Snapshot identifiers intentionally survive source/CRM deletion for idempotent retries.
+model CallbackOutcomeEvent {
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id String
+  callbackId String
+  sequence Int
+  outcome String
+  action String
+  notes String
+  assigneeId String?
+  assigneeName String?
+  dueDate DateTime?
+  createdById String
+  createdByName String
+  requestHash String
+  createdAt DateTime @default(now())
+
+  @@id([organizationId, id])
+  @@unique([organizationId, callbackId, sequence])
+}
+
 model CallbackCrmHandoff {
   callbackId String @id
   organizationId String
