@@ -14,7 +14,7 @@ async function validateReferences(orgId: string, config: ReceptionistConfig, db 
   if (!stage) throw new AppError('VALIDATION_ERROR', 'Choose an open pipeline stage in this organization.', 400)
 }
 
-export async function saveReceptionistConfig(orgId: string, input: unknown) {
+export async function saveReceptionistConfig(orgId: string, input: unknown, options: { createOnly?: boolean } = {}) {
   const config = receptionistConfigSchema.parse(input)
   if (config.enabled) {
     await validateReferences(orgId, config)
@@ -22,7 +22,15 @@ export async function saveReceptionistConfig(orgId: string, input: unknown) {
     if (!voice?.twilioAuthToken || !voice.twilioAccountSid || !voice.twilioCallerId) throw new AppError('VALIDATION_ERROR', 'Connect Twilio with an Auth Token and incoming phone number before enabling the receptionist.', 400)
     if (config.forwardTo === voice.twilioCallerId) throw new AppError('VALIDATION_ERROR', 'The forwarding number must be different from the incoming Twilio number.', 400)
   }
-  await prisma.receptionistConfig.upsert({ where: { organizationId: orgId }, create: { organizationId: orgId, settings: config }, update: { settings: config } })
+  if (options.createOnly) {
+    try { await prisma.receptionistConfig.create({ data: { organizationId: orgId, settings: config } }) }
+    catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') throw new AppError('CONFIG_EXISTS', 'Receptionist settings already exist. Reload before continuing.', 412)
+      throw error
+    }
+  } else {
+    await prisma.receptionistConfig.upsert({ where: { organizationId: orgId }, create: { organizationId: orgId, settings: config }, update: { settings: config } })
+  }
   return config
 }
 
