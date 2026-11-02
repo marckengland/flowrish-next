@@ -2,6 +2,10 @@
 
 The receptionist answers incoming Twilio calls, uses your approved business information for questions, and collects a callback message. It reads the name, phone number, and request back to the caller. Only an explicit confirmation creates a lead, call activity, and callback task.
 
+## Test before connecting a phone
+
+Use the [onboarding and browser preview guide](RECEPTIONIST_PREVIEW.md) to enter your business name, hours, and callback team, review approved knowledge, and test a typed conversation. Browser preview works with reception disabled and no Twilio account. It creates no leads, tasks, activities, or call records. Optional browser read-aloud does not test telephone audio or speech recognition. Existing AI provider usage rules apply.
+
 ## Prepare the application
 
 1. Apply the pending Prisma migrations through your normal deployment process. The new migration is `20261102020000_add_ai_receptionist`.

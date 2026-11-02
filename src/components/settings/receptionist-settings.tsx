@@ -6,7 +6,8 @@ import { Loader2, PhoneIncoming } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { type ReceptionistConfig } from '@/lib/receptionist'
+import { receptionistGreeting, type ReceptionistConfig } from '@/lib/receptionist'
+import { ReceptionistPreview } from './receptionist-preview'
 
 interface SettingsData {
   config: ReceptionistConfig | null
@@ -71,8 +72,20 @@ export function ReceptionistSettings(): React.JSX.Element {
   if (loading) return <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Loader2 className="size-4 animate-spin" aria-hidden="true" />Loading receptionist settings…</p>
   if (!data || !config) return <div className="space-y-3"><p role="alert" className="text-sm text-destructive">{error}</p><Button variant="outline" onClick={() => { setLoading(true); setError(''); void load() }}>Try again</Button></div>
 
+  const hasUnsavedChanges = JSON.stringify(config) !== JSON.stringify(data.config)
+
   return (
     <div className="flex max-w-[680px] flex-col gap-5">
+      <div className="space-y-3 rounded-lg border p-4 text-sm">
+        <p className="font-medium">Set up your receptionist</p>
+        <ol aria-label="Receptionist setup steps" className="grid gap-3 sm:grid-cols-2">
+          <li><span className="font-medium">1. Business and callback team</span><p className="text-muted-foreground">Set your business name, hours, callback owner, and lead stage below.</p></li>
+          <li><span className="font-medium">2. Approved knowledge</span><p className="text-muted-foreground">Save FAQs and check public-approved Library documents.</p></li>
+          <li><a href="#receptionist-browser-preview" className="font-medium underline">3. Browser conversation</a><p className="text-muted-foreground">Test saved settings before connecting a phone.</p></li>
+          <li><span className="font-medium">4. Optional phone connection</span><p className="text-muted-foreground">Configure and test incoming phone routing separately.</p></li>
+        </ol>
+        <p>{hasUnsavedChanges ? 'Unsaved settings' : 'Settings saved'} · {data.config?.enabled ? 'Reception enabled' : 'Reception off'}</p>
+      </div>
       <Card>
         <CardHeader className="flex-col items-start gap-2">
           <CardTitle className="flex items-center gap-2"><PhoneIncoming className="size-4" aria-hidden="true" />AI receptionist</CardTitle>
@@ -83,6 +96,7 @@ export function ReceptionistSettings(): React.JSX.Element {
           <form onSubmit={save} className="space-y-5">
             <label className="flex min-h-11 items-center gap-3 text-sm font-medium"><input type="checkbox" checked={config.enabled} onChange={(event) => update('enabled', event.target.checked)} className="size-4 accent-primary" />Enable AI receptionist</label>
             <label className="block space-y-1.5 text-sm font-medium"><span>Business name</span><Input required maxLength={120} value={config.businessName} onChange={(event) => update('businessName', event.target.value)} /></label>
+            <div aria-label="Greeting preview" className="space-y-1 rounded-lg border bg-muted/30 p-3 text-sm"><p className="font-medium">Greeting preview · current input</p><p className="break-words">{config.businessName.trim() ? receptionistGreeting(config.businessName.trim()) : 'Enter your business name to preview the greeting.'}</p></div>
             <label className="block space-y-1.5 text-sm font-medium"><span id="receptionist-knowledge-label">Business information and FAQs</span><textarea aria-labelledby="receptionist-knowledge-label" rows={6} maxLength={8000} value={config.knowledge} onChange={(event) => update('knowledge', event.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-describedby="receptionist-knowledge-help" /><span id="receptionist-knowledge-help" className="block text-xs font-normal text-muted-foreground">Add services, prices, location, and approved answers. For anything missing, the receptionist offers a callback.</span></label>
             <label className="block space-y-1.5 text-sm font-medium"><span>When to answer</span><select value={config.mode} onChange={(event) => update('mode', event.target.value as ReceptionistConfig['mode'])} className={selectClass}><option value="after_hours">After business hours</option><option value="always">Every incoming call</option></select></label>
             {config.mode === 'after_hours' && <label className="block space-y-1.5 text-sm font-medium"><span>During business hours, forward to</span><Input type="tel" placeholder="+639171234567" required={config.enabled} value={config.forwardTo} onChange={(event) => update('forwardTo', event.target.value)} /><span className="block text-xs font-normal text-muted-foreground">Use a different number from the Twilio number callers dial.</span></label>}
@@ -105,9 +119,12 @@ export function ReceptionistSettings(): React.JSX.Element {
           </form>
         </CardContent>
       </Card>
+      <ReceptionistPreview key={`${JSON.stringify(data.config)}:${hasUnsavedChanges}`} hasSavedSettings={Boolean(data.config)} hasUnsavedChanges={hasUnsavedChanges} />
       <Card>
         <CardHeader><CardTitle>Connect your incoming number</CardTitle></CardHeader>
         <CardContent className="space-y-3 text-sm">
+          <p className="font-medium">4. Optional phone connection</p>
+          <p>Browser preview does not connect a number or enable reception. Phone routing requires separate configuration and a real test call.</p>
           <p>First save your Twilio credentials and Auth Token in Calling &amp; voice. Then open your phone number in Twilio and set its incoming call webhook to this URL, using HTTP POST.</p>
           <label className="block space-y-1.5 font-medium"><span>Incoming call webhook URL</span><Input readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}${data.webhookPath}`} onFocus={(event) => event.target.select()} /></label>
           <p className="text-xs text-muted-foreground">Use this on the phone number. Keep the existing TwiML App URL for outgoing calls. Call the number to verify the greeting, FAQ answers, and confirmed callback.</p>
