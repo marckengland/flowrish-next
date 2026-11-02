@@ -261,6 +261,7 @@ async function callAI(
   temperature = 0.7,
   maxTokens = 2000,
   timeoutMs?: number,
+  responseFormat?: Record<string, unknown>,
 ): Promise<string> {
   const { baseUrl, model, headers: providerHeaders } = resolveAiEndpoint()
   const url = `${baseUrl}/chat/completions`
@@ -278,6 +279,7 @@ async function callAI(
       messages,
       temperature,
       max_tokens: maxTokens,
+      ...(responseFormat && new URL(baseUrl).hostname === 'generativelanguage.googleapis.com' ? { response_format: responseFormat } : {}),
     }),
   })
 
@@ -339,12 +341,28 @@ export async function generateReceptionistReply(
     'You have no tools or access to existing customer records. Do not invent prices, availability, commitments, or identity details.',
     'Do not speak source identifiers, citation labels, document URLs, or internal revision numbers. Use only the approved business facts.',
     'Extract only details the caller supplied, or the supplied caller number. Preserve known details unless explicitly corrected.',
+    'When the caller states a specific callback request, replace an earlier general-question reason with that latest request. Preserve requested timing as part of the message, without claiming an appointment is booked.',
     'Return JSON only with keys fullName (string or null), phone (E.164 string or null), reason (string or null), reply (short spoken text).',
     'A caller saying yes does not authorize an action here; the application separately reads back and confirms the collected details.',
     `Business information: ${JSON.stringify({ name: config.businessName, information: config.knowledge })}`,
     `Known caller details: ${JSON.stringify({ fullName: state.fullName, phone: state.phone, reason: state.reason })}`,
   ].join('\n')
-  const raw = await callAI([{ role: 'system', content: system }, ...state.messages], 0.2, 500, 8000)
+  const raw = await callAI([{ role: 'system', content: system }, ...state.messages], 0.2, 500, 8000, {
+    type: 'json_schema',
+    json_schema: {
+      name: 'receptionist_reply', strict: true,
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          fullName: { anyOf: [{ type: 'string' }, { type: 'null' }], description: 'Caller-provided full name, or null when unknown.' },
+          phone: { anyOf: [{ type: 'string' }, { type: 'null' }], description: 'Caller-provided international phone number, or null when unknown.' },
+          reason: { anyOf: [{ type: 'string' }, { type: 'null' }], description: 'The latest specific callback purpose stated by the caller, including requested timing. Prefer it to earlier exploratory questions; null if unknown.' },
+          reply: { type: 'string', description: 'A short spoken response under 600 characters, using only approved business facts.' },
+        },
+        required: ['fullName', 'phone', 'reason', 'reply'],
+      },
+    },
+  })
   return receptionistExtractionSchema.parse(JSON.parse(raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()))
 }
 

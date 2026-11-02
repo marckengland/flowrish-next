@@ -40,3 +40,13 @@ The compiled-app browser completed all seven sample turns with the live provider
 Regression checks passed: 1,220 unit tests, 41 disposable PostgreSQL tests, lint, both TypeScript engines, and production build. The browser suite passed 36 checks; five existing navigation guards skipped because their selectors found no eligible targets: contact row, company row, cadence row, task card, and New lead CTA. No existing assertions were changed or skipped for this release.
 
 No telephone call, microphone input, or live phone-audio quality was tested. Run the same opt-in harness after deployment to verify the actual hosted provider path. Keep temporary fixture and report files private and never commit browser authentication or environment files.
+
+## Hosted-response fixes
+
+The hosted run on `157f8d7` identified `invalid_json` on the second conversational turn. The Gemini receptionist adapter now requests a required four-field JSON schema through the documented [OpenAI-compatible structured-output API](https://ai.google.dev/gemini-api/docs/openai#structured-output). Custom providers with unknown schema support retain prompt-based output. Server JSON parsing and phone/text validation remain mandatory.
+
+Reviewing the real replies also exposed an outdated callback reason: an earlier battery/pricing enquiry survived a later explicit request to arrange a tune-up next week. The receptionist instructions and schema description now prefer the latest specific callback request, preserving requested timing without claiming a booking. The live harness requires the corrected callback summary to include the tune-up and next-week request and to exclude the earlier battery enquiry.
+
+The earlier local success record predates this stronger reason check. The strengthened check reproduced that omission before the instruction fix. Production acceptance requires all six conversational turns to report AI mode, then deterministic confirmation with no additional AI request.
+
+The strengthened compiled-app run passed after both fixes: all six AI turns succeeded with valid structured replies, the callback reason remained “arranging a bicycle tune-up next week” through the name/number correction, confirmation used no AI, and cleanup restored the complete baseline. Final unit count is 1,224; all 41 database regressions, both typecheck engines, lint, and the production build passed. The prior full UI regression remains 36 passed with the five documented selector-guard skips.
