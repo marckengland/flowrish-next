@@ -117,6 +117,7 @@ export function AiProviderSettings(): React.JSX.Element {
   useEffect(() => { if (error) errorSummary.current?.focus() }, [error])
 
   const dirty = !!draft && !!view && (apiKey !== '' || JSON.stringify(draft) !== JSON.stringify(draftFrom(view.config)))
+  const isDeepSeekFlash = draft?.provider === 'deepseek' && draft.model === 'deepseek-flash'
   const requiresKey = !view?.config?.hasKey || view.config.provider !== draft?.provider
   const locked = loading || !!busy || conflict || accessDenied
   const canTest = !!view?.config?.enabled && view.config.hasKey && !dirty && !locked
@@ -257,8 +258,9 @@ export function AiProviderSettings(): React.JSX.Element {
                 </div>
                 <div>
                   <label htmlFor="ai-model" className="mb-1.5 block text-[13px] font-medium">Model</label>
-                  <Input id="ai-model" value={draft.model} maxLength={128} autoComplete="off" spellCheck={false} aria-invalid={invalidField === 'model'} onChange={(event) => edit({ model: event.target.value })} />
-                  <p className="mt-1 text-xs text-muted-foreground">Use a model available to your provider account.{draft.provider === 'openai' ? ' Enter your OpenAI model identifier.' : ''}</p>
+                  {isDeepSeekFlash && <p id="ai-model-name" className="mb-1.5 text-sm font-medium">DeepSeek V4.1 Flash</p>}
+                  <Input id="ai-model" aria-describedby={isDeepSeekFlash ? 'ai-model-name ai-model-help' : 'ai-model-help'} value={draft.model} maxLength={128} autoComplete="off" spellCheck={false} aria-invalid={invalidField === 'model'} onChange={(event) => edit({ model: event.target.value })} />
+                  <p id="ai-model-help" className="mt-1 text-xs text-muted-foreground">This field stores the API model identifier. Use a model available to your provider account.{draft.provider === 'openai' ? ' Enter your OpenAI model identifier.' : ''}</p>
                 </div>
                 <div>
                   <label htmlFor="ai-apiKey" className="mb-1.5 block text-[13px] font-medium">API key</label>
