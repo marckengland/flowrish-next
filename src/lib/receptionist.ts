@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-const phoneSchema = z.string().regex(/^\+[1-9]\d{7,14}$/, 'Use an international number, such as +639171234567.')
+export const phoneSchema = z.string().regex(/^\+[1-9]\d{7,14}$/, 'Use an international number, such as +639171234567.')
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
 
 export const receptionistConfigSchema = z.object({
@@ -44,6 +44,10 @@ export type CallState = z.infer<typeof callStateSchema>
 
 export function initialCallState(from: string): CallState {
   return { fullName: '', phone: phoneSchema.safeParse(from).success ? from : '', reason: '', awaitingConfirmation: false, turns: 0, silence: 0, fallbackField: null, messages: [] }
+}
+
+export function receptionistGreeting(businessName: string): string {
+  return `Thank you for calling ${businessName}. I am an AI receptionist. I can answer basic questions and take a callback message. What is your name, and how can we help?`
 }
 
 function localParts(now: Date, timeZone: string) {

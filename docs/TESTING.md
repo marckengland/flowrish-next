@@ -67,6 +67,12 @@ npm run test:e2e
 
 ---
 
+## Receptionist preview checks
+
+Run `node_modules/.bin/vitest run --config vitest.receptionist-preview.config.ts` for disposable PostgreSQL checks of the preview's read-only behavior, saved configuration version, current-organization permissions, approved knowledge, and revocation. It mocks the AI provider and creates no external calls.
+
+`e2e/receptionist-preview.spec.ts` exercises the onboarding and callback preview with synthetic intercepted responses. Readiness, missing-configuration, and authentication checks use the real API without saving settings. Browser read-aloud is optional and does not verify phone audio or speech recognition.
+
 ## Business knowledge checks
 
 Run `node_modules/.bin/vitest run --config vitest.knowledge.config.ts` for disposable PostgreSQL checks of published snapshots, public approval, revisions, concurrency, tenant isolation, RLS, and rollback preservation. Use Node 22.
