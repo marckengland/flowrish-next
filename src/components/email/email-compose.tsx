@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useId, useRef, useState, useTransition } from 'react'
 import {
   Loader2,
   Mail,
@@ -39,6 +39,9 @@ export interface EmailComposeProps {
   defaultSubject?: string
   /** Optional pre-filled body (e.g. from AI generation). */
   defaultBody?: string
+  /** Binds an explicitly reviewed conversation draft to its server-side context. */
+  followUpId?: string
+  draftVersion?: string
   /**
    * When provided, the email is sent as a reply on this Gmail thread.
    * The subject is locked and prefixed with "Re:" automatically. Used
@@ -106,6 +109,8 @@ export function EmailCompose({
   leadName,
   defaultSubject = '',
   defaultBody = '',
+  followUpId,
+  draftVersion,
   replyToThreadId,
   replySubject,
   latestThread,
@@ -118,6 +123,7 @@ export function EmailCompose({
   // thread. Otherwise we default to the lead's most recent thread —
   // user can flip "Start new thread" to override. This mirrors how
   // mail clients usually keep conversations together by default.
+  const subjectId = useId()
   const initialThreadMode: 'reply' | 'new' = replyToThreadId
     ? 'reply'
     : latestThread
@@ -205,6 +211,7 @@ export function EmailCompose({
   // (or strip it) so the field reflects the actual outgoing subject.
   // We don't touch user-typed customizations beyond the prefix.
   useEffect(() => {
+    if (followUpId && replyLocked) return
     setSubject((current) => {
       if (isReply) {
         return prefixReplySubject(
@@ -285,6 +292,7 @@ export function EmailCompose({
               subject: subject.trim(),
               body: body.trim(),
               ...(activeThreadId ? { threadId: activeThreadId } : {}),
+              ...(followUpId && draftVersion ? { followUpId, draftVersion } : {}),
             }),
           )
           for (const att of attachments) {
@@ -308,6 +316,7 @@ export function EmailCompose({
               subject: subject.trim(),
               body: body.trim(),
               ...(activeThreadId ? { threadId: activeThreadId } : {}),
+              ...(followUpId && draftVersion ? { followUpId, draftVersion } : {}),
             }),
           })
         }
@@ -446,13 +455,13 @@ export function EmailCompose({
       {/* Subject */}
       <div>
         <label
-          htmlFor="email-subject"
+          htmlFor={subjectId}
           className="block text-xs font-medium text-foreground mb-1"
         >
           Subject
         </label>
         <input
-          id="email-subject"
+          id={subjectId}
           type="text"
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
@@ -483,7 +492,7 @@ export function EmailCompose({
       </div>
 
       {/* AI helper — pastes draft into subject/body */}
-      <EmailGenerator
+      {!followUpId && <EmailGenerator
         leadId={leadId}
         leadName={leadName}
         onUseDraft={({ subject: draftSubject, body: draftBody }) => {
@@ -491,7 +500,7 @@ export function EmailCompose({
           setBody(draftBody)
           setEditorKey((k) => k + 1)
         }}
-      />
+      />}
 
       {/* Attachments */}
       <div className="flex flex-col gap-2">
@@ -580,7 +589,7 @@ export function EmailCompose({
             {testStatus.message}
           </span>
         ) : null}
-        <Button
+        {!followUpId && <Button
           type="button"
           variant="outline"
           size="sm"
@@ -601,7 +610,7 @@ export function EmailCompose({
           ) : (
             <span>Send test email</span>
           )}
-        </Button>
+        </Button>}
         {!alwaysOpen && (
           <Button
             type="button"
@@ -637,7 +646,7 @@ const inputClasses =
 function prefixReplySubject(subject: string): string {
   const trimmed = subject.trim()
   if (!trimmed) return 'Re:'
-  return /^re:\s/i.test(trimmed) ? trimmed : `Re: ${trimmed}`
+  return /^re:/i.test(trimmed) ? trimmed : `Re: ${trimmed}`
 }
 
 /**

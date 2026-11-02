@@ -4,7 +4,7 @@ Open **Follow-ups** in the sidebar to review incoming replies and captured recep
 
 Approval creates a task once. A receptionist callback already has a task from the caller's confirmed request; approval keeps that task rather than creating another one. A draft email opens the existing composer for review. Sending requires its separate Send action and a connected mailbox.
 
-Reply detection runs during Gmail or Microsoft mailbox sync. A qualifying inbound reply stops the matching active cadence. Outbound messages, automatic replies, delivery failures, and mail that cannot be linked safely to a lead/thread must not stop a cadence. This release uses message previews and deterministic draft templates; it does not claim to summarize the complete email.
+Reply detection runs during Gmail or Microsoft mailbox sync. A qualifying inbound reply stops the matching active cadence. Outbound messages, automatic replies, delivery failures, and mail that cannot be linked safely to a lead/thread must not stop a cadence. Source cards show message previews. Choose Generate contextual draft to retrieve the full source conversation and draft a reply using the configured AI provider; see [conversation drafts](CONVERSATION_DRAFTS.md). Manual templates remain available, and generation never sends email.
 
 Inbox access requires lead read permission. Approval and dismissal require lead write permission. Items are scoped to the signed-in organization and assignee. The public receptionist has no access to this inbox.
 

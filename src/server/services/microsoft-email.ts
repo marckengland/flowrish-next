@@ -194,6 +194,8 @@ export async function deliverMicrosoftEmail(params: {
   attachments: readonly OutgoingAttachment[]
   /** When set, reply into this conversation so the message threads in Outlook. */
   replyToConversationId?: string
+  /** Require an existing source conversation and bind the reviewed recipient. */
+  strictReply?: boolean
 }): Promise<{ externalId: string; threadId: string }> {
   const { accessToken, to, subject, htmlBody, attachments, replyToConversationId } = params
   const authHeaders = {
@@ -212,6 +214,12 @@ export async function deliverMicrosoftEmail(params: {
       replyToConversationId,
       htmlBody,
     )
+  }
+
+  if (params.strictReply) {
+    if (!draft || !replyToConversationId || draft.conversationId !== replyToConversationId) throw new AppError('DRAFT_CONFLICT', 'The source conversation is unavailable. Generate a new draft.', 409)
+    const bound = await fetch(`${MS_GRAPH}/me/messages/${encodeURIComponent(draft.id)}`, { method: 'PATCH', headers: authHeaders, body: JSON.stringify({ subject, toRecipients: [{ emailAddress: { address: to } }] }) })
+    if (!bound.ok) throw new AppError('EMAIL_SEND_FAILED', 'The reviewed reply could not be prepared.', 503)
   }
 
   if (!draft) {
@@ -244,6 +252,7 @@ export async function deliverMicrosoftEmail(params: {
       }),
     })
     if (!attRes.ok) {
+      if (params.strictReply) throw new AppError('EMAIL_SEND_FAILED', 'A reviewed reply attachment could not be prepared.', 503)
       const text = await attRes.text()
       throw new AppError('EMAIL_SEND_FAILED', `Failed to attach file: ${text}`, 500)
     }
@@ -254,6 +263,7 @@ export async function deliverMicrosoftEmail(params: {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
   if (!sendRes.ok) {
+    if (params.strictReply) throw new AppError('EMAIL_SEND_FAILED', 'The reviewed reply could not be sent. Check the connected mailbox and try again.', 503)
     const text = await sendRes.text()
     throw new AppError('EMAIL_SEND_FAILED', `Failed to send email: ${text}`, 500)
   }

@@ -114,6 +114,7 @@ export async function listFollowUps(organizationId: string, userId: string, stat
   return rows.flatMap((row) => {
     if (row.sourceType === 'CALL' && row.status === 'PENDING' && (!row.taskId || !ownedTaskIds.has(row.taskId))) return []
     const lead = byId.get(row.leadId)
-    return lead ? [{ ...row, lead }] : []
+    const parsedContext = z.object({ accountId: z.string(), provider: z.enum(['gmail', 'microsoft']), threadId: z.string(), recipientEmail: z.string().email(), mailboxEmail: z.string().email(), messageCount: z.number().int().positive(), lastMessageAt: z.string() }).safeParse(row.draftContext)
+    return lead ? [{ ...row, draftContext: parsedContext.success ? parsedContext.data : null, lead }] : []
   })
 }

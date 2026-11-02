@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
+import { prepareFollowUpSend } from '@/server/services/follow-up-drafts'
 import { sendEmail, type EmailAttachment } from '@/server/services/email'
 import {
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
 } from '@/server/services/files'
 import { AppError, errorResponse } from '@/lib/errors'
+
+export const maxDuration = 120
 
 const sendEmailBodySchema = z.object({
   leadId: z.string().uuid('Invalid lead ID'),
@@ -19,7 +22,9 @@ const sendEmailBodySchema = z.object({
    * stitch the message into the conversation (Requirement 7.3).
    */
   threadId: z.string().min(1).optional(),
-})
+  followUpId: z.string().uuid().optional(),
+  draftVersion: z.string().uuid().optional(),
+}).refine((value) => Boolean(value.followUpId) === Boolean(value.draftVersion), { message: 'A generated draft requires both its follow-up ID and version.' })
 
 /**
  * POST /api/email/send — Send an email to a lead with personalization tag replacement.
@@ -128,7 +133,14 @@ export async function POST(request: NextRequest) {
       parsedPayload = sendEmailBodySchema.parse(body)
     }
 
-    const result = await sendEmail(
+    let prepared: Awaited<ReturnType<typeof prepareFollowUpSend>> | undefined
+    if (parsedPayload.followUpId && parsedPayload.draftVersion) {
+      requirePermission(session.dbUser, 'leads:read')
+      prepared = await prepareFollowUpSend(session.organizationId, session.dbUser.id, parsedPayload.followUpId, parsedPayload.draftVersion, parsedPayload.leadId)
+      if (parsedPayload.subject !== prepared.subject) throw new AppError('DRAFT_CONFLICT', 'The reply must keep its verified conversation subject.', 409)
+      if (parsedPayload.threadId && parsedPayload.threadId !== prepared.threadId) throw new AppError('DRAFT_CONFLICT', 'The reply must use its source conversation.', 409)
+    }
+    const result = prepared ? await sendEmail(parsedPayload.leadId, parsedPayload.subject, parsedPayload.body, session.dbUser.id, session.organizationId, prepared.threadId, attachments, prepared.options) : await sendEmail(
       parsedPayload.leadId,
       parsedPayload.subject,
       parsedPayload.body,

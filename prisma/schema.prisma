@@ -128,6 +128,9 @@ model FollowUpSuggestion {
   description    String
   draftSubject   String       @default("")
   draftBody      String       @default("")
+  draftGeneratedAt DateTime?
+  draftVersion   String?
+  draftContext   Json?
   status         String       @default("PENDING")
   taskId         String?
   createdAt      DateTime     @default(now())

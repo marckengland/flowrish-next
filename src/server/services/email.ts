@@ -423,6 +423,13 @@ export interface EmailAttachment {
  *
  * Validates: Requirements 7.2, 7.3, 7.4, 7.5, 7.6
  */
+export interface SendEmailOptions {
+  accountId?: string
+  recipientEmail?: string
+  replyMessageId?: string
+  replyReferences?: string
+}
+
 export async function sendEmail(
   leadId: string,
   subject: string,
@@ -431,6 +438,7 @@ export async function sendEmail(
   orgId: string,
   threadId?: string,
   attachments: readonly EmailAttachment[] = [],
+  options: SendEmailOptions = {},
 ): Promise<{ messageId: string; threadId: string; attachmentCount: number }> {
   const db = createTenantPrisma(orgId)
 
@@ -443,14 +451,18 @@ export async function sendEmail(
     throw new AppError('LEAD_NOT_FOUND', 'Lead not found', 404)
   }
 
-  if (!lead.email) {
-    throw new AppError('LEAD_NO_EMAIL', 'Lead does not have an email address', 400)
-  }
+  const recipientEmail = options.recipientEmail ?? lead.email
+  if (!recipientEmail) throw new AppError('LEAD_NO_EMAIL', 'Lead does not have an email address', 400)
+  if (options.recipientEmail && ![lead.email, lead.altEmail].some((email) => email?.trim().toLowerCase() === recipientEmail.trim().toLowerCase())) throw new AppError('INVALID_RECIPIENT', 'The recipient no longer belongs to this lead.', 409)
+  if (options.accountId && (subject.length > 200 || /[\r\n]/.test(subject) || !/^[^\s<>@]+@[^\s<>@]+$/.test(recipientEmail))) throw new AppError('INVALID_EMAIL', 'The reviewed subject or recipient is invalid.', 400)
+  const validMessageId = (value: string) => /^<[^<>\s@]+@[^<>\s@]+>$/.test(value)
+  if (options.replyMessageId && (options.replyMessageId.length > 998 || !validMessageId(options.replyMessageId))) throw new AppError('INVALID_REPLY_HEADER', 'The source message cannot be used for a reply.', 409)
+  if (options.replyReferences && (options.replyReferences.length > 8000 || !options.replyReferences.split(/\s+/).every(validMessageId))) throw new AppError('INVALID_REPLY_HEADER', 'The source references cannot be used for a reply.', 409)
 
   // Get the user's connected email account (Gmail or Microsoft). When a
   // user has more than one, the most recently connected wins.
   const emailAccount = await db.emailAccount.findFirst({
-    where: { userId },
+    where: { userId, ...(options.accountId ? { id: options.accountId } : {}) },
     orderBy: { updatedAt: 'desc' },
   })
 
@@ -467,7 +479,7 @@ export async function sendEmail(
 
   // Re-fetch account to get potentially updated access token
   const updatedAccount = await db.emailAccount.findFirst({
-    where: { id: emailAccount.id },
+    where: { id: emailAccount.id, ...(options.accountId ? { userId } : {}) },
   })
 
   if (!updatedAccount) {
@@ -492,7 +504,8 @@ export async function sendEmail(
   if (updatedAccount.provider === 'microsoft') {
     const delivered = await deliverMicrosoftEmail({
       accessToken,
-      to: lead.email,
+      to: recipientEmail,
+      ...(options.accountId ? { strictReply: true } : {}),
       subject: personalizedSubject,
       htmlBody,
       attachments,
@@ -504,8 +517,8 @@ export async function sendEmail(
     resultThreadId = delivered.threadId
   } else {
     // Gmail: emit In-Reply-To / References headers so replies thread.
-    let inReplyToHeader: string | null = null
-    if (threadId) {
+    let inReplyToHeader: string | null = options.replyMessageId ?? null
+    if (threadId && !options.accountId) {
       const lastMessageOnThread = await db.emailMessage.findFirst({
         where: { threadId },
         orderBy: { sentAt: 'desc' },
@@ -520,18 +533,20 @@ export async function sendEmail(
       attachments.length > 0
         ? buildRawEmailWithAttachments(
             updatedAccount.email,
-            lead.email,
+            recipientEmail,
             personalizedSubject,
             htmlBody,
             attachments,
             inReplyToHeader,
+            options.replyReferences,
           )
         : buildRawEmail(
             updatedAccount.email,
-            lead.email,
+            recipientEmail,
             personalizedSubject,
             htmlBody,
             inReplyToHeader,
+            options.replyReferences,
           )
 
     const sendResponse = await fetch(`${GMAIL_API_BASE}/users/me/messages/send`, {
@@ -547,6 +562,7 @@ export async function sendEmail(
     })
 
     if (!sendResponse.ok) {
+      if (options.accountId) throw new AppError('EMAIL_SEND_FAILED', 'The reviewed reply could not be sent. Check the connected mailbox and try again.', 503)
       const errorText = await sendResponse.text()
       throw new AppError('EMAIL_SEND_FAILED', `Failed to send email: ${errorText}`, 500)
     }
@@ -564,7 +580,7 @@ export async function sendEmail(
       accountId: updatedAccount.id,
       threadId: resultThreadId,
       fromEmail: updatedAccount.email,
-      toEmail: lead.email,
+      toEmail: recipientEmail,
       subject: personalizedSubject,
       bodyPreview: personalizedBody.substring(0, 200),
       sentAt: new Date(),
@@ -750,6 +766,7 @@ function buildRawEmail(
   subject: string,
   htmlBody: string,
   inReplyTo: string | null = null,
+  references?: string,
 ): string {
   const altBoundary = makeBoundary('alt')
   const plainBody = htmlToPlainText(htmlBody)
@@ -760,7 +777,7 @@ function buildRawEmail(
     `Subject: ${encodeMimeHeaderValue(subject)}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
-    ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`] : []),
+    ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${references ?? inReplyTo}`] : []),
   ]
 
   const message = [
@@ -793,6 +810,7 @@ function buildRawEmailWithAttachments(
   htmlBody: string,
   attachments: readonly EmailAttachment[],
   inReplyTo: string | null = null,
+  references?: string,
 ): string {
   const mixedBoundary = makeBoundary('mixed')
   const altBoundary = makeBoundary('alt')
@@ -804,7 +822,7 @@ function buildRawEmailWithAttachments(
     `Subject: ${encodeMimeHeaderValue(subject)}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`,
-    ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`] : []),
+    ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${references ?? inReplyTo}`] : []),
   ]
 
   const parts: string[] = []
