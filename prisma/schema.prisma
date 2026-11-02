@@ -118,6 +118,10 @@ model Organization {
   knowledgeChunks KnowledgeChunk[]
   rehearsalFaqDrafts RehearsalFaqDraft[]
   knowledgeGapReviews KnowledgeGapReview[]
+  websiteReceptionistConfig WebsiteReceptionistConfig?
+  websiteReceptionistUsage WebsiteReceptionistUsage[]
+  websiteReceptionistSessions WebsiteReceptionistSession[]
+  websiteReceptionistCallbacks WebsiteReceptionistCallback[]
 }
 
 model KnowledgeDocument {
@@ -1213,4 +1217,72 @@ model ConversationMessage {
 
   @@index([organizationId])
   @@index([conversationId, createdAt])
+}
+
+model WebsiteReceptionistConfig {
+  organizationId     String       @id
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  publicId           String       @unique @default(uuid())
+  enabled            Boolean      @default(false)
+  allowedOrigins     String[]     @default([])
+  dailyMessageLimit  Int          @default(5)
+  dailyTokenLimit    Int          @default(20000)
+  dailyCallbackLimit Int          @default(10)
+  updatedAt          DateTime     @updatedAt
+}
+
+model WebsiteReceptionistUsage {
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  day            DateTime     @db.Date
+  scope          String
+  sessions       Int          @default(0)
+  messages       Int          @default(0)
+  reservedTokens Int          @default(0)
+  callbacks      Int          @default(0)
+  updatedAt      DateTime     @updatedAt
+
+  @@id([organizationId, day, scope])
+  @@index([day])
+}
+
+model WebsiteReceptionistSession {
+  id                  String       @id @default(uuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tokenHash           String       @unique
+  ipHash              String
+  siteOrigin          String
+  configVersion       DateTime
+  createdAt           DateTime     @default(now())
+  expiresAt           DateTime
+  turns               Int          @default(0)
+  closed              Boolean      @default(false)
+  inFlightId          String?
+  leaseExpiresAt      DateTime?
+  lastRequestId       String?
+  lastResponse        Json?
+  callbackSubmittedAt DateTime?
+
+  @@index([organizationId])
+  @@index([expiresAt])
+}
+
+model WebsiteReceptionistCallback {
+  id              String       @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sourceSessionId String
+  fullName        String
+  phone           String
+  reason          String
+  siteOrigin      String
+  status          String       @default("pending")
+  consentedAt     DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  reviewedById    String?
+
+  @@unique([organizationId, sourceSessionId])
+  @@index([organizationId, status, createdAt])
 }

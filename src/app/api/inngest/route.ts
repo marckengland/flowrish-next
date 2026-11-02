@@ -6,6 +6,7 @@ import { mailboxSyncScheduleFunction } from '@/server/inngest/mailbox-sync-sched
 import { scoreDecayFunction } from '@/server/inngest/score-decay'
 import { taskReminderFunction } from '@/server/inngest/task-reminder'
 import { forecastSnapshotFunction } from '@/server/inngest/forecast-snapshot'
+import { websiteReceptionistCleanupFunction } from '@/server/inngest/website-receptionist-cleanup'
 
 /**
  * Inngest serve endpoint for flowrish-next.
@@ -40,5 +41,6 @@ export const { GET, POST, PUT } = serve({
     scoreDecayFunction,
     taskReminderFunction,
     forecastSnapshotFunction,
+    websiteReceptionistCleanupFunction,
   ],
 })

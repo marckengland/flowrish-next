@@ -10,6 +10,7 @@ import { receptionistGreeting, type ReceptionistConfig } from '@/lib/receptionis
 import { ReceptionistPreview } from './receptionist-preview'
 import { ReceptionistReadinessChecklist } from './receptionist-readiness-checklist'
 import { KnowledgeGapsInbox } from './knowledge-gaps-inbox'
+import { WebsiteReceptionistSettings } from './website-receptionist-settings'
 
 interface SettingsData {
   config: ReceptionistConfig | null
@@ -123,6 +124,7 @@ export function ReceptionistSettings(): React.JSX.Element {
       </Card>
       <ReceptionistReadinessChecklist key={`checklist:${JSON.stringify(data.config)}:${hasUnsavedChanges}`} hasUnsavedChanges={hasUnsavedChanges} />
       <KnowledgeGapsInbox />
+      <WebsiteReceptionistSettings />
       <ReceptionistPreview key={`${JSON.stringify(data.config)}:${hasUnsavedChanges}`} hasSavedSettings={Boolean(data.config)} hasUnsavedChanges={hasUnsavedChanges} />
       <Card>
         <CardHeader><CardTitle>Connect your incoming number</CardTitle></CardHeader>

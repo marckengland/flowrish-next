@@ -1,0 +1,29 @@
+import { z } from 'zod'
+import { websiteOriginSchema, type WebsiteEmbedData } from './website-receptionist'
+
+const embedSchema = z.object({
+  publicId: z.string().uuid(),
+  siteOrigin: websiteOriginSchema,
+  allowedOrigins: z.array(websiteOriginSchema).min(1).max(5),
+  businessName: z.string().min(1).max(120).refine(value => value.trim().length > 0),
+}).strict().refine(data => data.allowedOrigins.includes(data.siteOrigin))
+
+export function renderWebsiteReceptionistHtml(data: WebsiteEmbedData, nonce: string): string {
+  const safe = embedSchema.parse(data)
+  if (!/^[a-zA-Z0-9+/_=-]{16,128}$/.test(nonce)) throw new Error('Invalid nonce')
+  const json = JSON.stringify(safe).replace(/[<>&\u2028\u2029]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`)
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Business website assistant</title>
+<style nonce="${nonce}">
+*{box-sizing:border-box}html{color-scheme:light;background:#fff;color:#18242b;font:15px/1.5 system-ui,-apple-system,sans-serif}body{margin:0}main{padding:20px;max-width:480px;margin:auto}h1{font-size:20px;line-height:1.3;margin:0 0 8px;overflow-wrap:anywhere}h2{font-size:18px;margin:0 0 8px}p{margin:8px 0}small,.muted{color:#52616a;font-size:13px}section{margin-top:24px}label{display:block;font-weight:600;margin:12px 0 5px}input,textarea,button{font:inherit}input:not([type=checkbox]),textarea{display:block;border:1px solid #87969f;border-radius:6px;padding:10px;width:100%;background:#fff;color:#18242b}textarea{min-height:80px;resize:vertical}button{min-height:44px;padding:10px 14px;border:1px solid #176049;border-radius:6px;background:#176049;color:#fff;font-weight:600;cursor:pointer;margin-top:10px}button:disabled{opacity:.55;cursor:default}button.secondary{color:#176049;background:#fff}button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid #c07700;outline-offset:3px}#messages{padding:0;list-style:none}#messages li{white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0;padding:10px 12px;background:#f1f5f3;border-radius:6px}#messages li.visitor{border-left:3px solid #52616a;background:#f6f7f8}.speaker{display:block;font-size:12px;font-weight:700;margin-bottom:4px}#status,#callback-status{overflow-wrap:anywhere}#status:empty,#callback-status:empty{display:none}#callback-review{border:1px solid #c8d6d0;border-radius:6px;padding:12px;margin-top:14px}dl{margin:0}dt{font-weight:600;font-size:13px;margin-top:8px}dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}.consent{font-weight:400;display:flex;gap:9px;align-items:flex-start}.consent input{margin-top:5px;flex:none;width:18px;height:18px}summary{cursor:pointer;font-weight:700;min-height:44px;padding-top:10px}.trap,[hidden]{display:none!important}@media(max-width:340px){main{padding:14px}button{width:100%}}
+</style></head><body><main>
+<header><h1 id="business-name">Business assistant</h1><p class="muted">An AI assistant. Answers may be incomplete. For urgent help, contact the business directly.</p></header>
+<p id="status" role="status" aria-live="polite">Connecting to the business…</p><button id="new-chat" class="secondary" type="button" hidden>Start a new chat</button>
+<section aria-label="Chat"><ol id="messages" role="log" aria-live="polite" aria-relevant="additions" aria-label="Conversation"></ol>
+<form id="question-form"><label for="question">Your question</label><textarea id="question" name="question" maxlength="1000" required disabled></textarea><p class="muted">Please avoid sensitive personal or medical information.</p><button id="send" type="button" disabled>Send question</button><button id="retry" class="secondary" type="button" hidden>Retry last question</button></form></section>
+<section aria-label="Callback request"><details open><summary>Request a callback</summary><p class="muted">Send your details for the business to review. This does not book an appointment or guarantee a call.</p>
+<form id="callback-form"><label for="full-name">Full name</label><input id="full-name" name="fullName" maxlength="120" autocomplete="name" required><label for="phone">Phone number</label><input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" pattern="\\+[1-9][0-9]{7,14}" placeholder="+639171234567" required><p class="muted">Include your country code, starting with +.</p><label for="reason">What should the business know?</label><textarea id="reason" name="reason" maxlength="1000" required></textarea><div class="trap" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div><button id="review" type="button" disabled>Review callback request</button>
+<div id="callback-review" hidden><h2>Review your request</h2><dl><dt>Name</dt><dd id="review-name"></dd><dt>Phone</dt><dd id="review-phone"></dd><dt>Request</dt><dd id="review-reason"></dd></dl><label class="consent"><input id="consent" type="checkbox"><span id="consent-label"></span></label><button id="confirm" type="button" disabled>Confirm callback request</button></div>
+</form><p id="callback-status" role="status" aria-live="polite"></p></details></section>
+</main><script id="receptionist-data" type="application/json" nonce="${nonce}">${json}</script><script src="/receptionist-widget-frame.js" nonce="${nonce}" defer></script></body></html>`
+}
