@@ -64,4 +64,6 @@ Interfaces: CalendarExceptionsEditor({value,onChange,timeZone,disabled?}) and Ca
 
 ## Execution record
 
-Baseline 15f6627; prior release 1,708 unit tests and relevant database/browser checks passed. New work executes inline under the accepted scope; release results live in the task ledger.
+Baseline 15f6627. Verification passed: 1,725 units, nine new database cases before the final recovery regression, 86 existing database cases, 28 standalone widget checks, three authenticated desktop/mobile workflow checks and nine existing authenticated browser regressions. Lint, strict/fast types, Prisma validation and guarded optimized build passed. The approved existing test change adds only missing database lock fixtures; all assertions remain.
+
+One independent review found that empty exception arrays also block compatibility with the old strict policy schema. A disposable-database regression reproduced the unsafe recovery count (expected 1, received 0); the instructions now require the calendarExceptions key to be absent, even when its array is empty. The safe editor-freeze recovery retains date-aware code and passed isolated types, 25 units and nine database cases. Final recovery regression and release results are recorded in the task ledger. No production settings, schema, widget state or provider credentials were changed.

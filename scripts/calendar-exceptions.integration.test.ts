@@ -51,6 +51,18 @@ async function draft() { return { expectedUpdatedAt: (await db.websiteReceptioni
 async function confirm() { const value = await draft(), preview = await handoff.previewCallbackHandoff(org, user, callbackId, value); return handoff.commitCallbackHandoff(org, user, callbackId, { draft: value, previewVersion: preview.version, confirmed: true }) }
 
 describe('business calendar exceptions with real disposable PostgreSQL', () => {
+  it('blocks the documented full rollback when cleared exception keys remain stored', async () => {
+    const query = readFileSync('docs/ops/business-calendar-exceptions-rollback.md', 'utf8').match(/\x60\x60\x60sql\n([\s\S]*?)\n\x60\x60\x60/)?.[1]
+    expect(query).toBeDefined()
+    await db.$transaction(async tx => {
+      await tx.$executeRawUnsafe('CREATE TEMP TABLE "ReceptionistConfig" (settings jsonb) ON COMMIT DROP')
+      await tx.$executeRawUnsafe('CREATE TEMP TABLE "CallbackResponsePolicy" (hours jsonb) ON COMMIT DROP')
+      await tx.$executeRaw`INSERT INTO "ReceptionistConfig" VALUES (${JSON.stringify({ ...config, calendarExceptions: [] })}::jsonb)`
+      await tx.$executeRaw`INSERT INTO "CallbackResponsePolicy" VALUES (${JSON.stringify({ ...calendar, calendarExceptions: [] })}::jsonb)`
+      const [row] = await tx.$queryRawUnsafe<Array<{ business_calendars: bigint; policy_calendars: bigint }>>(query!)
+      expect(Number(row.business_calendars)).toBe(1); expect(Number(row.policy_calendars)).toBe(1)
+    })
+  })
   it('roundtrips exceptions and preserves private settings, disabled reception and other tenants', async () => {
     const result = await save([closed]); expect(result.business.values).toMatchObject({ calendarExceptions: [closed] }); expect(JSON.stringify(result.business.values)).not.toContain('PRIVATE NOTES')
     expect((await db.receptionistConfig.findUniqueOrThrow({ where: { organizationId: org } })).settings).toMatchObject({ knowledge: 'PRIVATE NOTES', enabled: false, calendarExceptions: [closed] })
