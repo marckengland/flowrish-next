@@ -20,6 +20,20 @@ Unsaved drafts require confirmation before changing steps, reloading, or followi
 
 The widget is disabled until an administrator explicitly enables it. The phone receptionist toggle is independent. Changing website settings invalidates existing website sessions.
 
+## Check the website installation
+
+In guided setup, save the exact website origins in **Website & budget**, then open **Simulation**. Below the supplied script snippet, enter a public page URL and select **Check website installation**. The checker sends no traffic when you open the step. It does not load the widget, send an AI message, place a call, change settings, or enable reception.
+
+Use an HTTPS page on a saved allowed website, without credentials, a query, a fragment, or a custom port. Each subdomain needs its own saved origin. A domain mismatch returns guidance without fetching the page. Redirects must remain within the saved websites; use the final public URL directly if a redirect is blocked.
+
+**Matching snippet found in page source** means the standard absolute script URL and your current public widget ID match. Missing, wrong-ID, wrong-source, multiple-snippet, and unsupported-tag results explain what to replace. Copy the current snippet, publish the website, and check again. The checker does not return page contents, discovered foreign IDs, headers, IP addresses, or diagnostics.
+
+This is a source check, not a browser execution or connectivity test. It cannot prove CSP compatibility, AI readiness, conversation quality, or JavaScript/tag-manager injection. Password protection, bot blocking, non-HTML/compressed responses, malformed/ambiguous source, and unusually large pages may need a manual browser check. Module and nomodule variants are not the supplied classic script installation.
+
+The scanner also declines legacy frameset documents, nonstandard raw-text closing tags, and script tags with more than 256 attributes. Those cases receive manual-check guidance rather than a positive installation result.
+
+Checks are limited to one per organization every 30 seconds. The website fetch stops after eight seconds, 512 KiB, or three redirects. Every connection uses a validated public DNS address pinned to that connection; private, local, special, mixed, and unsafe redirect destinations are blocked. Settings and administrator access are checked before and after fetching. Changed settings require reloading saved setup. Editing the URL or leaving the step clears/cancels the transient result; results are not saved. Installation results never replace the separate simulation and spending acknowledgements required to enable reception.
+
 ## Spending and abuse limits
 
 Website answers use only the organization's configured provider. They cannot fall back to a deployment-wide key. Each attempted answer reserves 9,656 units against the widget's daily token allowance, including failures. The default 20,000 allowance permits at most two attempted answers per UTC day, even though the default message limit is five. The organization's existing AI request and token limits also apply.
@@ -99,6 +113,7 @@ npx vitest run --config vitest.callback-performance.config.ts
 npx playwright test --config playwright.website-receptionist.config.ts
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/website-receptionist-admin.spec.ts e2e/callback-handoff.spec.ts e2e/callback-outcomes.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-setup.spec.ts --retries=0
+PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-installation.spec.ts e2e/receptionist-installation-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-notifications.spec.ts e2e/callback-notifications-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-response.spec.ts e2e/callback-response-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-performance.spec.ts e2e/callback-performance-smoke.spec.ts --retries=0

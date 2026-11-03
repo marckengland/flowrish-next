@@ -1,0 +1,31 @@
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ReceptionistInstallationCheck } from './receptionist-installation-check'
+import type { InstallationResult } from '@/lib/receptionist-installation'
+import { setupFixture } from './receptionist-setup-fixture.test-data'
+const fetch = vi.fn(), settings = () => setupFixture().website.settings!, site = 'https://shop.example/'
+const result = (): InstallationResult => ({ requestedUrl: site, checkedUrl: site, checkedAt: '2026-11-03T00:00:00.000Z', expectedUpdatedAt: settings().updatedAt, publicId: settings().publicId, originAllowed: true, outcome: 'snippet_found', matchingSnippets: 1, detectedSnippets: 1 })
+const ok = (data = result()) => ({ ok: true, status: 200, json: async () => ({ data }) })
+beforeEach(() => { fetch.mockReset(); vi.stubGlobal('fetch', fetch) })
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+describe('explicit website installation check', () => {
+  it('sends no traffic on mount and checks only after explicit submission without activation or AI actions', async () => {
+    render(<ReceptionistInstallationCheck settings={settings()} />); expect(fetch).not.toHaveBeenCalled(); fetch.mockResolvedValueOnce(ok()); fireEvent.click(screen.getByRole('button', { name: 'Check website installation' })); expect(await screen.findByRole('heading', { name: 'Matching snippet found in page source' })).toBeInTheDocument(); expect(screen.getByText(/does not test browser execution/)).toBeInTheDocument(); expect(screen.getByText(/does not enable/)).toBeInTheDocument(); expect(fetch).toHaveBeenCalledOnce(); const [url, options] = fetch.mock.calls[0]; expect(url).toBe('/api/admin/receptionist/setup/installation'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body)).toEqual({ url: site, expectedUpdatedAt: settings().updatedAt })
+  })
+  it('clears a result on edits and rejects a stale response for a different URL or settings version', async () => {
+    fetch.mockResolvedValueOnce(ok()); render(<ReceptionistInstallationCheck settings={settings()} />); fireEvent.click(screen.getByRole('button', { name: 'Check website installation' })); await screen.findByRole('heading', { name: 'Matching snippet found in page source' }); fireEvent.change(screen.getByLabelText('Public website page URL'), { target: { value: 'https://shop.example/services' } }); expect(screen.queryByRole('heading', { name: 'Matching snippet found in page source' })).toBeNull(); fetch.mockResolvedValueOnce(ok()); fireEvent.click(screen.getByRole('button', { name: 'Check website installation' })); await screen.findByRole('alert'); expect(screen.queryByRole('heading', { name: 'Matching snippet found in page source' })).toBeNull()
+  })
+  it('aborts edited/unmounted checks and ignores late replies rather than restoring old guidance', async () => {
+    let resolve: (value: ReturnType<typeof ok>) => void = () => {}; fetch.mockImplementationOnce(() => new Promise(done => { resolve = done })); const view = render(<ReceptionistInstallationCheck settings={settings()} />); fireEvent.click(screen.getByRole('button', { name: 'Check website installation' })); const signal = fetch.mock.calls[0][1].signal; fireEvent.change(screen.getByLabelText('Public website page URL'), { target: { value: 'https://shop.example/new' } }); expect(signal.aborted).toBe(true); await act(async () => { resolve(ok()) }); expect(screen.queryByRole('heading', { name: 'Matching snippet found in page source' })).toBeNull(); fetch.mockImplementationOnce(() => new Promise(() => {})); fireEvent.click(screen.getByRole('button', { name: 'Check website installation' })); const active = fetch.mock.calls[1][1].signal; view.unmount(); expect(active.aborted).toBe(true)
+  })
+  it('shows fixed conflict/rate-limit/unavailable guidance without private diagnostics and retains the entered URL', async () => {
+    render(<ReceptionistInstallationCheck settings={settings()} />)
+    for (const [status, message] of [[409, /Reload saved setup/], [429, /30 seconds/], [503, /unavailable/]] as const) { fetch.mockResolvedValueOnce({ ok: false, status, json: async () => ({ error: { message: 'PRIVATE HOST/API KEY' } }) }); fireEvent.click(screen.getByRole('button', { name: 'Check website installation' })); expect(await screen.findByRole('alert')).toHaveTextContent(message); expect(screen.queryByText('PRIVATE HOST/API KEY')).toBeNull(); expect(screen.getByLabelText('Public website page URL')).toHaveValue(site) }
+  })
+  it('hides unexpected JSON and network diagnostics rather than rendering exception messages', async () => {
+    render(<ReceptionistInstallationCheck settings={settings()} />); fetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => { throw new SyntaxError('PRIVATE HTML/API KEY') } }); fireEvent.click(screen.getByRole('button', { name: 'Check website installation' })); expect(await screen.findByRole('alert')).not.toHaveTextContent('PRIVATE'); fetch.mockRejectedValueOnce(new Error('PRIVATE TRANSPORT DIAGNOSTIC')); fireEvent.click(screen.getByRole('button', { name: 'Check website installation' })); expect(await screen.findByRole('alert')).not.toHaveTextContent('PRIVATE')
+  })
+  it('validates public URLs locally and offers exact-domain guidance without enabling a widget', async () => {
+    render(<ReceptionistInstallationCheck settings={settings()} />); fireEvent.change(screen.getByLabelText('Public website page URL'), { target: { value: 'https://127.0.0.1/' } }); fireEvent.submit(screen.getByRole('form', { name: 'Website installation check' })); await screen.findByRole('alert'); expect(fetch).not.toHaveBeenCalled(); fireEvent.change(screen.getByLabelText('Public website page URL'), { target: { value: 'https://www.shop.example/' } }); fetch.mockResolvedValueOnce(ok({ ...result(), requestedUrl: 'https://www.shop.example/', checkedUrl: null, originAllowed: false, outcome: 'origin_not_allowed', matchingSnippets: 0, detectedSnippets: 0 })); fireEvent.click(screen.getByRole('button', { name: 'Check website installation' })); expect(await screen.findByRole('heading', { name: 'This website is not in the saved allowed list' })).toBeInTheDocument(); expect(screen.queryByRole('button', { name: /Enable/ })).toBeNull()
+  })
+})
