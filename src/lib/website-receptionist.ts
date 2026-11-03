@@ -24,7 +24,7 @@ export const websiteAdminSchema = z.object({ settings: websiteSettingsSchema.nul
 export const websiteSessionInputSchema = z.object({ siteOrigin: websiteOriginSchema, website: z.literal('') }).strict()
 export const websiteMessageInputSchema = z.object({ requestId: z.string().uuid(), expectedTurn: z.number().int().min(0).max(WEBSITE_SESSION_TURNS), question: text(1000).refine(value => new TextEncoder().encode(value).length <= 2000, 'Use a shorter question.'), history: z.array(text(1000)).max(4).refine(value => new TextEncoder().encode(value.join('\n')).length <= 4000, 'Use a shorter chat history.'), website: z.literal('') }).strict()
 export const websiteCallbackInputSchema = z.object({ fullName: text(120), phone: phoneSchema, reason: text(1000), confirmed: z.literal(true), website: z.literal('') }).strict()
-export const websiteSessionResultSchema = z.object({ token: z.string().regex(/^[a-f0-9]{64}$/), businessName: text(120), greeting: text(600), expiresAt: z.string().datetime(), turn: z.literal(0) }).strict()
+export const websiteSessionResultSchema = z.object({ token: z.string().regex(/^[a-f0-9]{64}$/), businessName: text(120), greeting: text(600), expiresAt: z.string().datetime(), turn: z.literal(0), feedbackEnabled: z.literal(true).optional() }).strict()
 export const websiteMessageResultSchema = z.object({ reply: text(600), turn: z.number().int().min(1).max(WEBSITE_SESSION_TURNS), canMessage: z.boolean() }).strict()
 export const websiteCallbackResultSchema = z.object({ received: z.literal(true) }).strict()
 export const websiteCallbackQuerySchema = z.object({ status: z.enum(['pending', 'reviewed', 'dismissed', 'all']).default('pending'), page: z.coerce.number().int().min(1).max(10000).default(1) }).strict()

@@ -6,6 +6,7 @@ import { z, ZodError } from 'zod'
 import { prisma } from '@/server/db/client'
 import { getEffectivePermissions } from '@/server/auth/permissions'
 import { AppError } from '@/lib/errors'
+import { FEEDBACK_DAILY_LIMIT, feedbackInputSchema } from '@/lib/visitor-feedback'
 import { aiProviderSettingsSchema } from '@/lib/ai-provider'
 import { receptionistConfigSchema, receptionistGreeting } from '@/lib/receptionist'
 import { websiteReceptionistSaveSchema, websiteSettingsSchema, websiteSessionInputSchema, websiteMessageInputSchema, websiteMessageResultSchema, websiteCallbackInputSchema, websiteCallbackQuerySchema, websiteCallbackReviewSchema, websiteCallbackRecordSchema, websiteOriginSchema, WEBSITE_REPLY_RESERVATION, WEBSITE_SESSION_TURNS, type WebsiteReceptionistAdminData, type WebsiteRequestContext, type WebsiteEmbedData, type WebsiteMessageResult } from '@/lib/website-receptionist'
@@ -102,7 +103,7 @@ export async function startWebsiteSession(publicId: string, raw: unknown, contex
       await consume(db, config, hash, 'sessions')
       const token = randomBytes(32).toString('hex'); const expiresAt = new Date(Date.now() + 30 * 60_000)
       await db.websiteReceptionistSession.create({ data: { organizationId: config.organizationId, tokenHash: createHash('sha256').update(token).digest('hex'), ipHash: hash, siteOrigin: input.siteOrigin, configVersion: config.updatedAt, expiresAt } })
-      return { token, businessName: ready.businessName, greeting: receptionistGreeting(ready.businessName), expiresAt: expiresAt.toISOString(), turn: 0 as const }
+      return { token, businessName: ready.businessName, greeting: receptionistGreeting(ready.businessName), expiresAt: expiresAt.toISOString(), turn: 0 as const, ...(config.feedbackEnabled ? { feedbackEnabled: true as const } : {}) }
     })
   })
 }
@@ -151,6 +152,33 @@ export async function sendWebsiteMessage(publicId: string, token: string, raw: u
     })
   })
 }
+export async function submitWebsiteFeedback(publicId: string, token: string, raw: unknown, context: WebsiteRequestContext) {
+  return safe(async () => {
+    const input = feedbackInputSchema.parse(raw); idSchema.parse(publicId); contextValid(context)
+    return prisma.$transaction(async db => {
+      const initial = await publicConfig(publicId, db)
+      // Match ordinary Library/settings parent-first locking without blocking foreign-key checks.
+      await db.$queryRaw`SELECT id FROM "Organization" WHERE id=${initial.organizationId} FOR NO KEY UPDATE`
+      const config = await locked(publicId, db)
+      if (!config.feedbackEnabled) fail()
+      const current = await session(db, config, token, context)
+      const identity = { organizationId: config.organizationId, sourceSessionId: current.id, requestId: input.requestId }
+      const existing = await db.websiteReceptionistFeedback.findUnique({ where: { organizationId_sourceSessionId_requestId: identity }, select: { question: true } })
+      if (existing) { if (existing.question !== input.question) fail('WEBSITE_CONFLICT', 409); return { received: true as const } }
+      // Retain only an opaque receipt when an administrator deletes the saved text.
+      if (current.feedbackRequestId === input.requestId) return { received: true as const }
+      if (current.inFlightId || current.turns < 1 || current.lastRequestId !== input.requestId || !websiteMessageResultSchema.safeParse(current.lastResponse).success) fail('WEBSITE_CONFLICT', 409)
+      const counterKey = { organizationId: config.organizationId, day: dayUtc() }
+      const usage = await db.websiteReceptionistFeedbackUsage.findUnique({ where: { organizationId_day: counterKey }, select: { reports: true } })
+      if ((usage?.reports ?? 0) >= FEEDBACK_DAILY_LIMIT) fail('WEBSITE_LIMIT_REACHED', 429)
+      await db.websiteReceptionistFeedbackUsage.upsert({ where: { organizationId_day: counterKey }, create: { ...counterKey, reports: 1 }, update: { reports: { increment: 1 } } })
+      await db.websiteReceptionistFeedback.create({ data: { ...identity, question: input.question, siteOrigin: current.siteOrigin, consentedAt: new Date() } })
+      await db.websiteReceptionistSession.update({ where: { id: current.id }, data: { feedbackRequestId: input.requestId } })
+      return { received: true as const }
+    })
+  })
+}
+
 export async function submitWebsiteCallback(publicId: string, token: string, raw: unknown, context: WebsiteRequestContext) {
   return safe(async () => {
     const input = websiteCallbackInputSchema.parse(raw); idSchema.parse(publicId); contextValid(context)

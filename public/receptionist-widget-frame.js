@@ -12,6 +12,13 @@
   const consent = get('consent');
   const callbackStatus = get('callback-status');
   const callbackReview = get('callback-review');
+  const feedbackSection = get('feedback-section');
+  const feedbackForm = get('feedback-form');
+  const feedbackQuestion = get('feedback-question');
+  const feedbackConsent = get('feedback-consent');
+  const feedbackSave = get('feedback-save');
+  const feedbackStatus = get('feedback-status');
+  let feedbackEnabled = false, feedbackBusy = false, feedbackSent = false, feedbackPending = null, lastFeedbackQuestion = null, feedbackEpoch = 0;
   const fields = [get('full-name'), get('phone'), get('reason')];
   const api = `/api/public/website-receptionist/${config.publicId}`;
   let handshaken = false;
@@ -30,19 +37,28 @@
   get('consent-label').textContent = `I agree ${config.businessName} may contact me about this request.`;
 
   function controls() {
-    question.disabled = !session || !canMessage || busy || !!pending;
+    question.disabled = !session || !canMessage || busy || feedbackBusy || !!pending || !!feedbackPending;
     send.disabled = question.disabled;
     retry.hidden = !pending || busy || !session;
     review.disabled = !session || callbackBusy || callbackSent || !!callbackPending;
     confirm.disabled = !session || callbackBusy || callbackSent || !reviewed || !consent.checked;
     fields.forEach(field => { field.disabled = callbackBusy || callbackSent || !!callbackPending; });
     consent.disabled = callbackBusy || callbackSent || !!callbackPending;
-    newChat.disabled = starting || busy || callbackBusy;
+    newChat.disabled = starting || busy || callbackBusy || feedbackBusy || !!feedbackPending;
+    const feedbackReady = !!session && feedbackEnabled && !!lastFeedbackQuestion;
+    feedbackSection.hidden = !feedbackReady;
+    get('feedback-open').hidden = !feedbackReady || feedbackSent || !feedbackForm.hidden;
+    get('feedback-open').disabled = busy || feedbackBusy || !!pending;
+    get('feedback-close').disabled = feedbackBusy;
+    feedbackQuestion.disabled = busy || feedbackBusy || feedbackSent || !!feedbackPending;
+    feedbackConsent.disabled = feedbackQuestion.disabled;
+    feedbackSave.disabled = !feedbackReady || busy || feedbackBusy || feedbackSent || (!feedbackPending && (!feedbackConsent.checked || !feedbackQuestion.value.trim()));
   }
 
   function expire() {
     session = null;
     pending = null;
+    resetFeedback();
     canMessage = false;
     reviewed = null;
     callbackPending = null;
@@ -101,10 +117,11 @@
   }
 
   async function start() {
-    if (!handshaken || starting || busy || callbackBusy) return;
+    if (!handshaken || starting || busy || callbackBusy || feedbackBusy || feedbackPending) return;
     starting = true;
     session = null;
     pending = null;
+    resetFeedback();
     history = [];
     turn = 0;
     callbackSent = false;
@@ -121,6 +138,7 @@
       const data = await request('session', { siteOrigin: config.siteOrigin, website: get('website').value });
       if (!/^[a-f0-9]{64}$/.test(data.token) || !Number.isFinite(Date.parse(data.expiresAt)) || data.turn !== 0 || typeof data.greeting !== 'string' || data.greeting.length > 600) throw new Error('Invalid response');
       session = { token: data.token, expiresAt: data.expiresAt };
+      feedbackEnabled = data.feedbackEnabled === true;
       canMessage = true;
       addMessage('Assistant', data.greeting);
       status.textContent = '';
@@ -137,7 +155,7 @@
   }
 
   async function submitQuestion() {
-    if (busy || !active() || !canMessage) return;
+    if (busy || feedbackBusy || feedbackPending || !active() || !canMessage) return;
     if (!pending) {
       const value = question.value.trim();
       if (!value || value.length > 1000 || value.includes('\0') || new TextEncoder().encode(value).length > 2000) {
@@ -153,6 +171,8 @@
     try {
       const data = await request('message', body, session.token);
       if (typeof data.reply !== 'string' || !data.reply.length || data.reply.length > 600 || data.turn !== turn + 1 || typeof data.canMessage !== 'boolean') throw new Error('Invalid response');
+      resetFeedback();
+      lastFeedbackQuestion = { requestId: body.requestId, question: body.question };
       addMessage('You', body.question);
       addMessage('Assistant', data.reply);
       turn = data.turn;
@@ -176,6 +196,50 @@
       }
     } finally { busy = false; controls(); }
   }
+
+  function resetFeedback() {
+    feedbackEpoch++;
+    feedbackBusy = false; feedbackSent = false; feedbackPending = null; lastFeedbackQuestion = null;
+    feedbackForm.hidden = true; feedbackConsent.checked = false; feedbackQuestion.value = ''; feedbackStatus.textContent = '';
+  }
+  get('feedback-open').addEventListener('click', function () {
+    if (!active() || !feedbackEnabled || !lastFeedbackQuestion || busy || feedbackBusy || feedbackSent) return;
+    feedbackQuestion.value = lastFeedbackQuestion.question; feedbackConsent.checked = false; feedbackForm.hidden = false; feedbackStatus.textContent = ''; controls(); feedbackQuestion.focus();
+  });
+  feedbackQuestion.addEventListener('input', function () { feedbackConsent.checked = false; controls(); });
+  get('feedback-close').addEventListener('click', function () {
+    if (feedbackBusy) return;
+    feedbackEpoch++;
+    const uncertain = !!feedbackPending;
+    feedbackPending = null; feedbackSent = uncertain; feedbackForm.hidden = true; feedbackConsent.checked = false; feedbackQuestion.value = '';
+    feedbackStatus.textContent = uncertain ? 'Feedback may already have been saved. No further retries will be sent.' : '';
+    controls();
+  });
+  feedbackConsent.addEventListener('change', controls);
+  feedbackForm.addEventListener('submit', function (event) { event.preventDefault(); });
+  feedbackSave.addEventListener('click', async function () {
+    if (!active() || !feedbackEnabled || !lastFeedbackQuestion || feedbackBusy || feedbackSent || busy) return;
+    if (!feedbackPending) {
+      const value = feedbackQuestion.value.trim();
+      if (!feedbackConsent.checked || !value || value.length > 1000 || value.includes('\u0000') || new TextEncoder().encode(value).length > 2000) { feedbackStatus.textContent = 'Review a question up to 1,000 characters and agree before saving.'; return; }
+      feedbackPending = { requestId: lastFeedbackQuestion.requestId, question: value, consented: true, website: get('website').value };
+    }
+    const epoch = feedbackEpoch, requestToken = session.token, payload = feedbackPending;
+    const isCurrent = () => feedbackEpoch === epoch && session?.token === requestToken;
+    feedbackBusy = true; feedbackStatus.textContent = 'Saving your feedback…'; controls();
+    try {
+      const data = await request('feedback', payload, requestToken);
+      if (!isCurrent()) return;
+      if (data.received !== true) throw new Error('Invalid feedback response');
+      feedbackPending = null; feedbackSent = true; feedbackForm.hidden = true; feedbackQuestion.value = ''; feedbackConsent.checked = false; feedbackStatus.textContent = 'Feedback saved for the business to review.';
+    } catch (error) {
+      if (!isCurrent()) return;
+      if (error.status === 410 || error.status === 401) expire();
+      else if (error.status === 403 || error.status === 404) { resetFeedback(); feedbackEnabled = false; status.textContent = 'Feedback saving is unavailable. You can still request a callback.'; controls(); }
+      else if (error.status === 400 || error.status === 409) { feedbackPending = null; feedbackConsent.checked = false; feedbackStatus.textContent = 'Feedback was not saved. Review the question and try again after the current answer.'; }
+      else feedbackStatus.textContent = 'We could not confirm your feedback. Retry Save feedback to resend the same reviewed question.';
+    } finally { if (isCurrent()) { feedbackBusy = false; controls(); } }
+  });
 
   function callbackValues() {
     return { fullName: fields[0].value.trim(), phone: fields[1].value.trim(), reason: fields[2].value.trim(), confirmed: true, website: get('website').value };
