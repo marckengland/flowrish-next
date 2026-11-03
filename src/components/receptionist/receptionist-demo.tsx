@@ -1,6 +1,6 @@
 'use client'
 
-import { useReducer, useRef, useState } from 'react'
+import { useEffect, useReducer, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { createDemoState, reduceDemo, type DemoBusiness, type DemoOutcome } from '@/lib/receptionist-demo'
@@ -12,6 +12,8 @@ export function ReceptionistDemo({ business }: { business: DemoBusiness }): Reac
   const [state, dispatch] = useReducer((current: ReturnType<typeof createDemoState>, action: Parameters<typeof reduceDemo>[1]) => reduceDemo(current, action, business), business, createDemoState)
   const [message, setMessage] = useState('')
   const input = useRef<HTMLInputElement>(null)
+  const transcript = useRef<HTMLOListElement>(null)
+  useEffect(() => { const element = transcript.current; if (element) element.scrollTop = element.scrollHeight }, [state.messages])
   function send(text: string) { dispatch({ type: 'message', text }); if (text.trim() && text.trim().length <= 1000) setMessage('') }
   function restart() { dispatch({ type: 'reset' }); setMessage(''); input.current?.focus() }
   const editable = ['editing', 'review'].includes(state.callbackStep)
@@ -26,7 +28,7 @@ export function ReceptionistDemo({ business }: { business: DemoBusiness }): Reac
       <section aria-labelledby="demo-conversation-heading" className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5">
         <div className="space-y-1"><h2 id="demo-conversation-heading" className="text-lg font-semibold">Try a conversation</h2><p className="text-sm text-muted-foreground">Choose a question or type your own. Replies follow simple demo rules. The latest 40 messages are shown.</p></div>
         <div className="flex flex-wrap gap-2">{[{ label: 'Ask about services', text: 'What services do you offer?' }, { label: 'Ask about hours', text: 'What are your callback hours?' }, { label: 'Ask about pricing', text: 'What does it cost?' }, { label: 'Practice a callback', text: 'Please call me back.' }].map(choice => <Button key={choice.label} variant="outline" className="min-h-11 whitespace-normal" onClick={() => send(choice.text)}>{choice.label}</Button>)}</div>
-        <ol role="log" aria-label="Demo conversation" aria-live="polite" aria-relevant="additions text" className="max-h-[28rem] space-y-3 overflow-y-auto rounded-lg border p-3">{state.messages.map((entry, index) => <li key={index} className={`min-w-0 rounded-lg p-3 text-sm ${entry.role === 'visitor' ? 'bg-muted/50' : 'bg-background'}`}><p className="mb-1 text-xs font-semibold text-muted-foreground">{entry.role === 'visitor' ? 'Sample visitor' : 'Receptionist · prewritten demo'}</p><p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{entry.text}</p></li>)}</ol>
+        <ol ref={transcript} role="log" aria-label="Demo conversation" aria-live="polite" aria-relevant="additions text" className="max-h-[28rem] space-y-3 overflow-y-auto rounded-lg border p-3">{state.messages.map((entry, index) => <li key={index} className={`min-w-0 rounded-lg p-3 text-sm ${entry.role === 'visitor' ? 'bg-muted/50' : 'bg-background'}`}><p className="mb-1 text-xs font-semibold text-muted-foreground">{entry.role === 'visitor' ? 'Sample visitor' : 'Receptionist · prewritten demo'}</p><p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{entry.text}</p></li>)}</ol>
         <form className="space-y-3" onSubmit={event => { event.preventDefault(); send(message) }}><label className="block text-sm font-medium">Sample visitor message<input ref={input} className={field} value={message} onChange={event => setMessage(event.target.value)} maxLength={1000} autoComplete="off" placeholder="Ask about pricing, hours, or services" /></label><Button type="submit" className="min-h-11" disabled={!message.trim()}>Send demo message</Button></form>
       </section>
       <section aria-labelledby="demo-workflow-heading" className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5">

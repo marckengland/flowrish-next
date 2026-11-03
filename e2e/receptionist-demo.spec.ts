@@ -24,6 +24,8 @@ for (const mobile of [false, true]) {
     await page.getByRole('button', { name: 'Ask about hours', exact: true }).click(); await expect(log).toContainText(/Staffed callback hours|team will confirm callback hours/)
     await expect(page.getByRole('textbox', { name: 'Sample phone', exact: true })).toHaveCount(0)
     await page.getByRole('button', { name: 'Ask about pricing', exact: true }).click(); await expect(log).toContainText(/Approved pricing excerpt|team will confirm pricing/)
+    for (let attempt = 0; attempt < 8; attempt++) await page.getByRole('button', { name: 'Ask about pricing', exact: true }).click()
+    await expect.poll(() => log.evaluate(element => element.scrollTop + element.clientHeight >= element.scrollHeight - 2)).toBe(true)
     const message = page.getByRole('textbox', { name: 'Sample visitor message', exact: true })
     await message.fill('<img src=x onerror=alert(1)> Can you guarantee tomorrow?'); await message.press('Enter'); await expect(log).toContainText('cannot answer that'); await expect(log.locator('img')).toHaveCount(0)
     await page.getByRole('button', { name: 'Practice a callback', exact: true }).click()
