@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { Prisma, type CallbackCrmHandoff } from '@prisma/client'
 import { z, ZodError } from 'zod'
 import { prisma } from '@/server/db/client'
-import { preferredTimeSchema, preferredTimeLabel } from '@/lib/callback-time'
+import { callbackCalendarReviewRequired, preferredTimeSchema, preferredTimeLabel } from '@/lib/callback-time'
 import { readCallbackCalendar, checkCallbackTime, validateCallbackInstant } from './callback-time'
 import { getEffectivePermissions } from '@/server/auth/permissions'
 import { AppError } from '@/lib/errors'
@@ -37,6 +37,7 @@ async function options(organizationId: string, callbackId: string, db: Db, lockC
   const callbackView = callback ? websiteCallbackRecordSchema.parse({ ...Object.fromEntries(['id', 'fullName', 'phone', 'reason', 'siteOrigin', 'status'].map(key => [key, callback[key as keyof typeof callback]])), consentedAt: callback.consentedAt.toISOString(), createdAt: callback.createdAt.toISOString(), updatedAt: callback.updatedAt.toISOString(), ...(callback.preferredTime ? { preferredTime: preferredTimeSchema.parse(callback.preferredTime) } : {}) }) : null
   if (receipt) return { data: handoffOptionsSchema.parse({ callback: callbackView, receipt: await receiptView(receipt, db), leads: [], contacts: [], members: [], stages: [], matchesTruncated: false, choicesTruncated: false }), snapshot: null }
   const callbackHours = callbackView?.preferredTime ? await readCallbackCalendar(organizationId, db, lockCalendar) : null
+  if (callbackView?.preferredTime && callbackCalendarReviewRequired(callbackView.preferredTime.at, callbackHours, callbackView.preferredTime.timeZone)) callbackView.calendarReviewRequired = true
   const digits = callback!.phone.replace(/\D/g, '')
   const [matchedLeads, matchedContacts, members, stages] = await Promise.all([
     db.$queryRaw<{ id: string }[]>`SELECT l.id FROM "Lead" l WHERE l."organizationId"=${organizationId} AND l."deletedAt" IS NULL AND NOT l."isClosed" AND (regexp_replace(coalesce(l.phone,''),'[^0-9]','','g')=${digits} OR EXISTS (SELECT 1 FROM "LeadContact" lc JOIN "Contact" c ON c.id=lc."contactId" WHERE lc."leadId"=l.id AND c."organizationId"=${organizationId} AND regexp_replace(coalesce(c.phone,''),'[^0-9]','','g')=${digits})) ORDER BY l.id LIMIT 21`,

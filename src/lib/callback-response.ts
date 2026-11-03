@@ -1,18 +1,19 @@
 import { z } from 'zod'
+import { calendarExceptionsSchema, openingHoursForDate } from './business-calendar'
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
 export const businessHoursSchema = z.object({
   timeZone: z.string().min(1).max(100).refine(value => { try { new Intl.DateTimeFormat('en', { timeZone: value }); return true } catch { return false } }, 'Choose a valid time zone.'),
-  opensAt: time, closesAt: time,
+  opensAt: time, closesAt: time, calendarExceptions: calendarExceptionsSchema.optional(),
   businessDays: z.array(z.number().int().min(0).max(6)).min(1).max(7).refine(days => new Set(days).size === days.length),
 }).strict().refine(value => value.opensAt < value.closesAt, 'Use one opening interval within the same day.')
 export type BusinessHours = z.infer<typeof businessHoursSchema>
 const minute = 60000, day = 86400000
 const clockMinutes = (clock: string) => Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3))
 // Nominal capacity cap; DST can skip an opening, so the actual search allows
-// up to 400 local dates rather than promising an exact 52-week wall deadline.
+// up to 400 local dates plus seven per override, rather than promising an exact wall deadline.
 export function supportedTarget(hours: BusinessHours, minutes: number) { return minutes <= (clockMinutes(hours.closesAt) - clockMinutes(hours.opensAt)) * hours.businessDays.length * 52 }
 
-/** Actual elapsed minutes whose local clock is inside the weekly schedule. */
+/** Actual elapsed minutes inside the weekly schedule or a date-specific opening. */
 export function businessCalendar(raw: BusinessHours): (start: Date, minutes: number) => Date {
   const hours = businessHoursSchema.parse(raw)
   const formatter = new Intl.DateTimeFormat('en-GB', { timeZone: hours.timeZone, calendar: 'iso8601', numberingSystem: 'latn', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
@@ -30,11 +31,12 @@ export function businessCalendar(raw: BusinessHours): (start: Date, minutes: num
   function openingWindows(date: number): Array<[number, number]> {
     if (windows.has(date)) return windows.get(date)!
     const result: Array<[number, number]> = []
-    if (hours.businessDays.includes(new Date(date).getUTCDay())) {
+    const opening = openingHoursForDate(hours, new Date(date).toISOString().slice(0, 10))
+    if (opening) {
       const possible = new Set<number>()
       for (let at = date - 18 * 3600000; at <= date + 42 * 3600000; at += 6 * 3600000) possible.add(offset(at))
       for (const shift of possible) {
-        const start = date + clockMinutes(hours.opensAt) * minute - shift, end = date + clockMinutes(hours.closesAt) * minute - shift
+        const start = date + clockMinutes(opening.opensAt) * minute - shift, end = date + clockMinutes(opening.closesAt) * minute - shift
         if (possible.size === 1) { result.push([start, end]); continue }
         // Only transition dates need subdivision. A local window may occur
         // twice during a fold, or lose some/all of its minutes during a gap.
@@ -53,7 +55,7 @@ export function businessCalendar(raw: BusinessHours): (start: Date, minutes: num
   return (start, minutes) => {
     if (!Number.isFinite(start.getTime()) || !Number.isInteger(minutes) || minutes < 1 || minutes > 1440 || !supportedTarget(hours, minutes)) throw new Error('Choose a target supported by the weekly business schedule.')
     let remaining = minutes * minute, date = civil(start.getTime()).date
-    for (let searched = 0; searched < 400; searched++, date += day) for (const [opens, closes] of openingWindows(date)) {
+    for (let searched = 0; searched < 400 + (hours.calendarExceptions?.length ?? 0) * 7; searched++, date += day) for (const [opens, closes] of openingWindows(date)) {
       const cursor = Math.max(start.getTime(), opens)
       if (cursor >= closes) continue
       if (remaining <= closes - cursor) return new Date(cursor + remaining)

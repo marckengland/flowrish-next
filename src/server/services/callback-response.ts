@@ -12,7 +12,7 @@ function conflict(message = 'The saved policy or business hours changed. Reload 
 async function safe<T>(run: () => Promise<T>) { try { return await run() } catch (error) { if (error instanceof AppError || error instanceof ZodError) throw error; if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') conflict(); throw new AppError('RESPONSE_UNAVAILABLE', 'Callback response targets are unavailable. Refresh and try again.', 503) } }
 function business(settings: Prisma.JsonValue | undefined, updatedAt: Date | undefined) {
   const values = settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {}
-  const parsed = businessHoursSchema.safeParse({ timeZone: values.timeZone, opensAt: values.opensAt, closesAt: values.closesAt, businessDays: Array.isArray(values.businessDays) ? [...new Set(values.businessDays)].sort() : values.businessDays })
+  const parsed = businessHoursSchema.safeParse({ timeZone: values.timeZone, opensAt: values.opensAt, closesAt: values.closesAt, businessDays: Array.isArray(values.businessDays) ? [...new Set(values.businessDays)].sort() : values.businessDays, ...(values.calendarExceptions !== undefined ? { calendarExceptions: values.calendarExceptions } : {}) })
   return { businessName: typeof values.businessName === 'string' ? values.businessName.trim().slice(0, 120) : '', hours: parsed.success ? parsed.data : null, updatedAt: updatedAt?.toISOString() ?? null }
 }
 async function metadata(org: string, db: Db) {

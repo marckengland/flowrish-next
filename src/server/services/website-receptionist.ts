@@ -8,7 +8,7 @@ import { getEffectivePermissions } from '@/server/auth/permissions'
 import { AppError } from '@/lib/errors'
 import { FEEDBACK_DAILY_LIMIT, feedbackInputSchema } from '@/lib/visitor-feedback'
 import { aiProviderSettingsSchema } from '@/lib/ai-provider'
-import { preferredTimeSchema } from '@/lib/callback-time'
+import { callbackCalendarReviewRequired, preferredTimeSchema } from '@/lib/callback-time'
 import { readCallbackCalendar, checkCallbackTime, resolveCallbackTime } from './callback-time'
 import { receptionistConfigSchema, receptionistGreeting } from '@/lib/receptionist'
 import { websiteReceptionistSaveSchema, websiteSettingsSchema, websiteSessionInputSchema, websiteMessageInputSchema, websiteMessageResultSchema, websiteCallbackInputSchema, websiteCallbackQuerySchema, websiteCallbackReviewSchema, websiteCallbackRecordSchema, websiteOriginSchema, WEBSITE_REPLY_RESERVATION, WEBSITE_SESSION_TURNS, type WebsiteReceptionistAdminData, type WebsiteRequestContext, type WebsiteEmbedData, type WebsiteMessageResult } from '@/lib/website-receptionist'
@@ -202,7 +202,25 @@ export async function submitWebsiteCallback(publicId: string, token: string, raw
 }
 function callbackView(row: { id: string; fullName: string; phone: string; reason: string; siteOrigin: string; status: string; consentedAt: Date; createdAt: Date; updatedAt: Date; preferredTime?: unknown }) { return websiteCallbackRecordSchema.parse({ id: row.id, fullName: row.fullName, phone: row.phone, reason: row.reason, siteOrigin: row.siteOrigin, status: row.status, consentedAt: row.consentedAt.toISOString(), createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), ...(row.preferredTime ? { preferredTime: preferredTimeSchema.parse(row.preferredTime) } : {}) }) }
 export async function listWebsiteCallbacks(organizationId: string, userId: string, raw: unknown) {
-  return safe(async () => { await admin(organizationId, userId); const query = websiteCallbackQuerySchema.parse(raw); const rows = await prisma.websiteReceptionistCallback.findMany({ where: { organizationId, ...(query.status === 'all' ? {} : { status: query.status }) }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (query.page - 1) * 20, take: 21 }); return { callbacks: rows.slice(0, 20).map(callbackView), page: query.page, pageSize: 20 as const, hasMore: rows.length > 20 } })
+  return safe(async () => {
+    await admin(organizationId, userId); const query = websiteCallbackQuerySchema.parse(raw)
+    const rows = await prisma.websiteReceptionistCallback.findMany({ where: { organizationId, ...(query.status === 'all' ? {} : { status: query.status }) }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (query.page - 1) * 20, take: 21 })
+    const callbacks = rows.slice(0, 20).map(callbackView), timed = callbacks.filter(row => row.preferredTime && row.status === 'pending')
+    if (timed.length) {
+      const calendar = await readCallbackCalendar(organizationId)
+      const receipts = await prisma.callbackCrmHandoff.findMany({ where: { organizationId, callbackId: { in: timed.map(row => row.id) } }, select: { callbackId: true, taskId: true } })
+      const [tasks, closed] = receipts.length ? await Promise.all([
+        prisma.task.findMany({ where: { organizationId, id: { in: receipts.map(row => row.taskId) }, isComplete: false, lead: { deletedAt: null, isClosed: false } }, select: { id: true, dueDate: true } }),
+        prisma.callbackOutcomeEvent.findMany({ where: { organizationId, callbackId: { in: receipts.map(row => row.callbackId) }, action: 'close' }, select: { callbackId: true } }),
+      ]) : [[], []]
+      for (const callback of timed) {
+        const receipt = receipts.find(row => row.callbackId === callback.id), task = receipt ? tasks.find(row => row.id === receipt.taskId) : null
+        const needsReview = receipt ? !!task && !closed.some(row => row.callbackId === callback.id) && callbackCalendarReviewRequired(task.dueDate.toISOString(), calendar) : callbackCalendarReviewRequired(callback.preferredTime!.at, calendar, callback.preferredTime!.timeZone)
+        if (needsReview) callback.calendarReviewRequired = true
+      }
+    }
+    return { callbacks, page: query.page, pageSize: 20 as const, hasMore: rows.length > 20 }
+  })
 }
 export async function reviewWebsiteCallback(organizationId: string, userId: string, id: string, raw: unknown) {
   return safe(async () => { await admin(organizationId, userId); idSchema.parse(id); const input = websiteCallbackReviewSchema.parse(raw); return prisma.$transaction(async db => { const current = await db.websiteReceptionistCallback.findFirst({ where: { id, organizationId } }); if (!current) fail('NOT_FOUND', 404); if (current.updatedAt.toISOString() !== input.expectedUpdatedAt) fail('WEBSITE_CONFLICT', 409); const done = await db.websiteReceptionistCallback.updateMany({ where: { id, organizationId, updatedAt: current.updatedAt }, data: { status: input.action === 'review' ? 'reviewed' : 'dismissed', reviewedById: userId, updatedAt: new Date(Math.max(Date.now(), current.updatedAt.getTime() + 1)) } }); if (!done.count) fail('WEBSITE_CONFLICT', 409); return callbackView((await db.websiteReceptionistCallback.findFirstOrThrow({ where: { id, organizationId } }))) }) })

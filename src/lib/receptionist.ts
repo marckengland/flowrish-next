@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { calendarExceptionsSchema, isWithinBusinessHours, openingHoursForDate } from './business-calendar'
 
 export const phoneSchema = z.string().regex(/^\+[1-9]\d{7,14}$/, 'Use an international number, such as +639171234567.')
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
@@ -11,6 +12,7 @@ export const receptionistConfigSchema = z.object({
   timeZone: z.string().max(100).refine((value) => {
     try { new Intl.DateTimeFormat('en', { timeZone: value }); return true } catch { return false }
   }, 'Choose a valid time zone.'),
+  calendarExceptions: calendarExceptionsSchema.optional(),
   opensAt: timeSchema,
   closesAt: timeSchema,
   businessDays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
@@ -57,18 +59,17 @@ function localParts(now: Date, timeZone: string) {
 }
 
 export function isBusinessOpen(config: ReceptionistConfig, now: Date): boolean {
-  const p = localParts(now, config.timeZone)
-  const weekday = new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay()
-  const time = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`
-  return config.businessDays.includes(weekday) && time >= config.opensAt && time < config.closesAt
+  return isWithinBusinessHours(now, config)
 }
 
 export function nextBusinessOpening(config: ReceptionistConfig, now: Date): Date {
   const p = localParts(now, config.timeZone)
-  const [hour, minute] = config.opensAt.split(':').map(Number)
-  for (let offset = 0; offset <= 14; offset++) {
+  for (let offset = 0; offset <= 14 + (config.calendarExceptions?.length ?? 0) * 7; offset++) {
+    const localDate = new Date(Date.UTC(p.year, p.month - 1, p.day + offset)).toISOString().slice(0, 10)
+    const opening = openingHoursForDate(config, localDate)
+    if (!opening) continue
+    const [hour, minute] = opening.opensAt.split(':').map(Number)
     const day = new Date(Date.UTC(p.year, p.month - 1, p.day + offset, hour, minute))
-    if (!config.businessDays.includes(day.getUTCDay())) continue
     const target = day.getTime()
     let candidate = target
     let converged = false

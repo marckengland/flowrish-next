@@ -1,7 +1,8 @@
 import { z } from 'zod'
+import { calendarExceptionsSchema, isWithinBusinessHours, openingHoursForDate } from './business-calendar'
 import { businessHoursSchema, type BusinessHours } from './callback-response'
 
-export const callbackCalendarSchema = z.object({ timeZone: z.string().min(1).max(100), opensAt: z.string().max(5), closesAt: z.string().max(5), businessDays: z.array(z.number().int()).max(7), version: z.string().datetime() }).strict().superRefine(({ version: _version, ...hours }, ctx) => {
+export const callbackCalendarSchema = z.object({ timeZone: z.string().min(1).max(100), opensAt: z.string().max(5), closesAt: z.string().max(5), businessDays: z.array(z.number().int()).max(7), calendarExceptions: calendarExceptionsSchema.optional(), version: z.string().datetime() }).strict().superRefine(({ version: _version, ...hours }, ctx) => {
   if (!businessHoursSchema.safeParse(hours).success) ctx.addIssue({ code: 'custom', message: 'Saved callback hours are unavailable.' })
 })
 export const preferredTimeInputSchema = z.object({ localTime: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/), timeZone: z.string().min(1).max(100), businessVersion: z.string().datetime() }).strict()
@@ -13,7 +14,7 @@ export class CallbackTimeError extends Error { constructor(message: string, publ
 export function callbackCalendarFromSettings(stored: { settings: unknown; updatedAt: Date } | null): CallbackCalendar | null {
   if (!stored || !stored.settings || typeof stored.settings !== 'object' || Array.isArray(stored.settings) || !Number.isFinite(stored.updatedAt.getTime())) return null
   const value = stored.settings as Record<string, unknown>
-  const parsed = callbackCalendarSchema.safeParse({ timeZone: value.timeZone, opensAt: value.opensAt, closesAt: value.closesAt, businessDays: value.businessDays, version: stored.updatedAt.toISOString() })
+  const parsed = callbackCalendarSchema.safeParse({ timeZone: value.timeZone, opensAt: value.opensAt, closesAt: value.closesAt, businessDays: value.businessDays, ...(value.calendarExceptions !== undefined ? { calendarExceptions: value.calendarExceptions } : {}), version: stored.updatedAt.toISOString() })
   return parsed.success ? parsed.data : null
 }
 function localClock(timeZone: string) {
@@ -37,8 +38,8 @@ export function resolveCallbackTime(raw: z.input<typeof preferredTimeInputSchema
   if (candidates.length !== 1) throw new CallbackTimeError('That time is unavailable or ambiguous during a clock change. Choose another time.')
   const at = candidates[0], current = now.getTime()
   if (!Number.isFinite(current) || at <= current || at > current + 90 * 86400000) throw new CallbackTimeError('Choose a future callback time within the next 90 days.')
-  const minutes = hour * 60 + minute, opening = calendar.opensAt.split(':').map(Number), closing = calendar.closesAt.split(':').map(Number)
-  if (!calendar.businessDays.includes(new Date(nominal).getUTCDay()) || minutes < opening[0] * 60 + opening[1] || minutes >= closing[0] * 60 + closing[1]) throw new CallbackTimeError('Choose a time within the saved business hours.')
+  const window = openingHoursForDate(calendar, input.localTime.slice(0, 10)), clockTime = input.localTime.slice(11)
+  if (!window || clockTime < window.opensAt || clockTime >= window.closesAt) throw new CallbackTimeError('Choose a time within the saved business hours.')
   return { ...input, at: new Date(at).toISOString() }
 }
 export function validateCallbackInstant(at: string, calendar: CallbackCalendar, now = new Date()): PreferredTime {
@@ -46,5 +47,8 @@ export function validateCallbackInstant(at: string, calendar: CallbackCalendar, 
   if (!Number.isFinite(timestamp) || timestamp % 60000 !== 0) throw new CallbackTimeError('Choose a valid callback time with minute precision.')
   const localTime = localClock(calendar.timeZone)(timestamp).localTime
   return resolveCallbackTime({ localTime, timeZone: calendar.timeZone, businessVersion: calendar.version }, calendar, now)
+}
+export function callbackCalendarReviewRequired(at: string, calendar: CallbackCalendar | null, requestedTimeZone?: string): boolean {
+  return !calendar || !!requestedTimeZone && requestedTimeZone !== calendar.timeZone || !isWithinBusinessHours(new Date(at), calendar)
 }
 export function preferredTimeLabel(value: PreferredTime): string { return `${value.localTime.replace('T', ' ')} (${value.timeZone})` }

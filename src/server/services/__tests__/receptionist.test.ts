@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const db = {
+    $queryRaw: vi.fn(),
     receptionistConfig: { findUnique: vi.fn(), upsert: vi.fn() },
     receptionistCall: { findUnique: vi.fn(), upsert: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     voiceConfig: { findUnique: vi.fn() },
@@ -32,6 +33,7 @@ const state = { ...initialCallState(input.from), fullName: 'Jane Smith', reason:
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.transaction.mockImplementation(async (fn: (db: typeof mocks.db) => unknown) => fn(mocks.db))
+  mocks.db.$queryRaw.mockResolvedValue([])
   mocks.db.receptionistConfig.findUnique.mockResolvedValue({ settings: config })
   mocks.db.organizationMember.findUnique.mockResolvedValue({ userId: config.assigneeId })
   mocks.db.stage.findFirst.mockResolvedValue({ id: config.stageId })

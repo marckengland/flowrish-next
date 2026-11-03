@@ -302,7 +302,7 @@ export function WebsiteReceptionistSettings({ setupOnly = false, callbacksOnly =
             <div className="space-y-4">{list.callbacks.map(record => <article key={record.id} aria-label={`Callback request from ${record.fullName}`} className="min-w-0 space-y-2 rounded-md border p-3 text-sm">
               <div className="flex flex-wrap justify-between gap-2"><p className="break-words font-medium">{record.fullName}</p><p>{({ pending: 'Pending', reviewed: 'Reviewed', dismissed: 'Dismissed' })[record.status]}</p></div>
               <p className="break-all">{record.phone}</p>
-              <p className="whitespace-pre-wrap break-words">{record.reason}</p>{record.preferredTime && <p>Requested callback time: {preferredTimeLabel(record.preferredTime)}</p>}
+              {record.calendarReviewRequired && <p role="status" aria-label="Callback calendar review" className="rounded-md border p-3 text-sm">Review this callback against the current business calendar. Its saved time has not been changed.</p>}<p className="whitespace-pre-wrap break-words">{record.reason}</p>{record.preferredTime && <p>Requested callback time: {preferredTimeLabel(record.preferredTime)}</p>}
               <p className="break-all text-xs text-muted-foreground">{record.siteOrigin}</p>
               <p className="text-xs text-muted-foreground">Consent confirmed: {new Date(record.consentedAt).toLocaleString()}</p>
               <div className="flex flex-wrap gap-2">
@@ -310,7 +310,7 @@ export function WebsiteReceptionistSettings({ setupOnly = false, callbacksOnly =
                 <Button type="button" variant="outline" className="min-h-11" disabled={callbacksBusy || record.status === 'dismissed'} onClick={() => void changeCallback(record, 'dismiss')}>Dismiss callback</Button>
                 <Button type="button" variant="outline" className="min-h-11" disabled={callbacksBusy} onClick={() => setDeleteId(record.id)}>Delete callback request</Button>
               </div>
-              <CallbackHandoff callbackId={record.id} disabled={callbacksBusy} onCallbackClosed={() => { void loadCallbacks(loadedFilter, list.page).then(() => setCallbacksNotice('Callback closed and task completed.')) }} />
+              <CallbackHandoff callbackId={record.id} disabled={callbacksBusy} onCalendarResolved={() => setList(current => current ? { ...current, callbacks: current.callbacks.map(value => value.id === record.id ? { ...value, calendarReviewRequired: false } : value) } : current)} onCallbackClosed={() => { void loadCallbacks(loadedFilter, list.page).then(() => setCallbacksNotice('Callback closed and task completed.')) }} />
               {deleteId === record.id && <div className="space-y-2 rounded-md border p-3" role="alert"><p>Delete this callback request permanently? It will be removed from staff review.</p><div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" className="min-h-11" disabled={callbacksBusy} onClick={() => setDeleteId(null)}>Cancel deletion</Button>
                 <Button type="button" variant="destructive" className="min-h-11" disabled={callbacksBusy} onClick={() => void changeCallback(record, 'delete')}>Confirm deletion</Button>

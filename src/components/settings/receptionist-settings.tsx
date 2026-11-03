@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { receptionistGreeting, type ReceptionistConfig } from '@/lib/receptionist'
+import { CalendarExceptionsEditor } from '@/components/receptionist/business-calendar'
 import { ReceptionistPreview } from './receptionist-preview'
 import { ReceptionistReadinessChecklist } from './receptionist-readiness-checklist'
 import { KnowledgeGapsInbox } from './knowledge-gaps-inbox'
@@ -119,6 +120,7 @@ export function ReceptionistSettings(): React.JSX.Element {
               <div className="flex flex-wrap gap-x-4 gap-y-1">{days.map((day, index) => <label key={day} className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={config.businessDays.includes(index)} onChange={(event) => update('businessDays', event.target.checked ? [...config.businessDays, index].sort() : config.businessDays.filter((value) => value !== index))} className="size-4 accent-primary" />{day}</label>)}</div>
               <p className="text-xs text-muted-foreground">Callback tasks are due at the next business opening. Use one opening and closing time per day.</p>
             </fieldset>
+            <CalendarExceptionsEditor value={config.calendarExceptions} timeZone={config.timeZone} disabled={saving} onChange={value => update('calendarExceptions', value)} />
             <label className="block space-y-1.5 text-sm font-medium"><span>Assign callbacks to</span><select required={config.enabled} value={config.assigneeId} onChange={(event) => update('assigneeId', event.target.value)} className={selectClass}>{data.members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label>
             <label className="block space-y-1.5 text-sm font-medium"><span>New lead stage</span><select required={config.enabled} value={config.stageId} onChange={(event) => update('stageId', event.target.value)} className={selectClass}><option value="" disabled>Select an open stage</option>{data.stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.pipeline.name} / {stage.name}</option>)}</select></label>
             {!data.stages.length && <p className="text-sm text-muted-foreground">Set up your <Link href="/pipeline" className="underline">sales pipeline</Link> before saving receptionist settings.</p>}
