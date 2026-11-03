@@ -19,7 +19,9 @@
   const feedbackSave = get('feedback-save');
   const feedbackStatus = get('feedback-status');
   let feedbackEnabled = false, feedbackBusy = false, feedbackSent = false, feedbackPending = null, lastFeedbackQuestion = null, feedbackEpoch = 0;
-  const fields = [get('full-name'), get('phone'), get('reason')];
+  const preferredField = get('preferred-time');
+  let callbackHours = null;
+  const fields = [get('full-name'), get('phone'), get('reason'), ...(preferredField ? [preferredField] : [])];
   const api = `/api/public/website-receptionist/${config.publicId}`;
   let handshaken = false;
   let starting = false;
@@ -95,10 +97,10 @@
     });
     if (!response.ok) {
       let code;
-      if (response.status === 409) {
+      if (response.status === 409 || response.status === 400) {
         try {
           const body = await response.json();
-          if (body?.error?.code === 'WEBSITE_CHAT_CLOSED') code = 'WEBSITE_CHAT_CLOSED';
+          if (['WEBSITE_CHAT_CLOSED', 'CALLBACK_TIME_INVALID', 'CALLBACK_TIME_CHANGED', 'CALLBACK_TIME_UNAVAILABLE'].includes(body?.error?.code)) code = body.error.code;
         } catch { /* Error response bodies are optional and never displayed. */ }
       }
       throw { status: response.status, code };
@@ -109,6 +111,8 @@
   }
 
   function errorText(error) {
+    if (error.code === 'CALLBACK_TIME_INVALID') return 'Choose a future callback time within the saved business hours and the next 90 days. Times during clock changes may be unavailable.';
+    if (error.code === 'CALLBACK_TIME_UNAVAILABLE') return 'Callback scheduling is unavailable. Start a new chat to review the current business details, or request a callback without a preferred time.';
     if (error.status === 429) return 'Please wait before trying again. The business may have reached its daily limit.';
     if (error.status === 409) return 'Your previous request is still being processed. Wait a moment, then retry the same request.';
     if (error.status === 400) return 'Please check your details and try again.';
@@ -139,6 +143,10 @@
       if (!/^[a-f0-9]{64}$/.test(data.token) || !Number.isFinite(Date.parse(data.expiresAt)) || data.turn !== 0 || typeof data.greeting !== 'string' || data.greeting.length > 600) throw new Error('Invalid response');
       session = { token: data.token, expiresAt: data.expiresAt };
       feedbackEnabled = data.feedbackEnabled === true;
+      callbackHours = preferredField && get('preferred-section') && get('preferred-help') && get('review-time') ? validCallbackHours(data.callbackHours) : null;
+      if (get('preferred-section')) get('preferred-section').hidden = !callbackHours;
+      if (callbackHours) get('preferred-help').textContent = `Business time zone: ${callbackHours.timeZone}. ${callbackHours.businessDays.map(day => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]).join(', ')}, ${callbackHours.opensAt} to ${callbackHours.closesAt}.`;
+      else if (preferredField) preferredField.value = '';
       canMessage = true;
       addMessage('Assistant', data.greeting);
       status.textContent = '';
@@ -241,8 +249,13 @@
     } finally { if (isCurrent()) { feedbackBusy = false; controls(); } }
   });
 
+  function validCallbackHours(value) {
+    if (!value || typeof value.timeZone !== 'string' || value.timeZone.length > 100 || !Number.isFinite(Date.parse(value.version)) || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(value.opensAt) || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(value.closesAt) || value.opensAt >= value.closesAt || !Array.isArray(value.businessDays) || !value.businessDays.length || value.businessDays.length > 7 || new Set(value.businessDays).size !== value.businessDays.length || value.businessDays.some(day => !Number.isInteger(day) || day < 0 || day > 6)) return null;
+    try { new Intl.DateTimeFormat('en', { timeZone: value.timeZone }); } catch { return null; }
+    return { timeZone: value.timeZone, opensAt: value.opensAt, closesAt: value.closesAt, businessDays: value.businessDays, version: value.version };
+  }
   function callbackValues() {
-    return { fullName: fields[0].value.trim(), phone: fields[1].value.trim(), reason: fields[2].value.trim(), confirmed: true, website: get('website').value };
+    return { fullName: fields[0].value.trim(), phone: fields[1].value.trim(), reason: fields[2].value.trim(), confirmed: true, website: get('website').value, ...(callbackHours && preferredField.value ? { preferredTime: { localTime: preferredField.value, timeZone: callbackHours.timeZone, businessVersion: callbackHours.version } } : {}) };
   }
 
   function resetReview() {
@@ -263,11 +276,16 @@
       callbackStatus.textContent = 'Check your name, international phone number, and callback request.';
       return;
     }
+    if (values.preferredTime) {
+      const clock = values.preferredTime.localTime.slice(11), day = new Date(`${values.preferredTime.localTime.slice(0, 10)}T00:00:00Z`).getUTCDay();
+      if (!callbackHours.businessDays.includes(day) || clock < callbackHours.opensAt || clock >= callbackHours.closesAt) { callbackStatus.textContent = 'Choose a time within the saved business hours.'; return; }
+    }
     reviewed = values;
     consent.checked = false;
     get('review-name').textContent = values.fullName;
     get('review-phone').textContent = values.phone;
     get('review-reason').textContent = values.reason;
+    if (get('review-time')) get('review-time').textContent = values.preferredTime ? `${values.preferredTime.localTime.replace('T', ' ')} (${values.preferredTime.timeZone}) · Requested time for staff to confirm.` : 'No preferred time requested.';
     callbackReview.hidden = false;
     callbackStatus.textContent = '';
     controls();
@@ -287,8 +305,12 @@
       callbackStatus.textContent = 'Your request was sent to the business for review.';
     } catch (error) {
       if (error.status === 410 || error.status === 401) expire();
+      else if (error.status === 409 && callbackPending && callbackPending.preferredTime) { expire(); callbackStatus.textContent = 'Business hours or request details changed. Start a new chat and review the requested time again.'; }
       else {
-        if (error.status === 400) callbackPending = null;
+        if (error.status === 400) {
+          callbackPending = null;
+          if (['CALLBACK_TIME_INVALID', 'CALLBACK_TIME_UNAVAILABLE'].includes(error.code)) { reviewed = null; consent.checked = false; callbackReview.hidden = true; }
+        }
         callbackStatus.textContent = errorText(error);
       }
     } finally { callbackBusy = false; controls(); }

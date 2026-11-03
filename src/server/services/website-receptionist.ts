@@ -8,6 +8,8 @@ import { getEffectivePermissions } from '@/server/auth/permissions'
 import { AppError } from '@/lib/errors'
 import { FEEDBACK_DAILY_LIMIT, feedbackInputSchema } from '@/lib/visitor-feedback'
 import { aiProviderSettingsSchema } from '@/lib/ai-provider'
+import { preferredTimeSchema } from '@/lib/callback-time'
+import { readCallbackCalendar, checkCallbackTime, resolveCallbackTime } from './callback-time'
 import { receptionistConfigSchema, receptionistGreeting } from '@/lib/receptionist'
 import { websiteReceptionistSaveSchema, websiteSettingsSchema, websiteSessionInputSchema, websiteMessageInputSchema, websiteMessageResultSchema, websiteCallbackInputSchema, websiteCallbackQuerySchema, websiteCallbackReviewSchema, websiteCallbackRecordSchema, websiteOriginSchema, WEBSITE_REPLY_RESERVATION, WEBSITE_SESSION_TURNS, type WebsiteReceptionistAdminData, type WebsiteRequestContext, type WebsiteEmbedData, type WebsiteMessageResult } from '@/lib/website-receptionist'
 import { generateWebsiteReceptionistAnswer } from './website-receptionist-generation'
@@ -99,11 +101,12 @@ export async function startWebsiteSession(publicId: string, raw: unknown, contex
     return prisma.$transaction(async db => {
       const config = await locked(publicId, db); if (!config.allowedOrigins.includes(input.siteOrigin)) fail()
       const ready = await readiness(config.organizationId, db); if (!ready.hasSavedBusiness) fail()
+      const callbackHours = await readCallbackCalendar(config.organizationId, db, true)
       const hash = ipHash(config.organizationId, dayUtc(), context.ip)
       await consume(db, config, hash, 'sessions')
       const token = randomBytes(32).toString('hex'); const expiresAt = new Date(Date.now() + 30 * 60_000)
       await db.websiteReceptionistSession.create({ data: { organizationId: config.organizationId, tokenHash: createHash('sha256').update(token).digest('hex'), ipHash: hash, siteOrigin: input.siteOrigin, configVersion: config.updatedAt, expiresAt } })
-      return { token, businessName: ready.businessName, greeting: receptionistGreeting(ready.businessName), expiresAt: expiresAt.toISOString(), turn: 0 as const, ...(config.feedbackEnabled ? { feedbackEnabled: true as const } : {}) }
+      return { token, businessName: ready.businessName, greeting: receptionistGreeting(ready.businessName), expiresAt: expiresAt.toISOString(), turn: 0 as const, ...(config.feedbackEnabled ? { feedbackEnabled: true as const } : {}), ...(callbackHours ? { callbackHours } : {}) }
     })
   })
 }
@@ -184,15 +187,20 @@ export async function submitWebsiteCallback(publicId: string, token: string, raw
     const input = websiteCallbackInputSchema.parse(raw); idSchema.parse(publicId); contextValid(context)
     return prisma.$transaction(async db => {
       const config = await locked(publicId, db); const current = await session(db, config, token, context)
-      if (current.callbackSubmittedAt) return { received: true as const }
+      const requestHash = createHash('sha256').update(JSON.stringify(input)).digest('hex')
+      if (current.callbackSubmittedAt) {
+        if ((current.callbackRequestHash && current.callbackRequestHash !== requestHash) || (!current.callbackRequestHash && input.preferredTime)) throw new AppError('CALLBACK_TIME_CHANGED', 'This callback was already received. Start a new chat to change its details.', 409)
+        return { received: true as const }
+      }
+      const preferredTime = input.preferredTime ? checkCallbackTime(await readCallbackCalendar(config.organizationId, db, true), calendar => resolveCallbackTime(input.preferredTime!, calendar)) : undefined
       await consume(db, config, ipHash(config.organizationId, dayUtc(), context.ip), 'callbacks')
-      await db.websiteReceptionistCallback.create({ data: { organizationId: config.organizationId, sourceSessionId: current.id, fullName: input.fullName, phone: input.phone, reason: input.reason, siteOrigin: current.siteOrigin } })
-      await db.websiteReceptionistSession.update({ where: { id: current.id }, data: { callbackSubmittedAt: new Date() } })
+      await db.websiteReceptionistCallback.create({ data: { organizationId: config.organizationId, sourceSessionId: current.id, fullName: input.fullName, phone: input.phone, reason: input.reason, siteOrigin: current.siteOrigin, ...(preferredTime ? { preferredTime } : {}) } })
+      await db.websiteReceptionistSession.update({ where: { id: current.id }, data: { callbackSubmittedAt: new Date(), ...(preferredTime ? { callbackRequestHash: requestHash } : {}) } })
       return { received: true as const }
     })
   })
 }
-function callbackView(row: { id: string; fullName: string; phone: string; reason: string; siteOrigin: string; status: string; consentedAt: Date; createdAt: Date; updatedAt: Date }) { return websiteCallbackRecordSchema.parse({ id: row.id, fullName: row.fullName, phone: row.phone, reason: row.reason, siteOrigin: row.siteOrigin, status: row.status, consentedAt: row.consentedAt.toISOString(), createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }) }
+function callbackView(row: { id: string; fullName: string; phone: string; reason: string; siteOrigin: string; status: string; consentedAt: Date; createdAt: Date; updatedAt: Date; preferredTime?: unknown }) { return websiteCallbackRecordSchema.parse({ id: row.id, fullName: row.fullName, phone: row.phone, reason: row.reason, siteOrigin: row.siteOrigin, status: row.status, consentedAt: row.consentedAt.toISOString(), createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), ...(row.preferredTime ? { preferredTime: preferredTimeSchema.parse(row.preferredTime) } : {}) }) }
 export async function listWebsiteCallbacks(organizationId: string, userId: string, raw: unknown) {
   return safe(async () => { await admin(organizationId, userId); const query = websiteCallbackQuerySchema.parse(raw); const rows = await prisma.websiteReceptionistCallback.findMany({ where: { organizationId, ...(query.status === 'all' ? {} : { status: query.status }) }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (query.page - 1) * 20, take: 21 }); return { callbacks: rows.slice(0, 20).map(callbackView), page: query.page, pageSize: 20 as const, hasMore: rows.length > 20 } })
 }

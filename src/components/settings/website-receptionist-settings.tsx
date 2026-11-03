@@ -5,6 +5,7 @@ import { CallbackHandoff, CallbackHandoffSource } from './callback-handoff'
 import { CallbackOutcomeQueue } from './callback-outcomes'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
+import { preferredTimeLabel } from '@/lib/callback-time'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -301,7 +302,7 @@ export function WebsiteReceptionistSettings({ setupOnly = false, callbacksOnly =
             <div className="space-y-4">{list.callbacks.map(record => <article key={record.id} aria-label={`Callback request from ${record.fullName}`} className="min-w-0 space-y-2 rounded-md border p-3 text-sm">
               <div className="flex flex-wrap justify-between gap-2"><p className="break-words font-medium">{record.fullName}</p><p>{({ pending: 'Pending', reviewed: 'Reviewed', dismissed: 'Dismissed' })[record.status]}</p></div>
               <p className="break-all">{record.phone}</p>
-              <p className="whitespace-pre-wrap break-words">{record.reason}</p>
+              <p className="whitespace-pre-wrap break-words">{record.reason}</p>{record.preferredTime && <p>Requested callback time: {preferredTimeLabel(record.preferredTime)}</p>}
               <p className="break-all text-xs text-muted-foreground">{record.siteOrigin}</p>
               <p className="text-xs text-muted-foreground">Consent confirmed: {new Date(record.consentedAt).toLocaleString()}</p>
               <div className="flex flex-wrap gap-2">

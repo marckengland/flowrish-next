@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import { Prisma, type CallbackCrmHandoff } from '@prisma/client'
 import { z, ZodError } from 'zod'
 import { prisma } from '@/server/db/client'
+import { preferredTimeSchema, preferredTimeLabel } from '@/lib/callback-time'
+import { readCallbackCalendar, checkCallbackTime, validateCallbackInstant } from './callback-time'
 import { getEffectivePermissions } from '@/server/auth/permissions'
 import { AppError } from '@/lib/errors'
 import { websiteCallbackRecordSchema } from '@/lib/website-receptionist'
@@ -24,7 +26,7 @@ async function receiptView(row: CallbackCrmHandoff, db: Db) {
     db.lead.findFirst({ where: { id: row.leadId, organizationId: row.organizationId, deletedAt: null }, select: { id: true } }),
     db.task.findFirst({ where: { id: row.taskId, organizationId: row.organizationId, lead: { organizationId: row.organizationId, deletedAt: null } }, select: { id: true } }),
   ])
-  return handoffReceiptSchema.parse({ callbackId: row.callbackId, leadId: row.leadId, taskId: row.taskId, createdAt: row.createdAt.toISOString(), leadAvailable: !!lead, taskAvailable: !!task })
+  return handoffReceiptSchema.parse({ callbackId: row.callbackId, leadId: row.leadId, taskId: row.taskId, createdAt: row.createdAt.toISOString(), leadAvailable: !!lead, taskAvailable: !!task, ...(row.preferredTime ? { preferredTime: preferredTimeSchema.parse(row.preferredTime) } : {}) })
 }
 async function options(organizationId: string, callbackId: string, db: Db) {
   const [callback, receipt] = await Promise.all([
@@ -32,8 +34,9 @@ async function options(organizationId: string, callbackId: string, db: Db) {
     db.callbackCrmHandoff.findFirst({ where: { callbackId, organizationId } }),
   ])
   if (!callback && !receipt) fail('NOT_FOUND', 'Callback request not found.', 404)
-  const callbackView = callback ? websiteCallbackRecordSchema.parse({ ...Object.fromEntries(['id', 'fullName', 'phone', 'reason', 'siteOrigin', 'status'].map(key => [key, callback[key as keyof typeof callback]])), consentedAt: callback.consentedAt.toISOString(), createdAt: callback.createdAt.toISOString(), updatedAt: callback.updatedAt.toISOString() }) : null
+  const callbackView = callback ? websiteCallbackRecordSchema.parse({ ...Object.fromEntries(['id', 'fullName', 'phone', 'reason', 'siteOrigin', 'status'].map(key => [key, callback[key as keyof typeof callback]])), consentedAt: callback.consentedAt.toISOString(), createdAt: callback.createdAt.toISOString(), updatedAt: callback.updatedAt.toISOString(), ...(callback.preferredTime ? { preferredTime: preferredTimeSchema.parse(callback.preferredTime) } : {}) }) : null
   if (receipt) return { data: handoffOptionsSchema.parse({ callback: callbackView, receipt: await receiptView(receipt, db), leads: [], contacts: [], members: [], stages: [], matchesTruncated: false, choicesTruncated: false }), snapshot: null }
+  const callbackHours = callbackView?.preferredTime ? await readCallbackCalendar(organizationId, db) : null
   const digits = callback!.phone.replace(/\D/g, '')
   const [matchedLeads, matchedContacts, members, stages] = await Promise.all([
     db.$queryRaw<{ id: string }[]>`SELECT l.id FROM "Lead" l WHERE l."organizationId"=${organizationId} AND l."deletedAt" IS NULL AND NOT l."isClosed" AND (regexp_replace(coalesce(l.phone,''),'[^0-9]','','g')=${digits} OR EXISTS (SELECT 1 FROM "LeadContact" lc JOIN "Contact" c ON c.id=lc."contactId" WHERE lc."leadId"=l.id AND c."organizationId"=${organizationId} AND regexp_replace(coalesce(c.phone,''),'[^0-9]','','g')=${digits})) ORDER BY l.id LIMIT 21`,
@@ -51,7 +54,7 @@ async function options(organizationId: string, callbackId: string, db: Db) {
     contacts: contacts.map(row => ({ id: row.id, label: label(`${row.firstName} ${row.lastName} · ${row.phone ?? ''}`), leadIds: row.leads.slice(0, 20).map(link => link.leadId) })),
     members: members.slice(0, 200).map(row => ({ id: row.userId, label: label(row.user.name) })),
     stages: stages.slice(0, 200).map(row => ({ id: row.id, label: label(`${row.pipeline.name} / ${row.name}`) })),
-    matchesTruncated: matchedLeads.length > 20 || matchedContacts.length > 20 || contacts.some(row => row.leads.length > 20), choicesTruncated: members.length > 200 || stages.length > 200,
+    matchesTruncated: matchedLeads.length > 20 || matchedContacts.length > 20 || contacts.some(row => row.leads.length > 20), choicesTruncated: members.length > 200 || stages.length > 200, ...(callbackHours ? { callbackHours } : {}),
   })
   return { data, snapshot: { leads, contacts } }
 }
@@ -88,10 +91,11 @@ async function preview(organizationId: string, callbackId: string, draft: Handof
     if (target.contactId) { const contact = data.contacts.find(row => row.id === target.contactId); if (!contact) fail(); contactLabel = contact.label }
     targetLabel = `New lead: ${target.firstName} ${target.lastName} · ${stage.label}`
   }
+  const confirmedTime = callback.preferredTime ? checkCallbackTime(data.callbackHours ?? null, calendar => validateCallbackInstant(draft.dueDate, calendar)) : undefined
   const taskTitle = `Callback: ${callback.fullName}`.replace(/[\0\r\n]/g, ' ')
-  const taskDescription = [`Visitor: ${callback.fullName}`, `Phone: ${callback.phone}`, `Request: ${callback.reason}`, `Website: ${callback.siteOrigin}`, `Contact consent confirmed: ${callback.consentedAt}`, `Source callback: ${callback.id}`, `Source: /settings?section=receptionist&callback=${callback.id}`, 'Staff-approved handoff. No call or message has been sent.'].join('\n')
+  const taskDescription = [`Visitor: ${callback.fullName}`, `Phone: ${callback.phone}`, `Request: ${callback.reason}`, `Website: ${callback.siteOrigin}`, `Contact consent confirmed: ${callback.consentedAt}`, `Source callback: ${callback.id}`, `Source: /settings?section=receptionist&callback=${callback.id}`, 'Staff-approved handoff. No call or message has been sent.', ...(confirmedTime ? [`Requested callback time: ${preferredTimeLabel(callback.preferredTime!)}`, `Staff-confirmed callback time at handoff: ${preferredTimeLabel(confirmedTime)}`] : [])].join('\n')
   const version = createHash('sha256').update(JSON.stringify({ draft, options: data, snapshot: state.snapshot, taskTitle, taskDescription })).digest('hex')
-  return handoffPreviewSchema.parse({ version, draft, targetLabel, contactLabel, assigneeName: member.label, taskTitle, taskDescription })
+  return handoffPreviewSchema.parse({ version, draft, targetLabel, contactLabel, assigneeName: member.label, taskTitle, taskDescription, ...(confirmedTime ? { preferredTime: callback.preferredTime, confirmedTime } : {}) })
 }
 export async function previewCallbackHandoff(organizationId: string, userId: string, callbackId: string, raw: unknown) { return safe(async () => { uuid.parse(callbackId); await authorize(organizationId, userId); const draft = handoffDraftSchema.parse(raw); return prisma.$transaction(db => preview(organizationId, callbackId, draft, db), { isolationLevel: 'RepeatableRead' }) }) }
 
@@ -125,7 +129,7 @@ export async function commitCallbackHandoff(organizationId: string, userId: stri
         if (target.contactId) await db.leadContact.create({ data: { leadId, contactId: target.contactId } })
       }
       const task = await db.task.create({ data: { organizationId, leadId, assigneeId: input.draft.assigneeId, title: reviewed.taskTitle, description: reviewed.taskDescription, priority: 'MEDIUM', dueDate: new Date(input.draft.dueDate) } })
-      const receipt = await db.callbackCrmHandoff.create({ data: { callbackId, organizationId, leadId, taskId: task.id, createdById: userId } })
+      const receipt = await db.callbackCrmHandoff.create({ data: { callbackId, organizationId, leadId, taskId: task.id, createdById: userId, ...(reviewed.preferredTime ? { preferredTime: reviewed.preferredTime } : {}) } })
       return receiptView(receipt, db)
     }, { timeout: 10000 })
   })

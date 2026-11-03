@@ -1302,6 +1302,7 @@ model WebsiteReceptionistSession {
   feedbackRequestId   String?
   lastResponse        Json?
   callbackSubmittedAt DateTime?
+  callbackRequestHash String?
 
   @@index([organizationId])
   @@index([expiresAt])
@@ -1331,6 +1332,7 @@ model CallbackOutcomeEvent {
 
 model CallbackCrmHandoff {
   callbackId String @id
+  preferredTime Json?
   organizationId String
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leadId String
@@ -1346,6 +1348,7 @@ model WebsiteReceptionistCallback {
   organizationId  String
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   sourceSessionId String
+  preferredTime   Json?
   fullName        String
   phone           String
   reason          String

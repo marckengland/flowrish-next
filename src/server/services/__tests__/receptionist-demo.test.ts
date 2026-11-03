@@ -6,19 +6,20 @@ vi.mock('@/server/db/client', () => {
   return { prisma: { ...db, $transaction: vi.fn(async (fn: (value: typeof db) => unknown) => fn(db)) } }
 })
 import { getReceptionistDemoBusiness } from '../receptionist-demo'
+const callbackHours = { timeZone: 'Asia/Manila', opensAt: '09:00', closesAt: '17:00', businessDays: [1, 2, 3, 4, 5], version: '2026-01-01T00:00:00.000Z' }
 
 describe('read-only organization demo information', () => {
   beforeEach(() => {
     vi.clearAllMocks(); mocks.access.mockResolvedValue({ admin: true, crm: false }); mocks.organization.mockResolvedValue({ name: 'Flowrish' })
-    mocks.profile.mockResolvedValue({ settings: { enabled: false, businessName: 'Flowrish', knowledge: 'PRIVATE PHONE NOTES', mode: 'always', timeZone: 'Asia/Manila', opensAt: '09:00', closesAt: '17:00', businessDays: [1, 2, 3, 4, 5], forwardTo: '', assigneeId: '', stageId: '' } })
+    mocks.profile.mockResolvedValue({ settings: { enabled: false, businessName: 'Flowrish', knowledge: 'PRIVATE PHONE NOTES', mode: 'always', timeZone: 'Asia/Manila', opensAt: '09:00', closesAt: '17:00', businessDays: [1, 2, 3, 4, 5], forwardTo: '', assigneeId: '', stageId: '' }, updatedAt: new Date(callbackHours.version) })
     mocks.document.mockImplementation(async ({ where }: any) => ({ publishedText: where.publishedCategory === 'SERVICES' ? 'Approved sales CRM services.' : 'Our team will confirm pricing.' }))
   })
   it.each([{ admin: true, crm: false }, { admin: false, crm: true }])('returns only safe demo fields for current access %j', async access => {
     mocks.access.mockResolvedValue(access)
     const business = await getReceptionistDemoBusiness('org-a', 'user-a')
     expect(mocks.access).toHaveBeenCalledWith('org-a', 'user-a')
-    expect(Object.keys(business).sort()).toEqual(['hours', 'name', 'pricing', 'services'])
-    expect(business).toEqual({ name: 'Flowrish', hours: 'Mon, Tue, Wed, Thu, Fri, 9:00 AM to 5:00 PM (Asia/Manila)', services: 'Approved sales CRM services.', pricing: 'Our team will confirm pricing.' })
+    expect(Object.keys(business).sort()).toEqual(['callbackHours', 'hours', 'name', 'pricing', 'services'])
+    expect(business).toEqual({ name: 'Flowrish', hours: 'Mon, Tue, Wed, Thu, Fri, 9:00 AM to 5:00 PM (Asia/Manila)', services: 'Approved sales CRM services.', pricing: 'Our team will confirm pricing.', callbackHours })
     expect(JSON.stringify(business)).not.toContain('PRIVATE PHONE NOTES')
   })
   it('rejects missing membership and unrelated/foreign permissions before reading business information', async () => {
