@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 
 import { Providers } from '@/components/providers'
 import { siteConfig } from '@/lib/site'
+import { SETUP_HISTORY_SCRIPT } from '@/lib/receptionist-setup-history'
 
 import './globals.css'
 
@@ -72,6 +73,7 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: SETUP_HISTORY_SCRIPT }} />
       </head>
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>

@@ -34,9 +34,9 @@ class RequestError extends Error {
   constructor(readonly status: number) { super('Request failed.') }
 }
 
-export function WebsiteReceptionistSettings(): React.JSX.Element {
-  const [data, setData] = useState<WebsiteReceptionistAdminData | null>(null)
-  const [draft, setDraft] = useState<Draft | null>(null)
+export function WebsiteReceptionistSettings({ setupOnly = false, initialData, onDirtyChange, onBusyChange, onSaved }: { setupOnly?: boolean; initialData?: WebsiteReceptionistAdminData; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onSaved?: () => void } = {}): React.JSX.Element {
+  const [data, setData] = useState<WebsiteReceptionistAdminData | null>(initialData ?? null)
+  const [draft, setDraft] = useState<Draft | null>(initialData ? draftFrom(initialData) : null)
   const [acknowledged, setAcknowledged] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -59,6 +59,9 @@ export function WebsiteReceptionistSettings(): React.JSX.Element {
   const allowSectionNavigation = useRef(false)
   const dirty = Boolean(data && draft && JSON.stringify(draft) !== JSON.stringify(draftFrom(data)))
 
+  useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
+  useEffect(() => { onBusyChange?.(busy) }, [busy, onBusyChange])
+
   useEffect(() => {
     mounted.current = true
     const active = controllers.current
@@ -68,7 +71,7 @@ export function WebsiteReceptionistSettings(): React.JSX.Element {
   useEffect(() => { if (discard) discardPrompt.current?.focus() }, [discard])
 
   useEffect(() => {
-    if (!dirty) return
+    if (!dirty || setupOnly) return
     function beforeUnload(event: BeforeUnloadEvent) { event.preventDefault(); event.returnValue = '' }
     function navigation(event: MouseEvent) {
       if (allowSectionNavigation.current) return
@@ -90,7 +93,7 @@ export function WebsiteReceptionistSettings(): React.JSX.Element {
     window.addEventListener('beforeunload', beforeUnload)
     document.addEventListener('click', navigation, true)
     return () => { window.removeEventListener('beforeunload', beforeUnload); document.removeEventListener('click', navigation, true) }
-  }, [dirty])
+  }, [dirty, setupOnly])
 
   function begin() { const controller = new AbortController(); controllers.current.add(controller); return controller }
   function active(controller: AbortController) { return mounted.current && !controller.signal.aborted }
@@ -138,7 +141,7 @@ export function WebsiteReceptionistSettings(): React.JSX.Element {
       })).data
       if (!active(controller)) return
       setData(next); setDraft(draftFrom(next)); setAcknowledged(false)
-      setNotice('Website receptionist settings saved.')
+      setNotice('Website receptionist settings saved.'); onSaved?.()
     } catch (cause) {
       if (active(controller)) setError(cause instanceof RequestError && cause.status === 409
         ? 'Website settings changed elsewhere. Your edits are preserved. Reload settings to use the latest version; reloading replaces your edits.'
@@ -251,10 +254,10 @@ export function WebsiteReceptionistSettings(): React.JSX.Element {
             </div>
             <form onSubmit={save} className="space-y-4">
               <fieldset disabled={busy} className="min-w-0 space-y-4">
-                <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
+                {!setupOnly ? <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
                   <input type="checkbox" className="size-4 accent-primary" checked={draft.enabled} disabled={!ready && !draft.enabled} onChange={event => edit('enabled', event.target.checked)} />
                   Enable website receptionist
-                </label>
+                </label> : <p className="text-sm">Activation is an explicit choice in the final setup step. Saving here preserves the current enabled/off state.</p>}
                 <label className="block space-y-1.5 text-sm font-medium"><span>Allowed website origins</span>
                   <textarea className={fieldClass} rows={3} maxLength={1600} value={draft.origins} onChange={event => edit('origins', event.target.value)} aria-describedby="website-origins-help" />
                 </label>
@@ -280,7 +283,7 @@ export function WebsiteReceptionistSettings(): React.JSX.Element {
           {notice && <p role="status" className="text-sm">{notice}</p>}
         </CardContent>
       </Card>
-      <Card>
+      {!setupOnly && <Card>
         <CardHeader className="flex-col items-start gap-2"><CardTitle>Website callback requests</CardTitle><p className="text-sm text-muted-foreground">Requests confirmed by visitors for your team to review. Reviewing or dismissing does not call, message, create a lead, or schedule a task.</p></CardHeader>
         <CardContent className="min-w-0 space-y-4">
           <CallbackHandoffSource />
@@ -318,7 +321,7 @@ export function WebsiteReceptionistSettings(): React.JSX.Element {
             </div>
           </>}
         </CardContent>
-      </Card>
+      </Card>}
     </section>
   )
 }

@@ -60,7 +60,8 @@ export default function SettingsPage(): React.JSX.Element {
   useEffect(() => {
     if (window.location.search.length <= 256) {
       const query = new URLSearchParams(window.location.search)
-      if (query.getAll('section').length === 1 && query.get('section') === 'receptionist') setActiveTab('receptionist')
+      const section = query.get('section')
+      if (query.getAll('section').length === 1 && (section === 'receptionist' || section === 'ai-provider')) setActiveTab(section)
     }
     setSectionReady(true)
   }, [])

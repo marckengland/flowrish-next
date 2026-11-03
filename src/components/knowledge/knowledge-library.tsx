@@ -34,7 +34,7 @@ async function responseData<T>(response: Response): Promise<T> {
   return body.data as T
 }
 
-export function KnowledgeLibrary({ initialDocumentId }: { initialDocumentId?: string } = {}): React.JSX.Element {
+export function KnowledgeLibrary({ initialDocumentId, embedded = false, template, onDirtyChange, onBusyChange, onChanged }: { initialDocumentId?: string; embedded?: boolean; template?: Draft; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onChanged?: () => void } = {}): React.JSX.Element {
   const incomingDocumentId = useRef(z.string().uuid().safeParse(initialDocumentId).success ? initialDocumentId : undefined)
   const [autoLoadOrigin, setAutoLoadOrigin] = useState(Boolean(incomingDocumentId.current))
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
@@ -51,6 +51,8 @@ export function KnowledgeLibrary({ initialDocumentId }: { initialDocumentId?: st
   const [navigation, setNavigation] = useState<string | null>(null)
   const sequence = useRef(0)
   const mounted = useRef(true)
+  useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
+  useEffect(() => { onBusyChange?.(busy || loading) }, [busy, loading, onBusyChange])
 
   useEffect(() => {
     mounted.current = true
@@ -94,7 +96,7 @@ export function KnowledgeLibrary({ initialDocumentId }: { initialDocumentId?: st
     setNotice('')
     setWarnings([])
     setAcknowledged(false)
-    if (target === 'new') { setSelected(null); setDraft(blank); setDirty(false); setEditing(true); return }
+    if (target === 'new' || target === 'hours') { setSelected(null); setDraft(target === 'hours' && template ? template : blank); setDirty(target === 'hours'); setEditing(true); return }
     setBusy(true)
     const request = ++sequence.current
     try {
@@ -115,7 +117,7 @@ export function KnowledgeLibrary({ initialDocumentId }: { initialDocumentId?: st
     setBusy(true); setError(null); setNotice('')
     try {
       const document = await responseData<KnowledgeDocument>(await fetch(selected ? `/api/knowledge/${selected.id}` : '/api/knowledge', { method: selected ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...draft, ...(selected ? { revision: selected.revision } : {}) }) }))
-      if (mounted.current) { apply(document); setNotice('Draft saved. Publish it when the text is ready for Airish.') }
+      if (mounted.current) { apply(document); setNotice('Draft saved. Publish it when the text is ready for Airish.'); onChanged?.() }
     } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : 'Unable to save the draft.') }
     finally { if (mounted.current) setBusy(false) }
   }
@@ -125,7 +127,7 @@ export function KnowledgeLibrary({ initialDocumentId }: { initialDocumentId?: st
     setBusy(true); setError(null); setNotice('')
     try {
       const document = await responseData<KnowledgeDocument>(await fetch(`/api/knowledge/${selected.id}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, revision: selected.revision, ...(action === 'approve_receptionist' ? { publishedRevision: selected.publishedRevision, acknowledged } : {}) }) }))
-      if (mounted.current) { apply(document, dirty); setNotice(action === 'publish' ? 'Published for Airish. Receptionist approval must be reviewed separately.' : action === 'approve_receptionist' ? 'Published snapshot approved for the receptionist.' : action === 'revoke_receptionist' ? 'Receptionist approval revoked.' : action === 'archive' ? 'Document archived. It is excluded from AI answers.' : 'Document unpublished. It is excluded from AI answers.') }
+      if (mounted.current) { apply(document, dirty); setNotice(action === 'publish' ? 'Published for Airish. Receptionist approval must be reviewed separately.' : action === 'approve_receptionist' ? 'Published snapshot approved for the receptionist.' : action === 'revoke_receptionist' ? 'Receptionist approval revoked.' : action === 'archive' ? 'Document archived. It is excluded from AI answers.' : 'Document unpublished. It is excluded from AI answers.'); onChanged?.() }
     } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : 'Unable to change publication.') }
     finally { if (mounted.current) setBusy(false) }
   }
@@ -151,7 +153,8 @@ export function KnowledgeLibrary({ initialDocumentId }: { initialDocumentId?: st
   const unpublishedChanges = published && selected && (draft.title !== selected.publishedTitle || draft.category !== selected.publishedCategory || draft.contentText !== selected.publishedText)
 
   return <div className="flex min-w-0 flex-col gap-5">
-    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="eyebrow text-muted-foreground">Business reference</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Knowledge library</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">Review business information before publishing it for Airish. Public receptionist access needs a separate approval.</p></div><div className="flex gap-2"><Button type="button" variant="outline" disabled={loading || busy} onClick={() => void navigate('reload')}><RefreshCw className="mr-2 size-4" aria-hidden="true" />Reload</Button><Button type="button" disabled={loading || busy} onClick={() => void navigate('new')}><Plus className="mr-2 size-4" aria-hidden="true" />New document</Button></div></header>
+    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="eyebrow text-muted-foreground">Business reference</p>{embedded ? <h2 className="mt-1 text-xl font-semibold tracking-tight">Knowledge library</h2> : <h1 className="mt-1 text-2xl font-semibold tracking-tight">Knowledge library</h1>}<p className="mt-2 max-w-2xl text-sm text-muted-foreground">Review business information before publishing it for Airish. Public receptionist access needs a separate approval.</p></div><div className="flex gap-2"><Button type="button" variant="outline" disabled={loading || busy} onClick={() => void navigate('reload')}><RefreshCw className="mr-2 size-4" aria-hidden="true" />Reload</Button><Button type="button" disabled={loading || busy} onClick={() => void navigate('new')}><Plus className="mr-2 size-4" aria-hidden="true" />New document</Button></div></header>
+    {template && <Button type="button" variant="outline" disabled={loading || busy} onClick={() => void navigate('hours')}>Use saved hours in a new draft</Button>}
     {error && <p role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">{error}</p>}
     {notice && <p role="status" className="text-sm text-brand">{notice}</p>}
     {navigation && <section aria-label="Unsaved draft confirmation" className="rounded-lg border bg-card p-4"><p className="text-sm">You have unsaved edits. Discard them to continue?</p><div className="mt-3 flex gap-2"><Button type="button" variant="outline" onClick={() => setNavigation(null)}>Keep editing</Button><Button type="button" onClick={() => void navigate(navigation, true)}>Discard and continue</Button></div></section>}
