@@ -70,6 +70,20 @@ The queue supports missed targets or all waiting work, with 20 rows per page. Cu
 
 Business minutes exclude closed days and hours and account for daylight-saving changes. The weekly schedule has no holiday overrides or overnight openings. Targets range from 5 to 1,440 minutes and cannot exceed 52 nominal weeks of opening minutes. Calendar searches stop after 400 local dates; unusually short schedules around skipped openings may require a shorter target. Manager selection and policy acknowledgement require administrator action; deploying this feature does not enable it.
 
+## Receptionist performance
+
+Open **Settings → AI receptionist → View receptionist performance**, or use the same link on **Callback response targets**. The dashboard requires current organization membership with Settings and CRM read/write permissions. It reads existing records and never calls a provider, contacts a visitor, approves a handoff, records a result, calculates new targets, or creates notifications.
+
+Choose inclusive UTC request dates and select **Apply filters**. The default covers 30 dates including today; the maximum is 366. Owner filters use current CRM ownership after any reassignment. **No CRM handoff** selects requests without an approved handoff. The selector lists up to 200 current organization members. Former or foreign owners' names are excluded.
+
+The milestone bars count available requests, approved CRM handoffs, recorded contact, and closed callbacks independently. Later results count toward the selected request cohort as of the displayed observation time. Closing does not imply contact or a sale. Reached or No answer after handoff counts as contact; Retry, task completion, and closure alone do not. Latest-result totals count one last staff-reported result per handoff, even when an earlier contact satisfies the contact milestone.
+
+Select a milestone, waiting-work tile, or record view to inspect its records. Drilldowns show 20 rows per page without changing the totals above. Available task links open the existing CRM workflow. Missing, closed, or deleted CRM destinations preserve historical milestones but have no task link or active waiting-contact flag. Pending handoffs and waiting contact with an unavailable owner count as work without a current CRM owner.
+
+Response-time figures are medians of valid elapsed minutes with sample counts. They include closed hours and weekends and are distinct from business-minute response targets. Missed flags use the current enabled policy and live source eligibility. Paused or changed policies hide obsolete flags; check the displayed last-success time before interpreting zero flags.
+
+Deleted requests leave the request-date cohort because their original creation time is not retained. Their durable CRM handoffs appear separately, selected by handoff date, with a separate drilldown and missed-contact count. Historical owner attribution, deleted-request date reconstruction, sales/revenue conversion, export, and automatic report delivery are outside this release.
+
 ## Verification
 
 Run the repository's full unit, lint, type, Prisma, and build checks. Additional suites use synthetic businesses and mocked AI:
@@ -81,11 +95,13 @@ npx vitest run --config vitest.callback-handoff.config.ts
 npx vitest run --config vitest.callback-outcomes.config.ts
 npx vitest run --config vitest.callback-notifications.config.ts
 npx vitest run --config vitest.callback-response.config.ts
+npx vitest run --config vitest.callback-performance.config.ts
 npx playwright test --config playwright.website-receptionist.config.ts
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/website-receptionist-admin.spec.ts e2e/callback-handoff.spec.ts e2e/callback-outcomes.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-setup.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-notifications.spec.ts e2e/callback-notifications-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-response.spec.ts e2e/callback-response-smoke.spec.ts --retries=0
+PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-performance.spec.ts e2e/callback-performance-smoke.spec.ts --retries=0
 ```
 
 The PostgreSQL suite requires Docker and the local `pgvector/pgvector:pg16` image. It starts a disposable database and does not load production credentials. The isolated iframe suite requires neither an application server nor credentials. The admin suite requires an authenticated application target and mocks all widget settings, callback, and AI operations. Do not enable a production widget or call a real provider to run these suites.

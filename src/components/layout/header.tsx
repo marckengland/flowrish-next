@@ -31,6 +31,7 @@ const PAGE_TITLES: Array<{ prefix: string; label: string }> = [
   { prefix: '/dashboard', label: 'Dashboard' },
   { prefix: '/notifications', label: 'Notifications' },
   { prefix: '/callbacks/response-targets', label: 'Response targets' },
+  { prefix: '/callbacks/performance', label: 'Receptionist performance' },
   { prefix: '/pipeline', label: 'Pipeline' },
   { prefix: '/leads', label: 'Leads' },
   { prefix: '/contacts', label: 'Contacts' },
