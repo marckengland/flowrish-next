@@ -48,7 +48,7 @@ Files: handoff/outcome services and schemas, staff components, demo reader/reduc
 
 ## Task 4: Verify and release
 
-- [ ] Run focused tests, full units, formatter/lint, strict/fast types, Prisma validation, optimized build, disposable PostgreSQL integration/rollback checks, standalone widget and desktop/mobile browser checks. Block all live provider transports.
+- [x] Run focused tests, full units, formatter/lint, strict/fast types, Prisma validation, optimized build, disposable PostgreSQL integration/rollback checks, standalone widget and desktop/mobile browser checks. Block all live provider transports.
 - [x] One fresh independent review; fix material findings through failing regressions and complete the full checks. Preserve all existing tests unless an explicitly approved update is required.
 - [x] Inspect production schema/state read-only and current Supabase docs; apply only the additive migration with migration history recorded. Keep widget off and records unchanged.
 - [ ] Commit/merge, verify merged checks, push and verify CI/deployment, then run deployed browser checks with writes/providers mocked. Report limitations and rollback.
@@ -59,4 +59,8 @@ Local timezone versus browser timezone; DST gaps/folds and inclusive/exclusive b
 
 ## Execution record
 
-Baseline `7063840`. Existing full baseline 1,683 units and all required checks passed on the prior release. User approved calendar-metadata test fixture extensions. No business configuration changes are authorized by this feature; widget remains disabled.
+Baseline `7063840`. User approved calendar-metadata test fixture extensions. No business configuration changes are authorized by this feature; widget remains disabled.
+
+Verification: 1,708 units, 67 existing database checks, nine new disposable-database checks, 26 standalone widget checks, and 15 authenticated desktop/mobile browser checks passed. ESLint autofix/lint, strict and fast TypeScript checks, Prisma validation, and the optimized production build passed. Browser tests used Los Angeles device time against Manila business time; provider transports and production mutations were blocked or mocked. Screenshots were inspected. The first legacy Demo browser run preceded the schema migration and failed on a missing column; the complete post-migration rerun passed without test changes.
+
+One independent whole-branch review found a calendar-update race. Two failing concurrent-database regressions reproduced stale handoff/reschedule confirmation; holding the business-calendar share lock through the mutation fixed both. Review exclusions match the stated limits. The additive migration and matching Prisma history are applied. RLS/grants, both disabled widgets, and zero callback/handoff/session counts remain unchanged. The retained-schema rollback patch was reverse-checked in a temporary Git index; synthetic legacy data and cross-organization control rows were preserved in database verification. Release/CI/deployment results are recorded in the task ledger and final report.
