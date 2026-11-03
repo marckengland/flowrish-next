@@ -340,8 +340,8 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
 
         {/* PRICING */}
         <PricingSection
-          getStartedHref={getStartedHref}
-          primaryLabel={primaryLabel}
+          getStartedHref="#waitlist"
+          primaryLabel="Join the waitlist"
         />
 
         {/* FINAL CTA */}
@@ -353,41 +353,19 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
             <h2 className="mx-auto mb-4 max-w-[640px] text-[40px] font-bold leading-[1.03] tracking-[-0.03em] text-balance sm:text-[48px]">
               Give your reps their time back.
             </h2>
-            {waitlistEnabled ? (
-              <>
-                <p className="mx-auto mb-8 max-w-[520px] text-[18px] leading-[1.5] text-white/70">
-                  Flowrish is in private beta. Join the waitlist and we&apos;ll
-                  email you the moment a spot opens. Set up in an afternoon and
-                  let it run the admin so your team can run the deals.
-                </p>
-                <WaitlistForm tone="dark" />
-                <p className="mt-6 text-[14px] text-white/60">
-                  Already a tester?{' '}
-                  <Link
-                    href="/login"
-                    className="font-semibold text-white underline-offset-4 hover:underline"
-                  >
-                    Sign in
-                  </Link>
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="mx-auto mb-8 max-w-[520px] text-[18px] leading-[1.5] text-white/70">
-                  Set up Flowrish in an afternoon and let it run the admin so
-                  your team can run the deals.
-                </p>
-                <div className="flex flex-wrap items-center justify-center gap-3.5">
-                  <Link
-                    href={getStartedHref}
-                    className="inline-flex h-[50px] items-center gap-2 rounded-xl bg-white px-7 text-[16px] font-semibold text-[oklch(0.17_0_0)] transition-opacity hover:opacity-90"
-                  >
-                    {primaryLabel}
-                    <ArrowRight className="size-[17px]" aria-hidden="true" />
-                  </Link>
-                </div>
-              </>
-            )}
+            <p className="mx-auto mb-8 max-w-[520px] text-[18px] leading-[1.5] text-white/70">
+              Join the waitlist and our team will email you when a spot opens.
+            </p>
+            <WaitlistForm tone="dark" />
+            <p className="mt-6 text-[14px] text-white/60">
+              Already a tester?{' '}
+              <Link
+                href="/login"
+                className="font-semibold text-white underline-offset-4 hover:underline"
+              >
+                Sign in
+              </Link>
+            </p>
           </div>
         </section>
 

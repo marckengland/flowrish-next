@@ -68,12 +68,10 @@ describe('public domain and contact references', () => {
       expect(page.textContent).not.toMatch(
         /\$\d|trial|per seat|seat\/mo|billed|−20%|most popular|volume & annual/i,
       )
-      if (waitlist) {
-        expect(page.textContent).toContain('Waitlist form')
-        expect(
-          page.querySelectorAll('a[href="#waitlist"]').length,
-        ).toBeGreaterThanOrEqual(3)
-      }
+      expect(page.textContent).toContain('Waitlist form')
+      expect(
+        page.querySelectorAll('#pricing a[href="#waitlist"]'),
+      ).toHaveLength(2)
     },
   )
   it('keeps authenticated visitors routed into the CRM', async () => {
