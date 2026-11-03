@@ -10,7 +10,7 @@ import { PLAN_TIERS } from '@/lib/plans'
 export interface PricingSectionProps {
   /** Where the plan CTAs point (e.g. /onboarding, or /dashboard when signed in). */
   getStartedHref: string
-  /** Where the enterprise "Talk to sales" CTA points. */
+  /** Optional real contact destination; hide the enterprise CTA when absent. */
   talkToSalesHref?: string
 }
 
@@ -20,7 +20,7 @@ export interface PricingSectionProps {
  */
 export function PricingSection({
   getStartedHref,
-  talkToSalesHref = 'mailto:sales@flowrish.com',
+  talkToSalesHref,
 }: PricingSectionProps): React.JSX.Element {
   const [annual, setAnnual] = useState(true)
 
@@ -92,27 +92,37 @@ export function PricingSection({
 
             <div className="mb-1 flex items-baseline gap-1.5">
               <span className="tnum text-[40px] font-bold tracking-[-0.03em]">
-                {tier.price ? (annual ? tier.price.annual : tier.price.monthly) : tier.customPrice}
+                {tier.price
+                  ? annual
+                    ? tier.price.annual
+                    : tier.price.monthly
+                  : tier.customPrice}
               </span>
               {tier.price && (
-                <span className="text-[14px] text-muted-foreground">/seat/mo</span>
+                <span className="text-[14px] text-muted-foreground">
+                  /seat/mo
+                </span>
               )}
             </div>
             <div className="mb-[22px] text-[12px] text-muted-foreground">
               {tier.price ? billLabel : tier.subLabelCustom}
             </div>
 
-            <Link
-              href={tier.slug === 'enterprise' ? talkToSalesHref : getStartedHref}
-              className={cn(
-                'mb-[22px] flex h-[42px] items-center justify-center rounded-[10px] text-[14px] font-semibold transition-[background-color,transform] active:translate-y-px',
-                tier.featured
-                  ? 'bg-brand text-brand-foreground hover:bg-brand-hover'
-                  : 'border border-border hover:bg-muted',
-              )}
-            >
-              {tier.slug === 'enterprise' ? 'Talk to sales' : 'Get started'}
-            </Link>
+            {(tier.slug !== 'enterprise' || talkToSalesHref) && (
+              <Link
+                href={
+                  tier.slug === 'enterprise' ? talkToSalesHref! : getStartedHref
+                }
+                className={cn(
+                  'mb-[22px] flex h-[42px] items-center justify-center rounded-[10px] text-[14px] font-semibold transition-[background-color,transform] active:translate-y-px',
+                  tier.featured
+                    ? 'bg-brand text-brand-foreground hover:bg-brand-hover'
+                    : 'border border-border hover:bg-muted',
+                )}
+              >
+                {tier.slug === 'enterprise' ? 'Talk to sales' : 'Get started'}
+              </Link>
+            )}
 
             <ul className="flex flex-col gap-2.5 text-[14px] text-foreground/80">
               {tier.features.map((f) => (

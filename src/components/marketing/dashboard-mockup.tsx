@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import { siteConfig } from '@/lib/site'
 import {
   LayoutDashboard,
   GitBranchPlus,
@@ -24,7 +25,7 @@ export function DashboardMockup(): React.JSX.Element {
         <span className="size-[11px] rounded-full bg-foreground/15" />
         <span className="size-[11px] rounded-full bg-foreground/15" />
         <span className="ml-3 font-mono text-[11px] text-muted-foreground">
-          app.flowrish.com
+          {new URL(siteConfig.url).host}
         </span>
       </div>
 
@@ -70,11 +71,29 @@ export function DashboardMockup(): React.JSX.Element {
           <div className="overflow-hidden rounded-[10px] border">
             <div className="flex items-center justify-between border-b px-3.5 py-2.5">
               <span className="text-[12px] font-semibold">Top priorities</span>
-              <span className="text-[10px] text-muted-foreground">View all</span>
+              <span className="text-[10px] text-muted-foreground">
+                View all
+              </span>
             </div>
-            <MockRow score="92" tone="danger" title="Call about renewal, 3 days left" meta="Acme Corp · Overdue Jul 24" />
-            <MockRow score="64" tone="warning" title="Send proposal follow-up" meta="Globex Inc · Due Jul 27" />
-            <MockRow score="31" tone="neutral" title="Log discovery-call notes" meta="Initech · Due Jul 29" last />
+            <MockRow
+              score="92"
+              tone="danger"
+              title="Call about renewal, 3 days left"
+              meta="Acme Corp · Overdue Jul 24"
+            />
+            <MockRow
+              score="64"
+              tone="warning"
+              title="Send proposal follow-up"
+              meta="Globex Inc · Due Jul 27"
+            />
+            <MockRow
+              score="31"
+              tone="neutral"
+              title="Log discovery-call notes"
+              meta="Initech · Due Jul 29"
+              last
+            />
           </div>
         </div>
       </div>
