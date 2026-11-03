@@ -34,7 +34,7 @@ class RequestError extends Error {
   constructor(readonly status: number) { super('Request failed.') }
 }
 
-export function WebsiteReceptionistSettings({ setupOnly = false, initialData, onDirtyChange, onBusyChange, onSaved }: { setupOnly?: boolean; initialData?: WebsiteReceptionistAdminData; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onSaved?: () => void } = {}): React.JSX.Element {
+export function WebsiteReceptionistSettings({ setupOnly = false, callbacksOnly = false, initialData, onDirtyChange, onBusyChange, onSaved }: { setupOnly?: boolean; callbacksOnly?: boolean; initialData?: WebsiteReceptionistAdminData; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onSaved?: () => void } = {}): React.JSX.Element {
   const [data, setData] = useState<WebsiteReceptionistAdminData | null>(initialData ?? null)
   const [draft, setDraft] = useState<Draft | null>(initialData ? draftFrom(initialData) : null)
   const [acknowledged, setAcknowledged] = useState(false)
@@ -218,8 +218,8 @@ export function WebsiteReceptionistSettings({ setupOnly = false, initialData, on
   const ready = Boolean(data?.hasSavedBusiness && data.hasOrganizationAi && data.approvedDocuments > 0)
   const snippet = data?.settings ? `<script src="${typeof window !== 'undefined' ? window.location.origin : ''}/receptionist-widget.js" data-flowrish-receptionist="${data.settings.publicId}" defer></script>` : ''
   return (
-    <section aria-label="Website receptionist" className="min-w-0 space-y-5">
-      <Card>
+    <section aria-label={callbacksOnly ? 'Receptionist callback inbox' : 'Website receptionist'} className="min-w-0 space-y-5">
+      {!callbacksOnly && <Card>
         <CardHeader className="flex-col items-start gap-2">
           <CardTitle>Website receptionist</CardTitle>
           <p className="text-sm text-muted-foreground">Add a receptionist to your organization’s website. It answers from approved Library documents and collects callback requests for staff review.</p>
@@ -282,7 +282,7 @@ export function WebsiteReceptionistSettings({ setupOnly = false, initialData, on
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           {notice && <p role="status" className="text-sm">{notice}</p>}
         </CardContent>
-      </Card>
+      </Card>}
       {!setupOnly && <Card>
         <CardHeader className="flex-col items-start gap-2"><CardTitle>Website callback requests</CardTitle><p className="text-sm text-muted-foreground">Requests confirmed by visitors for your team to review. Reviewing or dismissing does not call, message, create a lead, or schedule a task.</p></CardHeader>
         <CardContent className="min-w-0 space-y-4">
