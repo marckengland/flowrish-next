@@ -98,6 +98,16 @@ Tool links open existing setup, Library, callback approval, work queue, response
 
 Rollback: revert the home-page merge with `git revert -m 1 <merge-commit>`, then deploy normally. This release changes no schema, settings, permissions, background jobs, or business records, so there is no data rollback. Do not restore a database snapshot or rewrite main's history.
 
+## Receptionist callback inbox
+
+Open **Receptionist → Review callback requests**, or **Settings → AI receptionist → Open callback inbox**. The dedicated inbox requires current organization membership and Settings permission. CRM staff without Settings access continue to use their assigned callback work queue.
+
+Select **Load callback requests** to read confirmed visitor requests. Choose Pending, Reviewed, Dismissed, or All, then reload explicitly to apply the filter. Pagination follows the loaded filter, with up to 20 records per page. Opening the page does not fetch requests or load business, provider, spending, or embed settings.
+
+The inbox and Settings share the same callback controls. Reviewing or dismissing a request does not contact its visitor or create CRM work. **Prepare CRM handoff** loads existing choices or a retained receipt, where available leads and tasks can be opened. Creating CRM work still requires CRM and contacts access, a preview, an approval checkbox, and **Confirm CRM handoff**. Changed choices invalidate the previous preview. Permanent deletion retains its separate confirmation and does not delete an approved CRM lead or task.
+
+There are no new callback APIs, background jobs, provider calls, or automatic approvals. Configuration remains in Settings and guided setup.
+
 ## Receptionist performance
 
 Open **Settings → AI receptionist → View receptionist performance**, or use the same link on **Callback response targets**. The dashboard requires current organization membership with Settings and CRM read/write permissions. It reads existing records and never calls a provider, contacts a visitor, approves a handoff, records a result, calculates new targets, or creates notifications.
@@ -130,6 +140,7 @@ PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/website-r
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-setup.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-installation.spec.ts e2e/receptionist-installation-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-home.spec.ts e2e/receptionist-home-smoke.spec.ts --retries=0
+PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-callback-inbox.spec.ts e2e/receptionist-callback-inbox-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-notifications.spec.ts e2e/callback-notifications-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-response.spec.ts e2e/callback-response-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-performance.spec.ts e2e/callback-performance-smoke.spec.ts --retries=0

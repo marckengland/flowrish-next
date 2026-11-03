@@ -82,6 +82,7 @@ export function ReceptionistSettings(): React.JSX.Element {
       <div className="space-y-3 rounded-lg border p-4 text-sm">
         <p className="font-medium">Set up your receptionist</p>
         <Link href="/receptionist" className="flex min-h-11 items-center font-medium underline">Open Receptionist home</Link>
+        <Link href="/receptionist/callbacks" className="flex min-h-11 items-center font-medium underline">Open callback inbox</Link>
         <Link href="/receptionist/setup" className="inline-flex min-h-11 items-center font-medium underline">Open guided website setup</Link>
         <Link href="/callbacks/response-targets" className="flex min-h-11 items-center font-medium underline">Manage callback response targets</Link>
         <Link href="/callbacks/performance" className="flex min-h-11 items-center font-medium underline">View receptionist performance</Link>
