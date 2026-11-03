@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
-import { Bell, Bot, Menu, Search } from 'lucide-react'
+import { Bot, Menu, Search } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { useLayoutStore } from '@/stores/layout'
@@ -12,6 +12,8 @@ import { ThemeToggle } from '@/components/layout/theme-toggle'
  * compatibility with the shell even though the header no longer renders
  * the user card (it now lives pinned in the sidebar).
  */
+import { NotificationBell } from '@/components/notifications/notification-bell'
+
 export interface HeaderUser {
   name: string
   email: string
@@ -21,11 +23,13 @@ export interface HeaderUser {
 export interface HeaderProps {
   user: HeaderUser
   organizationName?: string
+  notificationScope?: string
 }
 
 /** Maps a pathname to the breadcrumb page label shown in the topbar. */
 const PAGE_TITLES: Array<{ prefix: string; label: string }> = [
   { prefix: '/dashboard', label: 'Dashboard' },
+  { prefix: '/notifications', label: 'Notifications' },
   { prefix: '/pipeline', label: 'Pipeline' },
   { prefix: '/leads', label: 'Leads' },
   { prefix: '/contacts', label: 'Contacts' },
@@ -56,6 +60,7 @@ function pageTitle(pathname: string): string {
  */
 export function Header({
   organizationName,
+  notificationScope,
 }: HeaderProps): React.JSX.Element {
   const router = useRouter()
   const pathname = usePathname()
@@ -108,14 +113,7 @@ export function Header({
 
         <ThemeToggle />
 
-        <button
-          type="button"
-          title="Notifications"
-          aria-label="Notifications"
-          className="flex size-[38px] items-center justify-center rounded-[10px] border bg-card text-foreground/60 transition-colors hover:bg-muted"
-        >
-          <Bell className="size-[17px]" aria-hidden="true" />
-        </button>
+        <NotificationBell scope={notificationScope} />
 
         <button
           type="button"
