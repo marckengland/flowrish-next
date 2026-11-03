@@ -22,6 +22,7 @@ import {
   Radar,
   Inbox,
   BookOpen,
+  Headset,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -44,6 +45,8 @@ interface NavItem {
   icon: LucideIcon
   /** User needs at least one of these permissions to see the item. */
   permissions?: readonly Permission[]
+  /** Any group may grant access; every permission within that group is required. */
+  permissionGroups?: readonly (readonly Permission[])[]
 }
 
 interface NavGroup {
@@ -97,6 +100,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
   {
     label: 'Automation',
     items: [
+      { href: '/receptionist', label: 'Receptionist', icon: Headset, permissionGroups: [['admin:settings'], ['leads:read', 'leads:write']] },
       { href: '/rhythm', label: 'Rhythm', icon: Activity },
       { href: '/follow-ups', label: 'Follow-up inbox', icon: Inbox, permissions: ['leads:read'] },
       {
@@ -200,6 +204,7 @@ export function Sidebar({
 
   const permissionSet = new Set<Permission>(permissions)
   const isVisible = (item: NavItem): boolean => {
+    if (item.permissionGroups) return item.permissionGroups.some(group => group.every(permission => permissionSet.has(permission)))
     if (!item.permissions || item.permissions.length === 0) return true
     return item.permissions.some((p) => permissionSet.has(p))
   }
@@ -301,6 +306,7 @@ export function Sidebar({
                     aria-current={active ? 'page' : undefined}
                     className={cn(
                       'flex items-center gap-3 rounded-[10px] px-3 py-[9px] text-[13.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                      href === '/receptionist' && 'min-h-11',
                       active
                         ? 'bg-brand/12 text-brand-emphasis'
                         : 'text-sidebar-foreground/65 hover:bg-white/[0.06] hover:text-sidebar-foreground',
