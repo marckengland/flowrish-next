@@ -13,9 +13,11 @@ const eslintConfig = [
   {
     ignores: [
       ".next/**",
+      "e2e/rehearsal-app/.next/**",
       "out/**",
       "build/**",
       "next-env.d.ts",
+      "e2e/rehearsal-app/next-env.d.ts",
       "src/generated/**",
     ],
   },

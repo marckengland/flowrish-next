@@ -37,6 +37,8 @@
     "**/*.mts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "e2e/rehearsal-app/.next",
+    "e2e/rehearsal-app/next-env.d.ts"
   ]
 }

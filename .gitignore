@@ -13,6 +13,7 @@
 
 # next.js
 /.next/
+/e2e/rehearsal-app/.next/
 /out/
 
 # production
