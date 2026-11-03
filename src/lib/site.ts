@@ -3,16 +3,30 @@
  *
  * Everything is driven off `NEXT_PUBLIC_SITE_URL` so metadata, canonicals,
  * the sitemap, robots, and JSON-LD resolve correctly across preview and
- * production domains. Set it in the deployment env; the fallback is only
- * for local dev.
+ * production domains. The default is the current public address; an explicit
+ * deployment override can select another domain owned by the team.
  */
+const defaultSiteUrl = 'https://flowrish.marckengland.com'
+const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(
+  /\/+$/,
+  '',
+)
+// Ignore obsolete brand-domain overrides until a domain owned by the team is configured.
+const siteUrl =
+  !configuredSiteUrl ||
+  /^https?:\/\/(?:[a-z0-9-]+\.)*flowrish\.com(?::\d+)?(?:[/?#]|$)/i.test(
+    configuredSiteUrl,
+  )
+    ? defaultSiteUrl
+    : configuredSiteUrl
+
 export const siteConfig = {
   name: 'Flowrish',
   /** Short marketing title. */
   title: 'Flowrish — The CRM that does the busywork',
   description:
     'Flowrish is a multi-tenant sales CRM that automates logging, follow-ups, lead scoring and forecasting, then hands every rep the single highest-value action to take next.',
-  url: (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://flowrish.com').replace(/\/$/, ''),
+  url: siteUrl,
   keywords: [
     'CRM',
     'sales CRM',

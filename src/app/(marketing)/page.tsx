@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import {
   ArrowRight,
-  Calendar,
   GitBranchPlus,
   Mail,
   Workflow,
@@ -102,7 +101,10 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
       />
       <div className="mx-auto max-w-[1280px]">
         {/* NAV */}
-        <MarketingNav getStartedHref={getStartedHref} primaryLabel={primaryLabel} />
+        <MarketingNav
+          getStartedHref={getStartedHref}
+          primaryLabel={primaryLabel}
+        />
 
         {/* HERO */}
         <section className="relative grid items-center gap-14 px-6 py-16 sm:px-14 lg:grid-cols-[1.02fr_1.18fr]">
@@ -133,13 +135,6 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
                 {primaryLabel}
                 <ArrowRight className="size-[17px]" aria-hidden="true" />
               </Link>
-              <a
-                href="mailto:sales@flowrish.com"
-                className="inline-flex h-12 items-center gap-2 rounded-xl border px-6 text-[16px] font-semibold transition-[background-color,transform] hover:bg-muted active:translate-y-px"
-              >
-                <Calendar className="size-4" aria-hidden="true" />
-                Book a demo
-              </a>
             </div>
             <p className="rise rise-4 font-mono text-[13px] text-muted-foreground">
               {waitlistEnabled
@@ -188,7 +183,10 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
                   'Overdue and at-risk alerts',
                 ].map((f) => (
                   <li key={f} className="flex items-center gap-2.5">
-                    <Check className="size-[17px] shrink-0 text-brand" aria-hidden="true" />
+                    <Check
+                      className="size-[17px] shrink-0 text-brand"
+                      aria-hidden="true"
+                    />
                     {f}
                   </li>
                 ))}
@@ -196,12 +194,32 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
             </div>
             <div className="overflow-hidden rounded-xl border bg-card shadow-[0_20px_44px_-26px_rgba(0,0,0,0.28)]">
               <div className="flex items-center justify-between border-b px-4 py-3">
-                <span className="text-[13px] font-semibold">Today&apos;s Rhythm</span>
-                <span className="font-mono text-[11px] text-muted-foreground">27 open</span>
+                <span className="text-[13px] font-semibold">
+                  Today&apos;s Rhythm
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  27 open
+                </span>
               </div>
-              <RhythmRow score="92" tone="danger" title="Call about renewal" meta="Acme Corp · Overdue" />
-              <RhythmRow score="64" tone="warning" title="Send proposal follow-up" meta="Globex Inc · Due today" />
-              <RhythmRow score="31" tone="neutral" title="Log discovery-call notes" meta="Initech · Due Jul 29" last />
+              <RhythmRow
+                score="92"
+                tone="danger"
+                title="Call about renewal"
+                meta="Acme Corp · Overdue"
+              />
+              <RhythmRow
+                score="64"
+                tone="warning"
+                title="Send proposal follow-up"
+                meta="Globex Inc · Due today"
+              />
+              <RhythmRow
+                score="31"
+                tone="neutral"
+                title="Log discovery-call notes"
+                meta="Initech · Due Jul 29"
+                last
+              />
             </div>
           </div>
 
@@ -229,7 +247,10 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
                   'Follow-ups threaded into Gmail automatically',
                 ].map((f) => (
                   <li key={f} className="flex items-center gap-2.5">
-                    <Check className="size-[17px] shrink-0 text-brand" aria-hidden="true" />
+                    <Check
+                      className="size-[17px] shrink-0 text-brand"
+                      aria-hidden="true"
+                    />
                     {f}
                   </li>
                 ))}
@@ -243,7 +264,9 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
           {/* 2x2 feature grid */}
           <div className="reveal grid gap-5 lg:grid-cols-2">
             <FeatureCard
-              icon={<GitBranchPlus className="size-[17px]" aria-hidden="true" />}
+              icon={
+                <GitBranchPlus className="size-[17px]" aria-hidden="true" />
+              }
               label="Pipeline"
               title="See every deal at a glance"
               body="Drag deals across stages on a kanban board. Values, scores and owners update everywhere, instantly."
@@ -276,18 +299,41 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
           </h2>
           <div className="reveal grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { n: '01', t: 'Connect & import', d: 'Link Gmail and import leads by CSV. Duplicates are caught and merged automatically.', first: true },
-              { n: '02', t: 'Score & prioritize', d: "Flowrish ranks every deal and builds each rep's daily rhythm the moment data lands." },
-              { n: '03', t: 'Automate outreach', d: 'Enroll leads in cadences. Follow-up emails and tasks fire on schedule, threaded in Gmail.' },
-              { n: '04', t: 'Forecast & commit', d: 'Compare your commit against the AI prediction and close the quarter with confidence.' },
+              {
+                n: '01',
+                t: 'Connect & import',
+                d: 'Link Gmail and import leads by CSV. Duplicates are caught and merged automatically.',
+                first: true,
+              },
+              {
+                n: '02',
+                t: 'Score & prioritize',
+                d: "Flowrish ranks every deal and builds each rep's daily rhythm the moment data lands.",
+              },
+              {
+                n: '03',
+                t: 'Automate outreach',
+                d: 'Enroll leads in cadences. Follow-up emails and tasks fire on schedule, threaded in Gmail.',
+              },
+              {
+                n: '04',
+                t: 'Forecast & commit',
+                d: 'Compare your commit against the AI prediction and close the quarter with confidence.',
+              },
             ].map((s) => (
               <div
                 key={s.n}
                 className={`border-t-2 pt-5 ${s.first ? 'border-foreground' : 'border-border'}`}
               >
-                <div className="mb-3.5 font-mono text-[13px] text-muted-foreground">{s.n}</div>
-                <h4 className="mb-2 text-[18px] font-semibold tracking-[-0.01em]">{s.t}</h4>
-                <p className="text-[14.5px] leading-[1.5] text-muted-foreground">{s.d}</p>
+                <div className="mb-3.5 font-mono text-[13px] text-muted-foreground">
+                  {s.n}
+                </div>
+                <h4 className="mb-2 text-[18px] font-semibold tracking-[-0.01em]">
+                  {s.t}
+                </h4>
+                <p className="text-[14.5px] leading-[1.5] text-muted-foreground">
+                  {s.d}
+                </p>
               </div>
             ))}
           </div>
@@ -314,14 +360,6 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
                 </p>
                 <WaitlistForm tone="dark" />
                 <p className="mt-6 text-[14px] text-white/60">
-                  Prefer a walkthrough?{' '}
-                  <a
-                    href="mailto:sales@flowrish.com"
-                    className="font-semibold text-white underline-offset-4 hover:underline"
-                  >
-                    Book a demo
-                  </a>
-                  {' · '}
                   Already a tester?{' '}
                   <Link
                     href="/login"
@@ -334,8 +372,8 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
             ) : (
               <>
                 <p className="mx-auto mb-8 max-w-[520px] text-[18px] leading-[1.5] text-white/70">
-                  Set up Flowrish in an afternoon and let it run the admin so your
-                  team can run the deals.
+                  Set up Flowrish in an afternoon and let it run the admin so
+                  your team can run the deals.
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-3.5">
                   <Link
@@ -345,12 +383,6 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
                     {primaryLabel}
                     <ArrowRight className="size-[17px]" aria-hidden="true" />
                   </Link>
-                  <a
-                    href="mailto:sales@flowrish.com"
-                    className="inline-flex h-[50px] items-center rounded-xl border border-white/25 px-6 text-[16px] font-semibold text-white transition-colors hover:bg-white/10"
-                  >
-                    Book a demo
-                  </a>
                 </div>
               </>
             )}
@@ -374,7 +406,10 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
               The CRM that does the busywork, so your team can sell.
             </p>
           </div>
-          <FooterCol title="Product" links={['Pipeline', 'Cadences', 'Forecasting']} />
+          <FooterCol
+            title="Product"
+            links={['Pipeline', 'Cadences', 'Forecasting']}
+          />
           <FooterCol title="Company" links={['About', 'Careers', 'Contact']} />
           <FooterCol title="Legal" links={['Privacy', 'Terms', 'Security']} />
         </footer>
@@ -419,7 +454,11 @@ function FooterCol({
     <div className="flex flex-col gap-2.5 text-[13.5px]">
       <span className="mb-0.5 font-semibold">{title}</span>
       {links.map((l) => (
-        <a key={l} href="#" className="text-muted-foreground transition-colors hover:text-foreground">
+        <a
+          key={l}
+          href="#"
+          className="text-muted-foreground transition-colors hover:text-foreground"
+        >
           {l}
         </a>
       ))}
@@ -447,8 +486,12 @@ function RhythmRow({
         ? 'bg-warning-subtle text-warning-foreground'
         : 'bg-muted text-muted-foreground'
   return (
-    <div className={`flex items-center gap-3 px-4 py-3 ${last ? '' : 'border-b border-row-divider'}`}>
-      <span className={`flex size-[34px] items-center justify-center rounded-full text-[12px] font-bold tnum ${toneClass}`}>
+    <div
+      className={`flex items-center gap-3 px-4 py-3 ${last ? '' : 'border-b border-row-divider'}`}
+    >
+      <span
+        className={`flex size-[34px] items-center justify-center rounded-full text-[12px] font-bold tnum ${toneClass}`}
+      >
         {score}
       </span>
       <div className="flex-1">
@@ -458,4 +501,3 @@ function RhythmRow({
     </div>
   )
 }
-

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useActionState } from 'react'
+import { siteConfig } from '@/lib/site'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -87,9 +88,9 @@ export function OnboardingForm() {
             >
               URL slug
             </label>
-            <div className="flex items-center overflow-hidden rounded-[10px] border border-input bg-card focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand/15">
-              <span className="flex h-10 items-center border-r border-border bg-muted px-3 font-mono text-[13px] text-muted-foreground">
-                flowrish.com/
+            <div className="flex flex-col overflow-hidden rounded-[10px] sm:flex-row border border-input bg-card focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand/15">
+              <span className="flex h-10 items-center border-b border-border bg-muted sm:border-b-0 sm:border-r px-3 font-mono text-[13px] text-muted-foreground">
+                {new URL(siteConfig.url).host}/
               </span>
               <input
                 id="org-slug"
@@ -99,16 +100,21 @@ export function OnboardingForm() {
                 placeholder="northwind"
                 pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
                 aria-describedby="org-slug-hint"
-                className="h-10 flex-1 bg-transparent px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                className="h-10 min-w-0 flex-1 bg-transparent px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
               />
             </div>
-            <p id="org-slug-hint" className="mt-1.5 text-xs text-muted-foreground">
+            <p
+              id="org-slug-hint"
+              className="mt-1.5 text-xs text-muted-foreground"
+            >
               Lowercase letters, numbers, and hyphens only.
             </p>
           </div>
 
           {createState?.error && (
-            <p className="text-sm text-danger-foreground">{createState.error}</p>
+            <p className="text-sm text-danger-foreground">
+              {createState.error}
+            </p>
           )}
 
           <Button
@@ -139,7 +145,10 @@ export function OnboardingForm() {
               placeholder="Enter your invite code"
               aria-describedby="invite-code-hint"
             />
-            <p id="invite-code-hint" className="mt-1.5 text-xs text-muted-foreground">
+            <p
+              id="invite-code-hint"
+              className="mt-1.5 text-xs text-muted-foreground"
+            >
               Ask your team admin for an invite code.
             </p>
           </div>
