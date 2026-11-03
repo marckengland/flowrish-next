@@ -175,3 +175,15 @@ The conversation uses prewritten rules for services, pricing, hours, callback re
 Everything entered in Demo mode stays in page memory. Restart or reload to clear it. The page shows the latest 40 messages and 20 outcomes. It does not save a rehearsal report, submit a callback, create CRM records, change owners/deadlines, place calls, or change the website switch. Approved excerpts are rendered as plain text. Missing information is left for the team to confirm.
 
 Rollback for this feature is an ordinary code revert. There are no migrations, new dependencies, or configuration/data changes to undo. Live AI quality, microphone behavior, and telephone connectivity are outside this demo.
+
+## Preferred callback times
+
+Visitors can optionally request a callback time in the saved business timezone, within weekly opening hours and the next 90 days. Opening time is included; closing time is excluded. The form shows the timezone and includes the selected local time in its consent readback. Changing a field clears consent. Times affected by a missing or repeated daylight-saving clock hour are rejected. The server rechecks the saved calendar version, future time, and hours before consuming callback quota or saving the request.
+
+Staff see the original requested time in the inbox and CRM handoff. Confirm the request or select another business-local time, then preview and approve the task. The task deadline stores the staff-approved UTC instant. Rescheduling through callback outcomes uses the same business-hours validation and approval. A business-hours change invalidates an earlier preview. Untimed callbacks keep their existing deadline controls.
+
+The original requested UTC instant, timezone, local readback, and business version remain on the callback and durable handoff receipt. Removing a source does not erase that request snapshot from approved CRM work. Timed first-contact response targets start at the later of handoff creation and the staff-confirmed task deadline; existing reconciliation updates targets after a reschedule. Untimed target rules are unchanged.
+
+Timed submissions freeze the full reviewed payload for retries. A matching retry does not consume more quota or recreate a removed source; changed timed retries require a new chat. Calendar-version conflicts require a fresh session and readback. Old embeds and sessions continue supporting untimed requests. Error text uses an allowlist and never displays server diagnostics.
+
+Demo mode rehearses preferred, confirmed, and rescheduled times in page memory. It makes no provider or mutation requests. A requested time requires staff confirmation and does not reserve an appointment. Holidays, overnight hours, staff capacity, external calendars, and automatic booking are not modeled. See [preferred-time rollback](ops/preferred-callback-time-rollback.md) for the additive-schema recovery procedure.

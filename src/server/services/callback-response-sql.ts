@@ -5,7 +5,7 @@ export function responseSourcesSql(organizationId: string) {
     FROM "WebsiteReceptionistCallback" c WHERE c."organizationId"=${organizationId} AND c.status='pending'
       AND NOT EXISTS (SELECT 1 FROM "CallbackCrmHandoff" h WHERE h."organizationId"=${organizationId} AND h."callbackId"=c.id)
     UNION ALL
-    SELECT h."callbackId",'attempt',h."createdAt",t.id,t."assigneeId",u.name
+    SELECT h."callbackId",'attempt',CASE WHEN h."preferredTime"->>'at' IS NOT NULL THEN GREATEST(h."createdAt",t."dueDate") ELSE h."createdAt" END,t.id,t."assigneeId",u.name
     FROM "CallbackCrmHandoff" h JOIN "Task" t ON t.id=h."taskId" AND t."leadId"=h."leadId" AND t."organizationId"=${organizationId}
     JOIN "Lead" l ON l.id=h."leadId" AND l."organizationId"=${organizationId} JOIN "User" u ON u.id=t."assigneeId"
     WHERE h."organizationId"=${organizationId} AND NOT l."isClosed" AND l."deletedAt" IS NULL

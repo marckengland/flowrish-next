@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import { Prisma, type CallbackOutcomeEvent } from '@prisma/client'
 import { z, ZodError } from 'zod'
 import { prisma } from '@/server/db/client'
+import { preferredTimeSchema } from '@/lib/callback-time'
+import { readCallbackCalendar, checkCallbackTime, validateCallbackInstant } from './callback-time'
 import { getEffectivePermissions } from '@/server/auth/permissions'
 import { AppError } from '@/lib/errors'
 import { websiteCallbackRecordSchema } from '@/lib/website-receptionist'
@@ -20,7 +22,7 @@ async function authorize(organizationId: string, userId: string, db: Db = prisma
   if (!permissions.has('leads:read') || !permissions.has('leads:write')) fail('FORBIDDEN', 'Organization membership and CRM read/write permissions are required.', 403)
   return { isAdmin: permissions.has('admin:settings') }
 }
-async function context(organizationId: string, userId: string, callbackId: string, db: Db, isAdmin: boolean) {
+async function context(organizationId: string, userId: string, callbackId: string, db: Db, isAdmin: boolean, lockCalendar = false) {
   const receipt = await db.callbackCrmHandoff.findFirst({ where: { callbackId, organizationId } })
   if (!receipt) fail('NOT_FOUND', 'Callback CRM handoff not found.', 404)
   const [task, lead, source, latest, closed, members] = await Promise.all([
@@ -34,11 +36,14 @@ async function context(organizationId: string, userId: string, callbackId: strin
   if (!isAdmin && task?.assigneeId !== userId) fail('FORBIDDEN', 'Only the current callback owner or an organization administrator can manage this request.', 403)
   const leadAvailable = !!lead && !lead.deletedAt && !lead.isClosed
   const availableTask = task && leadAvailable ? task : null
-  const version = hash({ receipt, task, lead, source, sequence: latest?.sequence ?? 0, closed: !!closed, members })
-  return { receipt, task: availableTask, source, leadAvailable, closed: !!closed, latest, members, version }
+  const preference = receipt.preferredTime || source?.preferredTime
+  const preferredTime = preference ? preferredTimeSchema.parse(preference) : undefined
+  const callbackHours = preferredTime ? await readCallbackCalendar(organizationId, db, lockCalendar) : null
+  const version = hash({ receipt, task, lead, source, sequence: latest?.sequence ?? 0, closed: !!closed, members, ...(callbackHours ? { callbackHours } : {}) })
+  return { receipt, task: availableTask, source, leadAvailable, closed: !!closed, latest, members, version, preferredTime, callbackHours }
 }
 function sourceView(source: NonNullable<Awaited<ReturnType<typeof context>>['source']>) {
-  return websiteCallbackRecordSchema.parse({ id: source.id, fullName: source.fullName, phone: source.phone, reason: source.reason, siteOrigin: source.siteOrigin, status: source.status, consentedAt: source.consentedAt.toISOString(), createdAt: source.createdAt.toISOString(), updatedAt: source.updatedAt.toISOString() })
+  return websiteCallbackRecordSchema.parse({ id: source.id, fullName: source.fullName, phone: source.phone, reason: source.reason, siteOrigin: source.siteOrigin, status: source.status, consentedAt: source.consentedAt.toISOString(), createdAt: source.createdAt.toISOString(), updatedAt: source.updatedAt.toISOString(), ...(source.preferredTime ? { preferredTime: preferredTimeSchema.parse(source.preferredTime) } : {}) })
 }
 function eventView(row: CallbackOutcomeEvent) { return callbackOutcomeEventSchema.parse({ id: row.id, sequence: row.sequence, outcome: row.outcome, action: row.action, notes: row.notes, createdAt: row.createdAt.toISOString(), createdByName: row.createdByName, assigneeName: row.assigneeName, dueDate: row.dueDate?.toISOString() ?? null }) }
 export async function getCallbackOutcome(organizationId: string, userId: string, callbackId: string, raw: unknown) {
@@ -47,25 +52,26 @@ export async function getCallbackOutcome(organizationId: string, userId: string,
     return prisma.$transaction(async db => {
       const ctx = await context(organizationId, userId, callbackId, db, auth.isAdmin)
       const rows = await db.callbackOutcomeEvent.findMany({ where: { organizationId, callbackId, ...(query.before ? { sequence: { lt: query.before } } : {}) }, orderBy: { sequence: 'desc' }, take: 21 })
-      return callbackOutcomeDetailSchema.parse({ callbackId, taskId: ctx.receipt.taskId, version: ctx.version, source: ctx.source ? sourceView(ctx.source) : null, closed: ctx.closed, canEdit: !!ctx.task && !ctx.closed, leadAvailable: ctx.leadAvailable,
+      return callbackOutcomeDetailSchema.parse({ callbackId, taskId: ctx.receipt.taskId, version: ctx.version, source: ctx.source ? sourceView(ctx.source) : null, ...(ctx.preferredTime ? { preferredTime: ctx.preferredTime } : {}), ...(ctx.callbackHours ? { callbackHours: ctx.callbackHours } : {}), closed: ctx.closed, canEdit: !!ctx.task && !ctx.closed, leadAvailable: ctx.leadAvailable,
         task: ctx.task ? { id: ctx.task.id, title: ctx.task.title, dueDate: ctx.task.dueDate.toISOString(), assigneeId: ctx.task.assigneeId, assigneeName: label(ctx.task.assignee.name), isComplete: ctx.task.isComplete } : null,
         members: ctx.members.slice(0, 200).map(row => ({ id: row.userId, label: label(row.user.name) })), membersTruncated: ctx.members.length > 200,
         history: rows.slice(0, 20).map(eventView), hasMore: rows.length > 20, beforeNext: rows.length > 20 ? rows[19].sequence : null })
     }, { isolationLevel: 'RepeatableRead' })
   })
 }
-async function preview(organizationId: string, userId: string, callbackId: string, raw: unknown, db: Db, isAdmin: boolean) {
-  const input = callbackOutcomePreviewInputSchema.parse(raw), ctx = await context(organizationId, userId, callbackId, db, isAdmin)
+async function preview(organizationId: string, userId: string, callbackId: string, raw: unknown, db: Db, isAdmin: boolean, lockCalendar = false) {
+  const input = callbackOutcomePreviewInputSchema.parse(raw), ctx = await context(organizationId, userId, callbackId, db, isAdmin, lockCalendar)
   if (ctx.version !== input.expectedVersion) fail('OUTCOME_CONFLICT', 'The callback, task, or history changed. Reload and review the current state.')
   if (!ctx.task || ctx.closed) fail('OUTCOME_CLOSED', 'This request is closed or its CRM task is unavailable. No records will be recreated.')
   const { draft } = input
   const member = draft.assigneeId ? ctx.members.find(row => row.userId === draft.assigneeId) : null
   if (draft.action === 'reschedule' && (!member || !draft.dueDate || !Number.isFinite(Date.parse(draft.dueDate)) || Date.parse(draft.dueDate) <= Date.now())) fail('OUTCOME_INVALID', 'Choose a current organization member and a future deadline.', 400)
+  const confirmedTime = draft.action === 'reschedule' && ctx.preferredTime ? checkCallbackTime(ctx.callbackHours, calendar => validateCallbackInstant(draft.dueDate!, calendar)) : undefined
   const nextOwner = member ? label(member.user.name) : null, nextDueDate = draft.dueDate ? new Date(draft.dueDate).toISOString() : null
   const taskChange = draft.action === 'close' ? 'Complete the existing task. No new task will be created.' : draft.action === 'reschedule' ? 'Update the existing task owner and deadline and leave it open.' : 'Keep the task owner, deadline and completion unchanged.'
   const sourceChange = draft.action === 'close' ? ctx.source ? 'Mark the source callback reviewed and close its request lifecycle.' : 'The source callback was removed. Close the retained request lifecycle.' : 'Keep callback review status unchanged.'
   const reopensTask = draft.action === 'reschedule' && ctx.task.isComplete
-  return callbackOutcomePreviewSchema.parse({ ...input, callbackId, version: hash({ input, callbackId, nextOwner, nextDueDate, taskChange, sourceChange, reopensTask }), taskTitle: ctx.task.title, taskChange, sourceChange, nextOwner, nextDueDate, reopensTask })
+  return callbackOutcomePreviewSchema.parse({ ...input, callbackId, version: hash({ input, callbackId, nextOwner, nextDueDate, taskChange, sourceChange, reopensTask }), taskTitle: ctx.task.title, taskChange, sourceChange, nextOwner, nextDueDate, reopensTask, ...(confirmedTime ? { confirmedTime } : {}) })
 }
 export async function previewCallbackOutcome(organizationId: string, userId: string, callbackId: string, raw: unknown) { return safe(async () => { id.parse(callbackId); const auth = await authorize(organizationId, userId); return prisma.$transaction(db => preview(organizationId, userId, callbackId, raw, db, auth.isAdmin), { isolationLevel: 'RepeatableRead' }) }) }
 export async function resolveCallbackOutcomeTask(organizationId: string, userId: string, taskId: string) {
@@ -93,7 +99,7 @@ export async function recordCallbackOutcome(organizationId: string, userId: stri
       await db.$queryRaw`SELECT id FROM "Lead" WHERE id=${receipt.leadId} AND "organizationId"=${organizationId} FOR UPDATE`
       await db.$queryRaw`SELECT id FROM "WebsiteReceptionistCallback" WHERE id=${callbackId} AND "organizationId"=${organizationId} FOR UPDATE`
       if (input.draft.assigneeId && !members.some(row => row.userId === input.draft.assigneeId)) fail('OUTCOME_INVALID', 'Choose a current organization member.', 400)
-      const reviewed = await preview(organizationId, userId, callbackId, { draft: input.draft, expectedVersion: input.expectedVersion }, db, auth.isAdmin)
+      const reviewed = await preview(organizationId, userId, callbackId, { draft: input.draft, expectedVersion: input.expectedVersion }, db, auth.isAdmin, true)
       if (reviewed.version !== input.previewVersion) fail('OUTCOME_CONFLICT', 'The reviewed action changed. Reload and preview again.')
       const latest = await db.callbackOutcomeEvent.findFirst({ where: { callbackId, organizationId }, orderBy: { sequence: 'desc' } })
       const actor = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } }), now = new Date(), draft = reviewed.draft
