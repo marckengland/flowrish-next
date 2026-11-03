@@ -50,3 +50,11 @@ Final independent review: ready to merge; no Critical or Important findings. Rev
 Final: Ruling: production-scale latency was not benchmarked against representative customer data. Ship with the 366-date bound, paginated records, explicit reads, and 15-second transaction timeout; make no latency/capacity promise. Cost if wrong: large organizations may get a slow report or a retryable unavailable response. The review also excluded final deployed behavior, which the root release verification will cover with production browser checks and read-only counts.
 
 Temporary-index rollback proof passed: reversing the full staged feature patch restored the exact baseline application/schema tree. Restoring that baseline again left its tree unchanged. No persistent rollback operations are needed.
+
+## Organization-permission follow-up
+
+The user approved fixing the deferred page-shell mismatch. The page now reuses the API's current-organization `callbackAccess` check before mounting the report. It catches only membership-denial `AppError` 403; authentication and database failures propagate. Unrelated pages and the global session permission helper remain unchanged.
+
+Seven new page tests exercise the real access helper and report client with mocked session/database transport. Six failed against the previous page; all seven pass with the fix. Coverage includes foreign-only roles, complementary permissions split between organizations, fresh local grants, removed membership, authentication, and database failures. A new-test assertion was corrected to inspect the SQL tag's interpolated argument, preserving its organization/user binding checks. Existing test files and assertions were untouched.
+
+Verified 1,561 unit tests, the 10 existing disposable performance database tests, strict/fast TypeScript, lint, Prisma validation, guarded production build, and four authenticated browser checks with mocked writes/read-only API access. Provider guard recorded zero transports. Independent review found no issues and separately passed the seven page tests. The original deferred page-shell finding is resolved. Rollback is a normal revert of this follow-up merge; no persistent schema/configuration changed.
