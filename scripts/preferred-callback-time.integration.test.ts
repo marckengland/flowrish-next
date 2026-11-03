@@ -68,6 +68,39 @@ describe('preferred callback timing on disposable PostgreSQL', () => {
     await expect(handoff.commitCallbackHandoff(org, user, callbackId, { draft: value, previewVersion: preview.version, confirmed: true })).rejects.toMatchObject({ statusCode: 409 })
     expect(await db.task.count({ where: { organizationId: org } })).toBe(0)
   })
+  it.each(['handoff', 'reschedule'] as const)('rechecks the calendar after a concurrent hours update before %s commits', async mode => {
+    const receipt = mode === 'reschedule' ? await confirm() : null
+    const value = await draft(), reviewed = mode === 'handoff' ? await handoff.previewCallbackHandoff(org, user, callbackId, value) : null
+    const detail = mode === 'reschedule' ? await outcomes.getCallbackOutcome(org, user, callbackId, {}) : null
+    const input = { draft: { outcome: 'retry', action: 'reschedule', notes: 'Synthetic concurrent hours change', assigneeId: user, dueDate: later.at }, expectedVersion: detail?.version ?? '' }
+    const outcomePreview = detail ? await outcomes.previewCallbackOutcome(org, user, callbackId, input) : null
+    let release!: () => void, locked!: (pid: number) => void
+    const gate = new Promise<void>(resolve => { release = resolve }), ready = new Promise<number>(resolve => { locked = resolve })
+    const writer = db.$transaction(async tx => {
+      await tx.receptionistConfig.update({ where: { organizationId: org }, data: { settings: { ...calendar, closesAt: '16:00' } } })
+      const [row] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`
+      locked(row.pid); await gate
+    }, { timeout: 10000 })
+    const writerPid = await ready
+    let settled = false
+    const operation = (mode === 'handoff'
+      ? handoff.commitCallbackHandoff(org, user, callbackId, { draft: value, previewVersion: reviewed!.version, confirmed: true })
+      : outcomes.recordCallbackOutcome(org, user, callbackId, { ...input, requestId: randomUUID(), previewVersion: outcomePreview!.version, confirmed: true }))
+      .then(value => ({ value, error: null }), error => ({ value: null, error })).finally(() => { settled = true })
+    let blocked = false
+    try {
+      for (let attempt = 0; attempt < 100 && !settled && !blocked; attempt++) {
+        const [row] = await db.$queryRaw<Array<{ blocked: boolean }>>`SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE ${writerPid}::integer = ANY(pg_blocking_pids(pid))) AS blocked`
+        blocked = row.blocked
+        if (!blocked && !settled) await new Promise(resolve => setTimeout(resolve, 10))
+      }
+    } finally { release(); await writer }
+    const result = await operation
+    expect(blocked).toBe(true); expect(result.error).toMatchObject({ statusCode: 409 })
+    expect(await db.task.count({ where: { organizationId: org } })).toBe(receipt ? 1 : 0)
+    if (receipt) expect((await db.task.findUniqueOrThrow({ where: { id: receipt.taskId } })).dueDate.toISOString()).toBe(preference.at)
+    expect(await db.callbackOutcomeEvent.count({ where: { organizationId: org } })).toBe(0)
+  })
   it('keeps requested timing after source removal and reschedules only through staff approval', async () => {
     const receipt = await confirm(); await db.websiteReceptionistCallback.delete({ where: { id: callbackId } })
     const detail = await outcomes.getCallbackOutcome(org, user, callbackId, {})

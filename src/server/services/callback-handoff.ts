@@ -28,7 +28,7 @@ async function receiptView(row: CallbackCrmHandoff, db: Db) {
   ])
   return handoffReceiptSchema.parse({ callbackId: row.callbackId, leadId: row.leadId, taskId: row.taskId, createdAt: row.createdAt.toISOString(), leadAvailable: !!lead, taskAvailable: !!task, ...(row.preferredTime ? { preferredTime: preferredTimeSchema.parse(row.preferredTime) } : {}) })
 }
-async function options(organizationId: string, callbackId: string, db: Db) {
+async function options(organizationId: string, callbackId: string, db: Db, lockCalendar = false) {
   const [callback, receipt] = await Promise.all([
     db.websiteReceptionistCallback.findFirst({ where: { id: callbackId, organizationId } }),
     db.callbackCrmHandoff.findFirst({ where: { callbackId, organizationId } }),
@@ -36,7 +36,7 @@ async function options(organizationId: string, callbackId: string, db: Db) {
   if (!callback && !receipt) fail('NOT_FOUND', 'Callback request not found.', 404)
   const callbackView = callback ? websiteCallbackRecordSchema.parse({ ...Object.fromEntries(['id', 'fullName', 'phone', 'reason', 'siteOrigin', 'status'].map(key => [key, callback[key as keyof typeof callback]])), consentedAt: callback.consentedAt.toISOString(), createdAt: callback.createdAt.toISOString(), updatedAt: callback.updatedAt.toISOString(), ...(callback.preferredTime ? { preferredTime: preferredTimeSchema.parse(callback.preferredTime) } : {}) }) : null
   if (receipt) return { data: handoffOptionsSchema.parse({ callback: callbackView, receipt: await receiptView(receipt, db), leads: [], contacts: [], members: [], stages: [], matchesTruncated: false, choicesTruncated: false }), snapshot: null }
-  const callbackHours = callbackView?.preferredTime ? await readCallbackCalendar(organizationId, db) : null
+  const callbackHours = callbackView?.preferredTime ? await readCallbackCalendar(organizationId, db, lockCalendar) : null
   const digits = callback!.phone.replace(/\D/g, '')
   const [matchedLeads, matchedContacts, members, stages] = await Promise.all([
     db.$queryRaw<{ id: string }[]>`SELECT l.id FROM "Lead" l WHERE l."organizationId"=${organizationId} AND l."deletedAt" IS NULL AND NOT l."isClosed" AND (regexp_replace(coalesce(l.phone,''),'[^0-9]','','g')=${digits} OR EXISTS (SELECT 1 FROM "LeadContact" lc JOIN "Contact" c ON c.id=lc."contactId" WHERE lc."leadId"=l.id AND c."organizationId"=${organizationId} AND regexp_replace(coalesce(c.phone,''),'[^0-9]','','g')=${digits})) ORDER BY l.id LIMIT 21`,
@@ -70,9 +70,9 @@ export async function getCallbackTaskSource(organizationId: string, userId: stri
   })
 }
 
-async function preview(organizationId: string, callbackId: string, draft: HandoffDraft, db: Db) {
+async function preview(organizationId: string, callbackId: string, draft: HandoffDraft, db: Db, lockCalendar = false) {
   if (new Date(draft.dueDate).getTime() <= Date.now()) fail('HANDOFF_INVALID', 'Choose a future callback deadline.')
-  const state = await options(organizationId, callbackId, db), { data } = state
+  const state = await options(organizationId, callbackId, db, lockCalendar), { data } = state
   if (data.receipt) fail('HANDOFF_ALREADY_DONE', 'This callback already has a CRM handoff. Reload its status.', 409)
   const callback = data.callback!
   if (callback.updatedAt !== draft.expectedUpdatedAt) fail('HANDOFF_CONFLICT', 'The callback changed. Reload its details before reviewing again.', 409)
@@ -119,7 +119,7 @@ export async function commitCallbackHandoff(organizationId: string, userId: stri
         await db.$queryRaw`SELECT s.id FROM "Stage" s JOIN "Pipeline" p ON p.id=s."pipelineId" WHERE s.id=${target.stageId} AND p."organizationId"=${organizationId} FOR SHARE OF s,p`
         if (target.contactId) await db.$queryRaw`SELECT id FROM "Contact" WHERE id=${target.contactId} AND "organizationId"=${organizationId} FOR SHARE`
       }
-      const reviewed = await preview(organizationId, callbackId, input.draft, db)
+      const reviewed = await preview(organizationId, callbackId, input.draft, db, true)
       if (reviewed.version !== input.previewVersion) fail('HANDOFF_CONFLICT', 'The preview changed. Review the current details before confirming.', 409)
       let leadId: string
       if (target.mode === 'lead') leadId = target.leadId

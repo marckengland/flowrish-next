@@ -26,31 +26,31 @@ Tradeoff: saved weekly hours cannot establish staff availability or reserve an a
 
 Files: new `src/lib/callback-time.ts` and tests; `prisma/schema.prisma`; new additive migration; relevant shared schemas.
 
-- [ ] Write failing tests for valid Manila conversion, closing boundary, weekends, invalid/past/over-90-day dates, DST gaps/folds, fractional offsets, stale timezone/version, and UTC formatting.
-- [ ] Implement pure calendar/preference schemas and validators without dependencies. Extend contracts using optional metadata so old payloads remain valid.
-- [ ] Add nullable preference snapshots and retry hash; generate Prisma client; prove persistence and rollback/data preservation in a disposable database.
+- [x] Write failing tests for valid Manila conversion, closing boundary, weekends, invalid/past/over-90-day dates, DST gaps/folds, fractional offsets, stale timezone/version, and UTC formatting.
+- [x] Implement pure calendar/preference schemas and validators without dependencies. Extend contracts using optional metadata so old payloads remain valid.
+- [x] Add nullable preference snapshots and retry hash; generate Prisma client; prove persistence and rollback/data preservation in a disposable database.
 
 ## Task 2: Visitor request and consent
 
 Files: website receptionist service/HTML, standalone widget JS, new focused server/widget tests.
 
-- [ ] Write failing tests for optional session calendar, consent readback, corrections, rejection before quota/write, stale calendars, matching retries, changed timed retries, and source-deleted retry safety.
-- [ ] Return safe calendar metadata, validate/lock saved business hours during timed submission, persist canonical preference/hash, render optional business-local input, and retain retry payload exactly.
-- [ ] Keep old no-preference request behavior and existing workflow assertions. No real website widget activation or production test records.
+- [x] Write failing tests for optional session calendar, consent readback, corrections, rejection before quota/write, stale calendars, matching retries, changed timed retries, and source-deleted retry safety.
+- [x] Return safe calendar metadata, validate/lock saved business hours during timed submission, persist canonical preference/hash, render optional business-local input, and retain retry payload exactly.
+- [x] Keep old no-preference request behavior and existing workflow assertions. No real website widget activation or production test records.
 
 ## Task 3: Staff confirmation and Demo mode
 
 Files: handoff/outcome services and schemas, staff components, demo reader/reducer/component, new tests and approved fixture extensions.
 
-- [ ] Write failing tests for requested-time visibility, confirmed/rescheduled business-local time, fresh approval, changed-hours preview conflict, retained source metadata, no-time legacy compatibility, and simulated-only behavior.
-- [ ] Use chosen time as the existing task deadline after explicit staff preview/approval; preserve requested timing on durable receipts. Validate future business-hour choices before handoff and reschedule mutations.
-- [ ] Add optional preferred time and staff confirmation controls to Demo mode, sharing the pure validator and using fictional in-memory state only.
+- [x] Write failing tests for requested-time visibility, confirmed/rescheduled business-local time, fresh approval, changed-hours preview conflict, retained source metadata, no-time legacy compatibility, and simulated-only behavior.
+- [x] Use chosen time as the existing task deadline after explicit staff preview/approval; preserve requested timing on durable receipts. Validate future business-hour choices before handoff and reschedule mutations.
+- [x] Add optional preferred time and staff confirmation controls to Demo mode, sharing the pure validator and using fictional in-memory state only.
 
 ## Task 4: Verify and release
 
 - [ ] Run focused tests, full units, formatter/lint, strict/fast types, Prisma validation, optimized build, disposable PostgreSQL integration/rollback checks, standalone widget and desktop/mobile browser checks. Block all live provider transports.
-- [ ] One fresh independent review; fix material findings through failing regressions and complete the full checks. Preserve all existing tests unless an explicitly approved update is required.
-- [ ] Inspect production schema/state read-only and current Supabase docs; apply only the additive migration with migration history recorded. Keep widget off and records unchanged.
+- [x] One fresh independent review; fix material findings through failing regressions and complete the full checks. Preserve all existing tests unless an explicitly approved update is required.
+- [x] Inspect production schema/state read-only and current Supabase docs; apply only the additive migration with migration history recorded. Keep widget off and records unchanged.
 - [ ] Commit/merge, verify merged checks, push and verify CI/deployment, then run deployed browser checks with writes/providers mocked. Report limitations and rollback.
 
 ## Review focus
