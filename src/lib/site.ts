@@ -7,16 +7,16 @@
  * deployment override can select another domain owned by the team.
  */
 const defaultSiteUrl = 'https://flowrish.marckengland.com'
-const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(
-  /\/+$/,
+const configuredSiteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, '') || defaultSiteUrl
+const configuredHostname = new URL(configuredSiteUrl).hostname.replace(
+  /\.$/,
   '',
 )
-// Ignore obsolete brand-domain overrides until a domain owned by the team is configured.
+// Compare normalized hosts so old-domain spellings cannot revive an unowned address.
 const siteUrl =
-  !configuredSiteUrl ||
-  /^https?:\/\/(?:[a-z0-9-]+\.)*flowrish\.com(?::\d+)?(?:[/?#]|$)/i.test(
-    configuredSiteUrl,
-  )
+  configuredHostname === 'flowrish.com' ||
+  configuredHostname.endsWith('.flowrish.com')
     ? defaultSiteUrl
     : configuredSiteUrl
 

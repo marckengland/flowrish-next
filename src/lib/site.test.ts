@@ -18,6 +18,9 @@ describe('public site address', () => {
     'https://flowrish.com',
     'https://app.flowrish.com/',
     ' https://www.flowrish.com/ ',
+    'https://flowrish.com.',
+    'https://www.flowrish.com./',
+    'https://%66lowrish.com/',
   ])('replaces an obsolete configured brand domain %s', async (value) => {
     vi.stubEnv('NEXT_PUBLIC_SITE_URL', value)
     vi.resetModules()
