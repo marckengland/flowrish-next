@@ -124,6 +124,7 @@ model Organization {
   websiteReceptionistCallbacks WebsiteReceptionistCallback[]
   callbackCrmHandoffs CallbackCrmHandoff[]
   callbackOutcomeEvents CallbackOutcomeEvent[]
+  callbackNotifications CallbackNotification[]
 }
 
 model KnowledgeDocument {
@@ -301,6 +302,7 @@ model OrganizationMember {
   user           User         @relation(fields: [userId], references: [id])
   organization   Organization @relation(fields: [organizationId], references: [id])
   isDefault      Boolean      @default(false) // User's default org
+  callbackNotifications CallbackNotification[]
   joinedAt       DateTime     @default(now())
 
   @@unique([userId, organizationId])
@@ -1321,4 +1323,22 @@ model WebsiteReceptionistCallback {
 
   @@unique([organizationId, sourceSessionId])
   @@index([organizationId, status, createdAt])
+}
+
+model CallbackNotification {
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId String
+  member OrganizationMember @relation(fields: [userId, organizationId], references: [userId, organizationId], onDelete: Cascade)
+  key String
+  kind String
+  callbackId String
+  taskId String?
+  entityVersion DateTime
+  dueDate DateTime?
+  createdAt DateTime @default(now())
+  readAt DateTime?
+
+  @@id([organizationId, userId, key])
+  @@index([organizationId, userId, createdAt, key])
 }

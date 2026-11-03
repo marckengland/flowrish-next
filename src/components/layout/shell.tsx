@@ -13,6 +13,7 @@ export interface ShellProps {
   permissions: readonly Permission[]
   /** Organization display name shown in the sidebar brand area and header. */
   organizationName?: string
+  notificationScope?: string
   children: ReactNode
 }
 
@@ -32,6 +33,7 @@ export function Shell({
   user,
   permissions,
   organizationName,
+  notificationScope,
   children,
 }: ShellProps): React.JSX.Element {
   return (
@@ -42,7 +44,7 @@ export function Shell({
         user={user}
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Header user={user} organizationName={organizationName} />
+        <Header user={user} organizationName={organizationName} notificationScope={notificationScope} />
         <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-7 lg:px-8">
           {children}
         </main>

@@ -50,6 +50,14 @@ History survives source callback and CRM target deletion. A missing or inactive 
 
 The service does not store visitor questions or conversation history. It retains only the latest public answer for retries, hashed session tokens and IP identifiers, and confirmed callback details. Scheduled cleanup removes sessions that expired over 24 hours ago and widget usage rows older than two UTC days. It preserves callback records and organization AI usage.
 
+## Callback notifications
+
+The header bell opens **Notifications**. A scheduled check every five minutes alerts current organization administrators about pending website callbacks that have not been handed to CRM. Staff with CRM read/write access receive alerts for callback work currently assigned to them. Once its deadline passes, an overdue reminder replaces the assignment alert. The bell refreshes its unread count once per visible minute, on focus after that interval, and after a read action.
+
+Notifications represent current actionable work. Refreshing hides requests already reviewed/dismissed or handed off, former assignments, changed deadlines, completed tasks, closed requests, unavailable leads/tasks and lost permissions. Each saved task version receives at most one assignment and one overdue alert. Saved task edits, including owner/deadline changes and reopening, can create a new version; reminders do not repeat every scheduled check.
+
+Choose **Unread** or **All current alerts** and use **Mark read** explicitly. Reading an alert changes only your notification; it never reviews a request, contacts a visitor, creates CRM work, completes a task or records an outcome. Opening a link does not mark it read. Notification records contain source identifiers and timestamps, and keep read/deduplication state after their source becomes inactive. Removing an organization membership deletes its notifications. There is no email, SMS, push or AI delivery, and reads never create alerts.
+
 ## Verification
 
 Run the repository's full unit, lint, type, Prisma, and build checks. Additional suites use synthetic businesses and mocked AI:
@@ -59,11 +67,13 @@ npx vitest run --config vitest.website-receptionist.config.ts
 npx vitest run --config vitest.receptionist-setup.config.ts
 npx vitest run --config vitest.callback-handoff.config.ts
 npx vitest run --config vitest.callback-outcomes.config.ts
+npx vitest run --config vitest.callback-notifications.config.ts
 npx playwright test --config playwright.website-receptionist.config.ts
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/website-receptionist-admin.spec.ts e2e/callback-handoff.spec.ts e2e/callback-outcomes.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-setup.spec.ts --retries=0
+PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-notifications.spec.ts e2e/callback-notifications-smoke.spec.ts --retries=0
 ```
 
 The PostgreSQL suite requires Docker and the local `pgvector/pgvector:pg16` image. It starts a disposable database and does not load production credentials. The isolated iframe suite requires neither an application server nor credentials. The admin suite requires an authenticated application target and mocks all widget settings, callback, and AI operations. Do not enable a production widget or call a real provider to run these suites.
 
-Deferred: CAPTCHA, appointment booking, bulk CRM conversion, callback notifications, live phone service, and automatic callback deletion. Voice input remains in the authenticated browser test mode; the website widget uses typed questions.
+Deferred: CAPTCHA, appointment booking, bulk CRM conversion, email/push delivery, live phone service, and automatic callback deletion. Voice input remains in the authenticated browser test mode; the website widget uses typed questions.

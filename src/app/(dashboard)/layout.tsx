@@ -105,6 +105,7 @@ export default async function DashboardLayout({
       }}
       permissions={Array.from(permissionSet)}
       organizationName={organization?.name}
+      notificationScope={`${session.organizationId}:${session.dbUser.id}`}
     >
       {children}
     </Shell>
