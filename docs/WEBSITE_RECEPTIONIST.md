@@ -165,3 +165,13 @@ PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-
 The PostgreSQL suite requires Docker and the local `pgvector/pgvector:pg16` image. It starts a disposable database and does not load production credentials. The isolated iframe suite requires neither an application server nor credentials. The admin suite requires an authenticated application target and mocks all widget settings, callback, and AI operations. Do not enable a production widget or call a real provider to run these suites.
 
 Deferred: CAPTCHA, appointment booking, bulk CRM conversion, email/push delivery, live phone service, and automatic callback deletion. Voice input remains in the authenticated browser test mode; the website widget uses typed questions.
+
+## Demo mode
+
+Open Receptionist home and choose **Demo mode** to practice without live AI or phone requests. The server checks current organization Settings or CRM access and reads only the saved business identity/hours and bounded excerpts from current, published, receptionist-approved services and pricing documents. Drafts, private phone notes, stale approvals, and AI credentials are excluded from the page data.
+
+The conversation uses prewritten rules for services, pricing, hours, callback requests, and unknown questions. It does not evaluate an AI model. Use fictional callback details. Review the readback and confirm consent, then separately preview and approve the simulated lead/task and callback outcomes. Correcting callback details invalidates consent. Changing an outcome invalidates its approval. Repeated confirmation does not duplicate the simulated action.
+
+Everything entered in Demo mode stays in page memory. Restart or reload to clear it. The page shows the latest 40 messages and 20 outcomes. It does not save a rehearsal report, submit a callback, create CRM records, change owners/deadlines, place calls, or change the website switch. Approved excerpts are rendered as plain text. Missing information is left for the team to confirm.
+
+Rollback for this feature is an ordinary code revert. There are no migrations, new dependencies, or configuration/data changes to undo. Live AI quality, microphone behavior, and telephone connectivity are outside this demo.
