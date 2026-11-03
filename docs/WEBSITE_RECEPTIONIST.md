@@ -58,6 +58,18 @@ Notifications represent current actionable work. Refreshing hides requests alrea
 
 Choose **Unread** or **All current alerts** and use **Mark read** explicitly. Reading an alert changes only your notification; it never reviews a request, contacts a visitor, creates CRM work, completes a task or records an outcome. Opening a link does not mark it read. Notification records contain source identifiers and timestamps, and keep read/deduplication state after their source becomes inactive. Removing an organization membership deletes its notifications. There is no email, SMS, push or AI delivery, and reads never create alerts.
 
+## Callback response targets
+
+Open **Settings → AI receptionist → Manage callback response targets**, or **Notifications → View callback response targets**. Targets are off until a settings administrator enables them, selects a current manager with settings and CRM read/write access, and approves applying the policy to waiting work.
+
+Set separate targets for CRM handoff and first recorded contact. Defaults are 60 and 120 business minutes. Enabling or editing adopts the current saved timezone, opening days, and same-day opening interval. The policy retains that snapshot when business settings change. Explicitly save the changed hours to recalculate waiting deadlines. Pausing remains available if saved hours become invalid or the manager leaves.
+
+The handoff clock starts when a visitor confirms a callback. Pending requests leave this phase when reviewed, dismissed, deleted, or handed to CRM. The contact clock starts at approved CRM handoff. **Reached** or **No answer** satisfies contact; **Needs another attempt** and manual task completion alone do not. Reassignment and rescheduling do not restart the clock. Closing the callback or losing an active CRM destination removes eligibility. Deleting the source callback after handoff preserves the retained CRM obligation.
+
+The queue supports missed targets or all waiting work, with 20 rows per page. Current permissions limit the displayed work. A separate check every five minutes calculates deadlines and sends deduplicated in-app escalations to the selected manager. Refresh to see new results. Policy changes invalidate previous flags until the next successful check. Escalation never creates or reassigns CRM work, contacts visitors, completes tasks, or records outcomes.
+
+Business minutes exclude closed days and hours and account for daylight-saving changes. The weekly schedule has no holiday overrides or overnight openings. Targets range from 5 to 1,440 minutes and cannot exceed 52 nominal weeks of opening minutes. Calendar searches stop after 400 local dates; unusually short schedules around skipped openings may require a shorter target. Manager selection and policy acknowledgement require administrator action; deploying this feature does not enable it.
+
 ## Verification
 
 Run the repository's full unit, lint, type, Prisma, and build checks. Additional suites use synthetic businesses and mocked AI:
@@ -68,10 +80,12 @@ npx vitest run --config vitest.receptionist-setup.config.ts
 npx vitest run --config vitest.callback-handoff.config.ts
 npx vitest run --config vitest.callback-outcomes.config.ts
 npx vitest run --config vitest.callback-notifications.config.ts
+npx vitest run --config vitest.callback-response.config.ts
 npx playwright test --config playwright.website-receptionist.config.ts
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/website-receptionist-admin.spec.ts e2e/callback-handoff.spec.ts e2e/callback-outcomes.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-setup.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-notifications.spec.ts e2e/callback-notifications-smoke.spec.ts --retries=0
+PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-response.spec.ts e2e/callback-response-smoke.spec.ts --retries=0
 ```
 
 The PostgreSQL suite requires Docker and the local `pgvector/pgvector:pg16` image. It starts a disposable database and does not load production credentials. The isolated iframe suite requires neither an application server nor credentials. The admin suite requires an authenticated application target and mocks all widget settings, callback, and AI operations. Do not enable a production widget or call a real provider to run these suites.

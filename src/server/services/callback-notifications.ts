@@ -7,18 +7,12 @@ import { callbackNotificationAck, callbackNotificationCount, callbackNotificatio
 
 // The current team-role permission union matches getEffectivePermissions. The
 // same candidates drive delivery, unread counts, lists and mark-read access.
+import { callbackRecipientsSql } from './callback-access'
+import { currentResponseTargetsSql } from './callback-response-sql'
+
 function candidates(organizationId: string, userId?: string) {
   const now = new Date()
-  return Prisma.sql`WITH recipients AS (
-    SELECT m."userId", COALESCE(bool_or(p.key='admin:settings'),false) AS admin,
-      COALESCE(bool_or(p.key='leads:read') AND bool_or(p.key='leads:write'),false) AS crm
-    FROM "OrganizationMember" m
-    LEFT JOIN "TeamMember" tm ON tm."userId"=m."userId"
-    LEFT JOIN "Team" t ON t.id=tm."teamId" AND t."organizationId"=${organizationId}
-    LEFT JOIN "RolePermission" p ON p."roleId"=tm."roleId" AND t.id IS NOT NULL
-    WHERE m."organizationId"=${organizationId} ${userId ? Prisma.sql`AND m."userId"=${userId}` : Prisma.empty}
-    GROUP BY m."userId"
-  ), events AS (
+  return Prisma.sql`WITH recipients AS (${callbackRecipientsSql(organizationId, userId)}), events AS (
     SELECT r."userId", 'new_callback'::text AS kind, c.id AS "callbackId", NULL::text AS "taskId", c."updatedAt" AS "entityVersion", NULL::timestamp AS "dueDate"
     FROM "WebsiteReceptionistCallback" c CROSS JOIN recipients r
     WHERE c."organizationId"=${organizationId} AND c.status='pending' AND r.admin
@@ -31,8 +25,11 @@ function candidates(organizationId: string, userId?: string) {
     JOIN recipients r ON r."userId"=t."assigneeId" AND r.crm
     WHERE h."organizationId"=${organizationId} AND NOT t."isComplete" AND NOT l."isClosed" AND l."deletedAt" IS NULL
       AND NOT EXISTS (SELECT 1 FROM "CallbackOutcomeEvent" e WHERE e."organizationId"=${organizationId} AND e."callbackId"=h."callbackId" AND e.action='close')
+    UNION ALL
+    SELECT r."userId",CASE WHEN target.phase='handoff' THEN 'handoff_escalation' ELSE 'attempt_escalation' END,target."callbackId",target."taskId",target."policyVersion",target."dueAt"
+    FROM (${currentResponseTargetsSql(organizationId)}) target JOIN recipients r ON r."userId"=target."backupUserId" AND r.admin AND r.crm WHERE target."dueAt"<${now}
   ), candidates AS (
-    SELECT e.*, encode(sha256(convert_to(jsonb_build_array(e.kind,e."callbackId",e."taskId",e."entityVersion")::text,'UTF8')),'hex') AS key FROM events e
+    SELECT e.*, encode(sha256(convert_to((CASE WHEN e.kind IN ('handoff_escalation','attempt_escalation') THEN jsonb_build_array(e.kind,e."callbackId",e."taskId",e."entityVersion",e."dueDate") ELSE jsonb_build_array(e.kind,e."callbackId",e."taskId",e."entityVersion") END)::text,'UTF8')),'hex') AS key FROM events e
   )`
 }
 async function member(organizationId: string, userId: string) {
@@ -56,19 +53,20 @@ export async function runCallbackNotificationSweep() {
     after = batch[batch.length - 1].id
   }
 }
-export async function getCallbackNotificationCount(organizationId: string, userId: string) {
+export async function getCallbackNotificationCount(organizationId: string, userId: string, includeResponses = false) {
   return safe(async () => {
     await member(organizationId, userId)
-    const [row] = await prisma.$queryRaw<Array<{ unread: number }>>`${candidates(organizationId, userId)} SELECT count(*)::int AS unread FROM "CallbackNotification" n JOIN candidates c ON c.key=n.key AND c."userId"=n."userId" WHERE n."organizationId"=${organizationId} AND n."userId"=${userId} AND n."readAt" IS NULL`
+    const [row] = await prisma.$queryRaw<Array<{ unread: number }>>`${candidates(organizationId, userId)} SELECT count(*)::int AS unread FROM "CallbackNotification" n JOIN candidates c ON c.key=n.key AND c."userId"=n."userId" WHERE n."organizationId"=${organizationId} AND n."userId"=${userId} AND n."readAt" IS NULL ${includeResponses ? Prisma.empty : Prisma.sql`AND n.kind IN ('new_callback','assigned','overdue')`}`
     return callbackNotificationCount.parse(row)
   })
 }
-export async function listCallbackNotifications(organizationId: string, userId: string, raw: unknown) {
+export async function listCallbackNotifications(organizationId: string, userId: string, raw: unknown, includeResponses = false) {
   return safe(async () => {
     const input = callbackNotificationQuery.parse(raw); await member(organizationId, userId)
     const rows = await prisma.$queryRaw<Array<{ key: string; kind: string; callbackId: string; taskId: string | null; dueDate: Date | null; createdAt: Date; readAt: Date | null }>>`${candidates(organizationId, userId)}
       SELECT n.key,n.kind,n."callbackId",n."taskId",n."dueDate",n."createdAt",n."readAt" FROM "CallbackNotification" n JOIN candidates c ON c.key=n.key AND c."userId"=n."userId"
       WHERE n."organizationId"=${organizationId} AND n."userId"=${userId} ${input.filter === 'unread' ? Prisma.sql`AND n."readAt" IS NULL` : Prisma.empty}
+      ${includeResponses ? Prisma.empty : Prisma.sql`AND n.kind IN ('new_callback','assigned','overdue')`}
       ORDER BY n."createdAt" DESC,n.key DESC LIMIT 21 OFFSET ${(input.page - 1) * 20}`
     return callbackNotificationList.parse({ rows: rows.slice(0, 20).map(row => ({ ...row, dueDate: row.dueDate?.toISOString() ?? null, createdAt: row.createdAt.toISOString(), readAt: row.readAt?.toISOString() ?? null })), page: input.page, hasMore: rows.length > 20 })
   })
