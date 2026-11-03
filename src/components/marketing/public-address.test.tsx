@@ -64,13 +64,23 @@ describe('public domain and contact references', () => {
         ),
       ).toBe(true)
       expect(page.textContent).toContain('flowrish.marckengland.com')
+      expect(page.textContent).toContain('Our team will confirm pricing')
+      expect(page.textContent).not.toMatch(
+        /\$\d|trial|per seat|seat\/mo|billed|−20%|most popular|volume & annual/i,
+      )
+      if (waitlist) {
+        expect(page.textContent).toContain('Waitlist form')
+        expect(
+          page.querySelectorAll('a[href="#waitlist"]').length,
+        ).toBeGreaterThanOrEqual(3)
+      }
     },
   )
   it('keeps authenticated visitors routed into the CRM', async () => {
     state.authenticated = true
     await expect(LandingPage()).rejects.toThrow('Redirect to /dashboard')
   })
-  it('hides the unconfigured sales action while preserving signup and pricing controls', () => {
+  it('hides the unconfigured sales action while preserving signup and confirmed pricing wording', () => {
     render(<PricingSection getStartedHref="/onboarding" />)
     expect(
       screen.queryByRole('link', { name: 'Talk to sales' }),
@@ -80,7 +90,32 @@ describe('public domain and contact references', () => {
         .getAllByRole('link', { name: 'Get started' })
         .map((link) => link.getAttribute('href')),
     ).toEqual(['/onboarding', '/onboarding'])
-    expect(screen.getByRole('button', { name: 'Monthly' })).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Monthly' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Annual/ }),
+    ).not.toBeInTheDocument()
+    expect(screen.getAllByText('Our team will confirm pricing')).toHaveLength(3)
+    expect(document.body.textContent).not.toMatch(
+      /\$\d|trial|per seat|seat\/mo|billed|−20%|most popular|volume & annual/i,
+    )
+  })
+  it('keeps the waitlist as the public pricing contact path', () => {
+    render(
+      <PricingSection
+        getStartedHref="#waitlist"
+        primaryLabel="Join the waitlist"
+      />,
+    )
+    expect(
+      screen
+        .getAllByRole('link', { name: 'Join the waitlist' })
+        .map((link) => link.getAttribute('href')),
+    ).toEqual(['#waitlist', '#waitlist'])
+    expect(screen.getByText('Lead & contact management')).toBeVisible()
+    expect(screen.getByText('Cadences & Rhythm engine')).toBeVisible()
+    expect(screen.getByText('Audit log & SLAs')).toBeVisible()
   })
   it('renders a supplied real sales destination without changing the default', () => {
     render(

@@ -79,29 +79,20 @@ export interface PlanTier {
   slug: PlanSlug
   name: string
   blurb: string
-  /** Monthly + annual per-seat prices, or null for "Custom" (Enterprise). */
-  price: { monthly: string; annual: string } | null
-  customPrice?: string
-  subLabelCustom?: string
   /** Feature bullets shown on the pricing card. */
   features: string[]
   featured?: boolean
 }
 
-/**
- * Pricing tiers shown on the marketing page. Prices are per-seat.
- *
- * NOTE: prices below are the current published values — adjust the numbers
- * here (one place) to change what the pricing page displays. Feature access is
- * enforced server-side via FEATURE_MIN_PLAN, so keep the bullet lists in sync
- * with that map when you move a capability between tiers.
- */
+/** Approved public pricing wording until commercial terms are confirmed. */
+export const PUBLIC_PRICING_MESSAGE = 'Our team will confirm pricing'
+
+/** Plan descriptions and feature lists; access is enforced by FEATURE_MIN_PLAN. */
 export const PLAN_TIERS: PlanTier[] = [
   {
     slug: 'starter',
     name: 'Starter',
     blurb: 'For small teams getting organized.',
-    price: { monthly: '$24', annual: '$19' },
     features: [
       'Lead & contact management',
       'Kanban pipeline',
@@ -112,7 +103,6 @@ export const PLAN_TIERS: PlanTier[] = [
     slug: 'growth',
     name: 'Growth',
     blurb: 'Automation and forecasting for scaling teams.',
-    price: { monthly: '$59', annual: '$49' },
     features: [
       'Everything in Starter',
       'Cadences & Rhythm engine',
@@ -125,9 +115,6 @@ export const PLAN_TIERS: PlanTier[] = [
     slug: 'enterprise',
     name: 'Enterprise',
     blurb: 'Governance and control for large orgs.',
-    price: null,
-    customPrice: 'Custom',
-    subLabelCustom: 'Volume & annual terms',
     features: [
       'Everything in Growth',
       'Custom roles & SSO',

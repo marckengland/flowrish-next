@@ -1,71 +1,36 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
 import { Check } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import { PLAN_TIERS } from '@/lib/plans'
+import { PLAN_TIERS, PUBLIC_PRICING_MESSAGE } from '@/lib/plans'
 
 export interface PricingSectionProps {
   /** Where the plan CTAs point (e.g. /onboarding, or /dashboard when signed in). */
   getStartedHref: string
+  primaryLabel?: string
   /** Optional real contact destination; hide the enterprise CTA when absent. */
   talkToSalesHref?: string
 }
 
-/**
- * Marketing pricing block with an interactive Monthly/Annual toggle,
- * matching the landing prototype (Starter / Growth featured / Enterprise).
- */
+/** Public plan information with pricing confirmed by the team. */
 export function PricingSection({
   getStartedHref,
+  primaryLabel = 'Get started',
   talkToSalesHref,
 }: PricingSectionProps): React.JSX.Element {
-  const [annual, setAnnual] = useState(true)
-
   // Tiers + feature lists come from the shared plan source of truth
   // (src/lib/plans.ts), which the server-side entitlement guard reads too.
   const tiers = PLAN_TIERS
-
-  const billLabel = annual ? 'Billed annually' : 'Billed monthly'
 
   return (
     <section id="pricing" className="scroll-mt-20 px-6 py-14 sm:px-14">
       <div className="reveal mb-10 flex flex-wrap items-end justify-between gap-5">
         <div>
           <h2 className="max-w-[560px] text-[42px] font-bold leading-[1.05] tracking-[-0.03em]">
-            <span className="whitespace-nowrap">Priced per seat.</span>{' '}
-            <span className="whitespace-nowrap">No admin tax.</span>
+            Plans for your team.
           </h2>
-        </div>
-        <div className="inline-flex items-center gap-1 rounded-[11px] bg-muted p-1">
-          <button
-            type="button"
-            onClick={() => setAnnual(false)}
-            aria-pressed={!annual}
-            className={cn(
-              'rounded-lg px-4 py-1.5 text-[13px] font-semibold transition-colors',
-              !annual
-                ? 'bg-card text-foreground shadow-sm'
-                : 'text-muted-foreground',
-            )}
-          >
-            Monthly
-          </button>
-          <button
-            type="button"
-            onClick={() => setAnnual(true)}
-            aria-pressed={annual}
-            className={cn(
-              'rounded-lg px-4 py-1.5 text-[13px] font-semibold transition-colors',
-              annual
-                ? 'bg-card text-foreground shadow-sm'
-                : 'text-muted-foreground',
-            )}
-          >
-            Annual <span className="opacity-70">−20%</span>
-          </button>
         </div>
       </div>
 
@@ -80,33 +45,14 @@ export function PricingSection({
                 : 'border-border',
             )}
           >
-            {tier.featured && (
-              <div className="mb-3.5 inline-block w-fit rounded-full bg-foreground px-2.5 py-1 font-mono text-[11px] font-semibold tracking-[0.04em] text-background">
-                MOST POPULAR
-              </div>
-            )}
             <div className="mb-1.5 text-[15px] font-semibold">{tier.name}</div>
             <p className="mb-[18px] text-[13.5px] leading-[1.45] text-muted-foreground">
               {tier.blurb}
             </p>
 
-            <div className="mb-1 flex items-baseline gap-1.5">
-              <span className="tnum text-[40px] font-bold tracking-[-0.03em]">
-                {tier.price
-                  ? annual
-                    ? tier.price.annual
-                    : tier.price.monthly
-                  : tier.customPrice}
-              </span>
-              {tier.price && (
-                <span className="text-[14px] text-muted-foreground">
-                  /seat/mo
-                </span>
-              )}
-            </div>
-            <div className="mb-[22px] text-[12px] text-muted-foreground">
-              {tier.price ? billLabel : tier.subLabelCustom}
-            </div>
+            <p className="mb-[22px] text-[18px] font-semibold leading-snug">
+              {PUBLIC_PRICING_MESSAGE}
+            </p>
 
             {(tier.slug !== 'enterprise' || talkToSalesHref) && (
               <Link
@@ -120,7 +66,7 @@ export function PricingSection({
                     : 'border border-border hover:bg-muted',
                 )}
               >
-                {tier.slug === 'enterprise' ? 'Talk to sales' : 'Get started'}
+                {tier.slug === 'enterprise' ? 'Talk to sales' : primaryLabel}
               </Link>
             )}
 

@@ -15,6 +15,7 @@ import type { Metadata } from 'next'
 
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { siteConfig } from '@/lib/site'
+import { PUBLIC_PRICING_MESSAGE } from '@/lib/plans'
 import { DashboardMockup } from '@/components/marketing/dashboard-mockup'
 import { CadenceFlow } from '@/components/marketing/cadence-flow'
 import { MarketingNav } from '@/components/marketing/marketing-nav'
@@ -137,9 +138,7 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
               </Link>
             </div>
             <p className="rise rise-4 font-mono text-[13px] text-muted-foreground">
-              {waitlistEnabled
-                ? "Private beta. We'll email you the moment a spot opens."
-                : 'No credit card required. 14-day trial.'}
+              {PUBLIC_PRICING_MESSAGE}
             </p>
           </div>
           <div className="rise rise-2 relative">
@@ -340,7 +339,10 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
         </section>
 
         {/* PRICING */}
-        <PricingSection getStartedHref={getStartedHref} />
+        <PricingSection
+          getStartedHref={getStartedHref}
+          primaryLabel={primaryLabel}
+        />
 
         {/* FINAL CTA */}
         <section className="px-6 py-10 sm:px-10">
