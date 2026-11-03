@@ -34,6 +34,7 @@ const PAGE_TITLES: Array<{ prefix: string; label: string }> = [
   { prefix: '/callbacks/performance', label: 'Receptionist performance' },
   { prefix: '/receptionist/setup', label: 'Receptionist setup' },
   { prefix: '/receptionist/callbacks', label: 'Callback inbox' },
+  { prefix: '/receptionist/feedback', label: 'Visitor feedback' },
   { prefix: '/receptionist', label: 'Receptionist' },
   { prefix: '/pipeline', label: 'Pipeline' },
   { prefix: '/leads', label: 'Leads' },

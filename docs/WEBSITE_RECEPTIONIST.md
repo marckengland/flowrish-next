@@ -108,6 +108,20 @@ The inbox and Settings share the same callback controls. Reviewing or dismissing
 
 There are no new callback APIs, background jobs, provider calls, or automatic approvals. Configuration remains in Settings and guided setup.
 
+## Visitor feedback and FAQ drafts
+
+Open **Receptionist → Visitor feedback**, or **Settings → AI receptionist → Review visitor feedback**. Current organization membership and Settings permission are required. Load feedback settings explicitly, then acknowledge question saving before enabling it. Feedback is off by default, and changing it resets active chats without enabling website reception. Ordinary website saves retain the separate feedback setting.
+
+An opted-in session shows **This didn’t help** after an answer. The form explains that question copies in FAQs can remain after report expiry/deletion. Opening it does not save anything. The visitor can remove personal information, then must agree to save the reviewed question. Editing clears that agreement. Feedback contains the submitted question, allowed website origin and server consent time; it is not a verified transcript and includes no answer, contact details or full conversation.
+
+Saving uses the current session and answered-request ID. There is at most one report per answered request and a fifty-report organization limit per UTC day, tracked separately so deleting reports does not restore the allowance. Text-free daily counters are removed after two UTC days. Retrying the same reviewed text does not create another report or call AI. Closing an unresolved retry stops further attempts and explains that the earlier request may already have saved. The callback form remains independent.
+
+Administrators explicitly load Open, Dismissed or All reports, with twenty rows per page. Reports expire from review after thirty days and are removed during daily cleanup. Administrators can dismiss/reopen a report or permanently delete it after confirmation. An opaque session receipt prevents a deleted report from reappearing on a late public retry; it contains no question text and expires with ordinary session cleanup.
+
+**Create FAQ draft** copies a question into a private Library draft with an empty answer. It reuses an existing draft on retries and shares the fifty-active-document Library limit. Add and verify an answer in Library, remove any unsuitable visitor text, then publish and approve separately through the existing workflow. These explicitly created documents remain after feedback expiry/deletion. Feedback actions never generate answers, publish, approve, create CRM work, contact visitors or spend AI credits.
+
+Visitor reports stay separate from the rehearsal knowledge-gaps inbox. Semantic grouping, automatic answers and publication are outside this release. The [rollback procedure](ops/visitor-feedback-rollback.md) preserves expiry even when the feature is disabled.
+
 ## Receptionist performance
 
 Open **Settings → AI receptionist → View receptionist performance**, or use the same link on **Callback response targets**. The dashboard requires current organization membership with Settings and CRM read/write permissions. It reads existing records and never calls a provider, contacts a visitor, approves a handoff, records a result, calculates new targets, or creates notifications.
@@ -135,12 +149,14 @@ npx vitest run --config vitest.callback-notifications.config.ts
 npx vitest run --config vitest.callback-response.config.ts
 npx vitest run --config vitest.callback-performance.config.ts
 npx vitest run --config vitest.receptionist-home.config.ts
+npx vitest run --config vitest.visitor-feedback.config.ts
 npx playwright test --config playwright.website-receptionist.config.ts
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/website-receptionist-admin.spec.ts e2e/callback-handoff.spec.ts e2e/callback-outcomes.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-setup.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-installation.spec.ts e2e/receptionist-installation-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-home.spec.ts e2e/receptionist-home-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-callback-inbox.spec.ts e2e/receptionist-callback-inbox-smoke.spec.ts --retries=0
+PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/visitor-feedback-admin.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-notifications.spec.ts e2e/callback-notifications-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-response.spec.ts e2e/callback-response-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-performance.spec.ts e2e/callback-performance-smoke.spec.ts --retries=0
