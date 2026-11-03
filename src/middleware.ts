@@ -173,6 +173,12 @@ export async function middleware(request: NextRequest) {
   // The embed route supplies its tenant-specific frame-ancestors policy in Node.
   if (publicWebsite) return response
 
+  // This static sample needs no session or organization data. Keep writes and
+  // neighboring paths behind the normal authentication gate.
+  if (path === '/demo' && ['GET', 'HEAD'].includes(request.method)) {
+    return response
+  }
+
   // 3. Auth check via Supabase (skip for auth callback/confirm — they handle their own session)
   const isAuthCallback = path.startsWith('/auth/callback') || path.startsWith('/auth/confirm')
 

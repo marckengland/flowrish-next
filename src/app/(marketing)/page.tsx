@@ -136,6 +136,12 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
                 {primaryLabel}
                 <ArrowRight className="size-[17px]" aria-hidden="true" />
               </Link>
+              <Link
+                href="/demo"
+                className="inline-flex min-h-12 items-center rounded-xl border px-5 text-sm font-semibold transition-colors hover:bg-muted"
+              >
+                Try the receptionist demo
+              </Link>
             </div>
             <p className="rise rise-4 font-mono text-[13px] text-muted-foreground">
               {PUBLIC_PRICING_MESSAGE}
