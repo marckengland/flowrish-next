@@ -14,7 +14,7 @@ function BellState(): React.JSX.Element {
       if (!active || pending || document.visibilityState !== 'visible' || !explicit && Date.now() - lastAttempt < 60000) return
       const controller = new AbortController(); pending = controller; lastAttempt = Date.now()
       try {
-        const response = await fetch('/api/callback-notifications/count', { cache: 'no-store', signal: controller.signal })
+        const response = await fetch('/api/callback-notifications/count', { headers: { 'X-Flowrish-Response-Targets': '1' }, cache: 'no-store', signal: controller.signal })
         if (!response.ok) throw new Error('Unavailable')
         const next = callbackNotificationCount.parse((await response.json()).data)
         if (active && !controller.signal.aborted) { setCount(next.unread); setFailed(false) }

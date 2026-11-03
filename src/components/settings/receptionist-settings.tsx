@@ -82,6 +82,7 @@ export function ReceptionistSettings(): React.JSX.Element {
       <div className="space-y-3 rounded-lg border p-4 text-sm">
         <p className="font-medium">Set up your receptionist</p>
         <Link href="/receptionist/setup" className="inline-flex min-h-11 items-center font-medium underline">Open guided website setup</Link>
+        <Link href="/callbacks/response-targets" className="flex min-h-11 items-center font-medium underline">Manage callback response targets</Link>
         <ol aria-label="Receptionist setup steps" className="grid gap-3 sm:grid-cols-2">
           <li><span className="font-medium">1. Business and callback team</span><p className="text-muted-foreground">Set your business name, hours, callback owner, and lead stage below.</p></li>
           <li><span className="font-medium">2. Approved knowledge</span><p className="text-muted-foreground">Save FAQs and check public-approved Library documents.</p></li>

@@ -125,6 +125,8 @@ model Organization {
   callbackCrmHandoffs CallbackCrmHandoff[]
   callbackOutcomeEvents CallbackOutcomeEvent[]
   callbackNotifications CallbackNotification[]
+  callbackResponsePolicy CallbackResponsePolicy?
+  callbackResponseTargets CallbackResponseTarget[]
 }
 
 model KnowledgeDocument {
@@ -1341,4 +1343,32 @@ model CallbackNotification {
 
   @@id([organizationId, userId, key])
   @@index([organizationId, userId, createdAt, key])
+}
+
+model CallbackResponsePolicy {
+  organizationId String @id
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enabled Boolean @default(false)
+  handoffMinutes Int @default(60)
+  attemptMinutes Int @default(120)
+  backupUserId String?
+  hours Json?
+  businessUpdatedAt DateTime?
+  updatedAt DateTime @default(now()) @updatedAt
+  lastCheckedAt DateTime?
+}
+
+model CallbackResponseTarget {
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  callbackId String
+  phase String
+  startedAt DateTime
+  dueAt DateTime
+  policyVersion DateTime
+  taskId String?
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@id([organizationId, callbackId, phase])
+  @@index([organizationId, policyVersion, dueAt])
 }

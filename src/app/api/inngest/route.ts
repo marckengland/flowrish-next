@@ -8,6 +8,7 @@ import { taskReminderFunction } from '@/server/inngest/task-reminder'
 import { forecastSnapshotFunction } from '@/server/inngest/forecast-snapshot'
 import { websiteReceptionistCleanupFunction } from '@/server/inngest/website-receptionist-cleanup'
 import { callbackNotificationFunction } from '@/server/inngest/callback-notifications'
+import { callbackResponseFunction } from '@/server/inngest/callback-response'
 
 /**
  * Inngest serve endpoint for flowrish-next.
@@ -44,5 +45,6 @@ export const { GET, POST, PUT } = serve({
     forecastSnapshotFunction,
     websiteReceptionistCleanupFunction,
     callbackNotificationFunction,
+    callbackResponseFunction,
   ],
 })
