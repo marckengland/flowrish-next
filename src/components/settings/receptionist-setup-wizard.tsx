@@ -9,6 +9,7 @@ import { ReceptionistSetupSimulation } from './receptionist-setup-simulation'
 import { SETUP_HISTORY_EVENT } from '@/lib/receptionist-setup-history'
 import { businessHoursTemplate, setupBusinessSchema, setupSnapshotSchema, type SetupBusiness, type SetupSnapshot } from '@/lib/receptionist-setup'
 
+import { CalendarExceptionsEditor } from '@/components/receptionist/business-calendar'
 import { ReceptionistInstallationCheck } from './receptionist-installation-check'
 type Navigation = number | 'reload' | { href: string }
 const steps = ['Business', 'Library', 'Website & budget', 'Simulation', 'Review & enable']
@@ -121,6 +122,7 @@ export function ReceptionistSetupWizard(): React.JSX.Element {
           <label className="block text-sm font-medium">Time zone<input required maxLength={100} className={field} placeholder="Asia/Manila" value={draft.timeZone} onChange={event => setDraft({ ...draft, timeZone: event.target.value })} /><span className="text-xs font-normal text-muted-foreground">Use an IANA time zone, such as Asia/Manila or America/New_York.</span></label>
           <div className="grid grid-cols-2 gap-3"><label className="block text-sm font-medium">Opening time<input className={field} type="time" required value={draft.opensAt} onChange={event => setDraft({ ...draft, opensAt: event.target.value })} /></label><label className="block text-sm font-medium">Closing time<input className={field} type="time" required value={draft.closesAt} onChange={event => setDraft({ ...draft, closesAt: event.target.value })} /></label></div>
           <fieldset><legend className="mb-2 text-sm font-medium">Business days</legend><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{days.map((day, index) => <label key={day} className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={draft.businessDays.includes(index)} onChange={event => setDraft({ ...draft, businessDays: (event.target.checked ? [...draft.businessDays, index] : draft.businessDays.filter(value => value !== index)).sort() })} />{day}</label>)}</div></fieldset>
+          <CalendarExceptionsEditor value={draft.calendarExceptions} timeZone={draft.timeZone} disabled={busy} onChange={value => setDraft({ ...draft, calendarExceptions: value })} />
           {snapshot.business.phoneEnabled && <p className="text-sm">Phone reception is currently enabled. These business details also update its greeting and hours.</p>}
           <Button type="submit" disabled={busy || snapshot.business.saved && !dirty}>Save business details</Button>
         </form>}

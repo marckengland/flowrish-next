@@ -1,3 +1,4 @@
+import { calendarExceptionsText, type CalendarException } from './business-calendar'
 import { websiteCallbackInputSchema } from './website-receptionist'
 import { CallbackTimeError, preferredTimeLabel, resolveCallbackTime, type CallbackCalendar, type PreferredTime } from './callback-time'
 
@@ -30,10 +31,10 @@ export type DemoAction =
   | { type: 'edit_staff_time'; value: string }
   | { type: 'reset' | 'review_callback' | 'confirm_callback' | 'preview_handoff' | 'confirm_handoff' | 'preview_outcome' | 'confirm_outcome' }
 
-export function demoHours(value: { timeZone: string; opensAt: string; closesAt: string; businessDays: number[] }): string {
+export function demoHours(value: { timeZone: string; opensAt: string; closesAt: string; businessDays: number[]; calendarExceptions?: CalendarException[] }): string {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const time = (input: string) => { const [hour, minute] = input.split(':').map(Number); return `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${hour < 12 ? 'AM' : 'PM'}` }
-  return `${[...value.businessDays].sort().map(day => days[day]).join(', ')}, ${time(value.opensAt)} to ${time(value.closesAt)} (${value.timeZone})`
+  return `${[...value.businessDays].sort().map(day => days[day]).join(', ')}, ${time(value.opensAt)} to ${time(value.closesAt)} (${value.timeZone})${value.calendarExceptions?.length ? `; Date-specific hours: ${calendarExceptionsText(value).replaceAll('\n', '; ')}` : ''}`
 }
 export function createDemoState(business: DemoBusiness): DemoState {
   return { messages: [{ role: 'receptionist', text: `Hello, you've reached ${business.name}. This is a prewritten demo. How can we help?` }], draft: { fullName: 'Jamie Example', phone: '+12025550123', reason: 'Ask about services and pricing.', preferredLocalTime: '' }, requestedTime: null, confirmedTime: null, pendingConfirmedTime: null, staffLocalTime: '', callbackStep: 'idle', callbackConsent: false, handoffStep: 'idle', handoffConsent: false, outcome: 'reached', outcomeStep: 'idle', outcomeConsent: false, outcomes: [], closed: false, error: '' }

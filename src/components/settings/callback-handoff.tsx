@@ -11,7 +11,7 @@ import { handoffOptionsSchema, handoffDraftSchema, handoffPreviewSchema, handoff
 
 const field = 'min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
 class RequestError extends Error { constructor(readonly status: number) { super('Request unavailable') } }
-export function CallbackHandoff({ callbackId, disabled = false, onCallbackClosed }: { callbackId: string; disabled?: boolean; onCallbackClosed?: () => void }) {
+export function CallbackHandoff({ callbackId, disabled = false, onCallbackClosed, onCalendarResolved }: { callbackId: string; disabled?: boolean; onCallbackClosed?: () => void; onCalendarResolved?: () => void }) {
   const [options, setOptions] = useState<HandoffOptions | null>(null)
   const [receipt, setReceipt] = useState<HandoffReceipt | null>(null)
   const [preview, setPreview] = useState<HandoffPreview | null>(null)
@@ -66,15 +66,16 @@ export function CallbackHandoff({ callbackId, disabled = false, onCallbackClosed
     void run(async signal => {
       const next = z.object({ data: handoffReceiptSchema }).strict().parse(await request(base, signal, { draft: reviewed.draft, previewVersion: reviewed.version, confirmed: true })).data
       if (next.callbackId !== callbackId) throw new Error('Unexpected handoff receipt')
-      if (mounted.current) { setReceipt(next); setPreview(null); setApproved(false) }
+      if (mounted.current) { setReceipt(next); setPreview(null); setApproved(false); onCalendarResolved?.() }
     })
   }
   return <section aria-label="CRM callback handoff" className="space-y-3 border-t pt-3">
     <Button type="button" variant="outline" className="min-h-11 whitespace-normal" disabled={disabled || busy} onClick={load}>{options ? 'Reload handoff choices' : 'Prepare CRM handoff'}</Button>
     {busy && <p role="status">Working on handoff…</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {!receipt && options?.callback?.calendarReviewRequired && <p role="status" aria-label="Callback calendar review" className="rounded-md border p-3 text-sm">Review this callback against the current business calendar. The requested time needs staff confirmation; no existing task was moved.</p>}
     {options?.callback && <div className="space-y-1 text-sm"><p className="break-words font-medium">{options.callback.fullName} · {options.callback.phone}</p><p className="whitespace-pre-wrap break-words">{options.callback.reason}</p>{options.callback.preferredTime && <p>Requested callback time: {preferredTimeLabel(options.callback.preferredTime)}</p>}<p className="text-xs text-muted-foreground">Consent: {new Date(options.callback.consentedAt).toLocaleString()}</p></div>}
-    {receipt ? <div className="space-y-2 text-sm"><p role="status">This callback has already been handed to CRM.</p><p>{new Date(receipt.createdAt).toLocaleString()}</p>{receipt.preferredTime && <p>Requested callback time: {preferredTimeLabel(receipt.preferredTime)}</p>}<div className="flex flex-wrap gap-4">{receipt.leadAvailable ? <Link className="underline" href={`/leads/${receipt.leadId}`}>Open lead</Link> : <p>Original lead is unavailable.</p>}{receipt.taskAvailable ? <Link className="underline" href={`/tasks/${receipt.taskId}`}>Open callback task</Link> : <p>Original task is unavailable. A retry will not recreate it.</p>}</div><CallbackOutcomeTracker callbackId={callbackId} onSaved={action => { if (action === 'close') onCallbackClosed?.() }} /></div> : options?.callback && <>
+    {receipt ? <div className="space-y-2 text-sm"><p role="status">This callback has already been handed to CRM.</p><p>{new Date(receipt.createdAt).toLocaleString()}</p>{receipt.preferredTime && <p>Requested callback time: {preferredTimeLabel(receipt.preferredTime)}</p>}<div className="flex flex-wrap gap-4">{receipt.leadAvailable ? <Link className="underline" href={`/leads/${receipt.leadId}`}>Open lead</Link> : <p>Original lead is unavailable.</p>}{receipt.taskAvailable ? <Link className="underline" href={`/tasks/${receipt.taskId}`}>Open callback task</Link> : <p>Original task is unavailable. A retry will not recreate it.</p>}</div><CallbackOutcomeTracker callbackId={callbackId} onSaved={action => { if (action === 'close') onCallbackClosed?.(); else if (action === 'reschedule') onCalendarResolved?.() }} /></div> : options?.callback && <>
       <p className="text-sm text-muted-foreground">Choose a matching lead, or explicitly create a new lead. Contact matches can be linked to a new lead; tasks require a lead. Existing CRM details and callback review status stay unchanged.</p>
       {options.contacts.length > 0 && <ul aria-label="Matching contacts" className="list-inside list-disc text-sm">{options.contacts.map(row => <li key={row.id} className="break-words">{row.label}{row.leadIds.length ? ' · Linked active leads are included in the destination choices.' : ' · No active linked lead.'}</li>)}</ul>}
       {!options.leads.length && !options.contacts.length && <p className="text-sm">No matching international phone numbers found.</p>}

@@ -29,7 +29,7 @@ async function snapshot(organizationId: string, db: Db) {
   ])
   const parsed = stored ? receptionistConfigSchema.safeParse(stored.settings) : null
   if (stored && !parsed?.success) fail('SETUP_REPAIR_REQUIRED', 'Existing business settings need review in AI receptionist Settings. They were not reset.')
-  const business = parsed?.success ? { businessName: parsed.data.businessName, timeZone: parsed.data.timeZone, opensAt: parsed.data.opensAt, closesAt: parsed.data.closesAt, businessDays: [...new Set(parsed.data.businessDays)].sort() } : { businessName: organization.name.trim().slice(0, 120), timeZone: 'UTC', opensAt: '09:00', closesAt: '17:00', businessDays: [1, 2, 3, 4, 5] }
+  const business = parsed?.success ? { businessName: parsed.data.businessName, timeZone: parsed.data.timeZone, opensAt: parsed.data.opensAt, closesAt: parsed.data.closesAt, businessDays: [...new Set(parsed.data.businessDays)].sort(), ...(parsed.data.calendarExceptions !== undefined ? { calendarExceptions: parsed.data.calendarExceptions } : {}) } : { businessName: organization.name.trim().slice(0, 120), timeZone: 'UTC', opensAt: '09:00', closesAt: '17:00', businessDays: [1, 2, 3, 4, 5] }
   const paragraphs = samples.flatMap(row => (row.publishedText ?? '').split(/\n\s*\n/).map(text => ({ category: row.publishedCategory ?? 'GENERAL', text: text.trim() }))).filter(row => row.text && Buffer.byteLength(row.text, 'utf8') <= 1200).sort((left, right) => right.text.length - left.text.length)
   const sample = paragraphs[0] ?? null
   const version = createHash('sha256').update(JSON.stringify({ businessVersion: stored?.updatedAt ?? null, websiteVersion: website.settings?.updatedAt ?? null, documents, providerVersion: provider?.updatedAt ?? null, sample })).digest('hex')

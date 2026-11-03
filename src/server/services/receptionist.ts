@@ -15,7 +15,7 @@ async function validateReferences(orgId: string, config: ReceptionistConfig, db 
 }
 
 export async function saveReceptionistConfig(orgId: string, input: unknown, options: { createOnly?: boolean } = {}) {
-  const config = receptionistConfigSchema.parse(input)
+  let config = receptionistConfigSchema.parse(input)
   if (config.enabled) {
     await validateReferences(orgId, config)
     const voice = await prisma.voiceConfig.findUnique({ where: { organizationId: orgId } })
@@ -29,7 +29,14 @@ export async function saveReceptionistConfig(orgId: string, input: unknown, opti
       throw error
     }
   } else {
-    await prisma.receptionistConfig.upsert({ where: { organizationId: orgId }, create: { organizationId: orgId, settings: config }, update: { settings: config } })
+    await prisma.$transaction(async db => {
+      await db.$queryRaw`SELECT id FROM "Organization" WHERE id=${orgId} FOR NO KEY UPDATE`
+      await db.$queryRaw`SELECT id FROM "ReceptionistConfig" WHERE "organizationId"=${orgId} FOR UPDATE`
+      const current = await db.receptionistConfig.findUnique({ where: { organizationId: orgId } })
+      if (config.calendarExceptions === undefined && current?.settings && typeof current.settings === 'object' && !Array.isArray(current.settings) && current.settings.calendarExceptions !== undefined) config = receptionistConfigSchema.parse({ ...config, calendarExceptions: current.settings.calendarExceptions })
+      const updatedAt = new Date(Math.max(Date.now(), (current?.updatedAt?.getTime() ?? 0) + 1))
+      await db.receptionistConfig.upsert({ where: { organizationId: orgId }, create: { organizationId: orgId, settings: config, updatedAt }, update: { settings: config, updatedAt } })
+    }, { timeout: 10000 })
   }
   return config
 }

@@ -145,7 +145,7 @@
       feedbackEnabled = data.feedbackEnabled === true;
       callbackHours = preferredField && get('preferred-section') && get('preferred-help') && get('review-time') ? validCallbackHours(data.callbackHours) : null;
       if (get('preferred-section')) get('preferred-section').hidden = !callbackHours;
-      if (callbackHours) get('preferred-help').textContent = `Business time zone: ${callbackHours.timeZone}. ${callbackHours.businessDays.map(day => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]).join(', ')}, ${callbackHours.opensAt} to ${callbackHours.closesAt}.`;
+      if (callbackHours) get('preferred-help').textContent = `Business time zone: ${callbackHours.timeZone}. ${callbackHours.businessDays.map(day => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]).join(', ')}, ${callbackHours.opensAt} to ${callbackHours.closesAt}.${callbackHours.calendarExceptions && callbackHours.calendarExceptions.length ? ' Date-specific closures and hours also apply.' : ''}`;
       else if (preferredField) preferredField.value = '';
       canMessage = true;
       addMessage('Assistant', data.greeting);
@@ -252,7 +252,14 @@
   function validCallbackHours(value) {
     if (!value || typeof value.timeZone !== 'string' || value.timeZone.length > 100 || !Number.isFinite(Date.parse(value.version)) || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(value.opensAt) || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(value.closesAt) || value.opensAt >= value.closesAt || !Array.isArray(value.businessDays) || !value.businessDays.length || value.businessDays.length > 7 || new Set(value.businessDays).size !== value.businessDays.length || value.businessDays.some(day => !Number.isInteger(day) || day < 0 || day > 6)) return null;
     try { new Intl.DateTimeFormat('en', { timeZone: value.timeZone }); } catch { return null; }
-    return { timeZone: value.timeZone, opensAt: value.opensAt, closesAt: value.closesAt, businessDays: value.businessDays, version: value.version };
+    if (value.calendarExceptions !== undefined) {
+      if (!Array.isArray(value.calendarExceptions) || value.calendarExceptions.length > 100 || new Set(value.calendarExceptions.map(entry => entry && entry.date)).size !== value.calendarExceptions.length) return null;
+      for (const entry of value.calendarExceptions) {
+        if (!entry || typeof entry.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date) || Number(entry.date.slice(0, 4)) < 2000 || !Number.isFinite(Date.parse(entry.date + 'T00:00:00Z')) || new Date(entry.date + 'T00:00:00Z').toISOString().slice(0, 10) !== entry.date || typeof entry.closed !== 'boolean') return null;
+        if (!entry.closed && (!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(entry.opensAt) || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(entry.closesAt) || entry.opensAt >= entry.closesAt)) return null;
+      }
+    }
+    return { timeZone: value.timeZone, opensAt: value.opensAt, closesAt: value.closesAt, businessDays: value.businessDays, version: value.version, ...(value.calendarExceptions !== undefined ? { calendarExceptions: value.calendarExceptions.map(entry => entry.closed ? { date: entry.date, closed: true } : { date: entry.date, closed: false, opensAt: entry.opensAt, closesAt: entry.closesAt }) } : {}) };
   }
   function callbackValues() {
     return { fullName: fields[0].value.trim(), phone: fields[1].value.trim(), reason: fields[2].value.trim(), confirmed: true, website: get('website').value, ...(callbackHours && preferredField.value ? { preferredTime: { localTime: preferredField.value, timeZone: callbackHours.timeZone, businessVersion: callbackHours.version } } : {}) };
@@ -278,7 +285,9 @@
     }
     if (values.preferredTime) {
       const clock = values.preferredTime.localTime.slice(11), day = new Date(`${values.preferredTime.localTime.slice(0, 10)}T00:00:00Z`).getUTCDay();
-      if (!callbackHours.businessDays.includes(day) || clock < callbackHours.opensAt || clock >= callbackHours.closesAt) { callbackStatus.textContent = 'Choose a time within the saved business hours.'; return; }
+      const override = (callbackHours.calendarExceptions || []).find(entry => entry.date === values.preferredTime.localTime.slice(0, 10));
+      const opening = override || callbackHours;
+      if ((override ? override.closed : !callbackHours.businessDays.includes(day)) || clock < opening.opensAt || clock >= opening.closesAt) { callbackStatus.textContent = 'Choose a time within the saved business hours.'; return; }
     }
     reviewed = values;
     consent.checked = false;

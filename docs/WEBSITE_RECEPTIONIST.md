@@ -146,6 +146,7 @@ npx vitest run --config vitest.receptionist-setup.config.ts
 npx vitest run --config vitest.callback-handoff.config.ts
 npx vitest run --config vitest.callback-outcomes.config.ts
 npx vitest run --config vitest.callback-notifications.config.ts
+npx vitest run --config vitest.calendar-exceptions.config.ts
 npx vitest run --config vitest.callback-response.config.ts
 npx vitest run --config vitest.callback-performance.config.ts
 npx vitest run --config vitest.receptionist-home.config.ts
@@ -175,6 +176,16 @@ The conversation uses prewritten rules for services, pricing, hours, callback re
 Everything entered in Demo mode stays in page memory. Restart or reload to clear it. The page shows the latest 40 messages and 20 outcomes. It does not save a rehearsal report, submit a callback, create CRM records, change owners/deadlines, place calls, or change the website switch. Approved excerpts are rendered as plain text. Missing information is left for the team to confirm.
 
 Rollback for this feature is an ordinary code revert. There are no migrations, new dependencies, or configuration/data changes to undo. Live AI quality, microphone behavior, and telephone connectivity are outside this demo.
+
+## Holiday closures and date-specific hours
+
+In **Receptionist → Guided setup → Business**, or **Settings → AI receptionist**, use **Holiday closures and special hours**. Add a date as **Closed all day** or choose different opening and closing times. Dates use the saved business timezone. A date override replaces the weekly rule, so it can also open a normally closed weekend. Add each date before saving the business form; removing all overrides restores weekly hours after saving. Up to 100 distinct explicit dates are supported, with one interval per open date and closing time exclusive.
+
+Callback forms, staff time validation, Demo, and phone opening calculations respect the saved overrides. Calendar changes invalidate old time reviews. Existing callback task times remain unchanged: the callback inbox and handoff/outcome panels flag active timed requests that conflict with the current calendar. Staff must agree and approve a valid replacement time; warnings clear after a confirmed handoff or reschedule. The original visitor request remains in the retained receipt, including after source deletion. Untimed legacy deadlines keep their existing behavior.
+
+Response policies keep their reviewed calendar snapshot. **Callback response targets** shows both current and adopted date overrides and warns when they differ. Saving an enabled policy requires acknowledgement before adopting the new calendar and recalculating waiting response deadlines. Saving business hours alone does not recalculate those targets or move callback tasks. Publish and separately approve updated Library hours if visitors should receive the new hours in public answers; existing approved documents are not overwritten.
+
+Dates do not recur annually. Automatic holiday imports, staff availability, overnight or split shifts, and external calendar booking are not included. Recovery retains date-aware validation and saved JSON: see [calendar recovery](ops/business-calendar-exceptions-rollback.md).
 
 ## Preferred callback times
 

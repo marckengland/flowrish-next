@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { Prisma, type CallbackOutcomeEvent } from '@prisma/client'
 import { z, ZodError } from 'zod'
 import { prisma } from '@/server/db/client'
-import { preferredTimeSchema } from '@/lib/callback-time'
+import { callbackCalendarReviewRequired, preferredTimeSchema } from '@/lib/callback-time'
 import { readCallbackCalendar, checkCallbackTime, validateCallbackInstant } from './callback-time'
 import { getEffectivePermissions } from '@/server/auth/permissions'
 import { AppError } from '@/lib/errors'
@@ -52,7 +52,7 @@ export async function getCallbackOutcome(organizationId: string, userId: string,
     return prisma.$transaction(async db => {
       const ctx = await context(organizationId, userId, callbackId, db, auth.isAdmin)
       const rows = await db.callbackOutcomeEvent.findMany({ where: { organizationId, callbackId, ...(query.before ? { sequence: { lt: query.before } } : {}) }, orderBy: { sequence: 'desc' }, take: 21 })
-      return callbackOutcomeDetailSchema.parse({ callbackId, taskId: ctx.receipt.taskId, version: ctx.version, source: ctx.source ? sourceView(ctx.source) : null, ...(ctx.preferredTime ? { preferredTime: ctx.preferredTime } : {}), ...(ctx.callbackHours ? { callbackHours: ctx.callbackHours } : {}), closed: ctx.closed, canEdit: !!ctx.task && !ctx.closed, leadAvailable: ctx.leadAvailable,
+      return callbackOutcomeDetailSchema.parse({ callbackId, taskId: ctx.receipt.taskId, version: ctx.version, source: ctx.source ? sourceView(ctx.source) : null, ...(ctx.preferredTime ? { preferredTime: ctx.preferredTime } : {}), ...(ctx.callbackHours ? { callbackHours: ctx.callbackHours } : {}), ...(ctx.preferredTime && ctx.task && !ctx.task.isComplete && !ctx.closed && callbackCalendarReviewRequired(ctx.task.dueDate.toISOString(), ctx.callbackHours) ? { calendarReviewRequired: true } : {}), closed: ctx.closed, canEdit: !!ctx.task && !ctx.closed, leadAvailable: ctx.leadAvailable,
         task: ctx.task ? { id: ctx.task.id, title: ctx.task.title, dueDate: ctx.task.dueDate.toISOString(), assigneeId: ctx.task.assigneeId, assigneeName: label(ctx.task.assignee.name), isComplete: ctx.task.isComplete } : null,
         members: ctx.members.slice(0, 200).map(row => ({ id: row.userId, label: label(row.user.name) })), membersTruncated: ctx.members.length > 200,
         history: rows.slice(0, 20).map(eventView), hasMore: rows.length > 20, beforeNext: rows.length > 20 ? rows[19].sequence : null })

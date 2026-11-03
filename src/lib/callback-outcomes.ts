@@ -17,7 +17,7 @@ export const callbackOutcomeCommitSchema = callbackOutcomePreviewInputSchema.ext
 export const callbackOutcomeAckSchema = z.object({ recorded: z.literal(true), callbackId: id, requestId: id, action: callbackOutcomeActionSchema }).strict()
 export const callbackOutcomeEventSchema = z.object({ id, sequence: z.number().int().positive(), outcome: callbackOutcomeEnum, action: callbackOutcomeActionSchema, notes: z.string().max(2000), createdAt: z.string().datetime(), createdByName: name, assigneeName: name.nullable(), dueDate: z.string().datetime().nullable() }).strict()
 export const callbackOutcomeDetailSchema = z.object({
-  callbackId: id, taskId: id, version: hash, preferredTime: preferredTimeSchema.optional(), callbackHours: callbackCalendarSchema.optional(), source: websiteCallbackRecordSchema.nullable(), closed: z.boolean(), canEdit: z.boolean(),
+  callbackId: id, taskId: id, version: hash, preferredTime: preferredTimeSchema.optional(), calendarReviewRequired: z.boolean().optional(), callbackHours: callbackCalendarSchema.optional(), source: websiteCallbackRecordSchema.nullable(), closed: z.boolean(), canEdit: z.boolean(),
   task: z.object({ id, title: z.string().max(500), dueDate: z.string().datetime(), assigneeId: id, assigneeName: name, isComplete: z.boolean() }).strict().nullable(),
   leadAvailable: z.boolean(), members: z.array(z.object({ id, label: name }).strict()).max(200), membersTruncated: z.boolean(),
   history: z.array(callbackOutcomeEventSchema).max(20), hasMore: z.boolean(), beforeNext: z.number().int().positive().nullable(),

@@ -86,6 +86,7 @@ export function CallbackOutcomeTracker(props: Props) {
     {detail && <>
       <p className="font-medium">{detail.closed ? 'Request closed' : 'Request open'}</p>
       {detail.preferredTime && <p>Requested callback time: {preferredTimeLabel(detail.preferredTime)}</p>}
+      {detail.calendarReviewRequired && <p role="status" aria-label="Callback calendar review" className="rounded-md border p-3 text-sm">Review this callback against the current business calendar. Its confirmed time is outside the saved hours. The task time is unchanged; agree a new time before previewing a reschedule.</p>}
       {detail.task ? <div className="space-y-1"><p className="break-words">{detail.task.title}</p><p>Owner: {detail.task.assigneeName}</p>{detail.preferredTime ? <p>Confirmed callback time: {new Date(detail.task.dueDate).toLocaleString('en-US', { timeZone: detail.callbackHours?.timeZone ?? detail.preferredTime.timeZone })} ({detail.callbackHours?.timeZone ?? detail.preferredTime.timeZone})</p> : <p>Deadline: {new Date(detail.task.dueDate).toLocaleString()}</p>}<p>Task: {detail.task.isComplete ? 'Complete' : 'Open'}</p></div> : <p>The original task or active lead is unavailable. History is retained; no task will be recreated.</p>}
       {!detail.source && <p className="text-muted-foreground">The source callback has been removed. Its CRM work and history are retained.</p>}
       {detail.canEdit && <form onSubmit={review} className="space-y-3"><fieldset disabled={busy} className="min-w-0 space-y-3">
