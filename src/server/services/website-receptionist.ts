@@ -38,24 +38,30 @@ async function readiness(organizationId: string, db: Tx = prisma) {
   return { hasSavedBusiness: parsed.success, businessName: parsed.success ? parsed.data.businessName : '', approvedDocuments, hasOrganizationAi: !!aiValid }
 }
 function settings(config: WebsiteReceptionistConfig) { return websiteSettingsSchema.parse({ publicId: config.publicId, enabled: config.enabled, allowedOrigins: config.allowedOrigins, dailyMessageLimit: config.dailyMessageLimit, dailyTokenLimit: config.dailyTokenLimit, dailyCallbackLimit: config.dailyCallbackLimit, updatedAt: config.updatedAt.toISOString() }) }
-async function adminData(organizationId: string): Promise<WebsiteReceptionistAdminData> {
-  const [config, ready, usage] = await Promise.all([prisma.websiteReceptionistConfig.findUnique({ where: { organizationId } }), readiness(organizationId), prisma.websiteReceptionistUsage.findUnique({ where: { organizationId_day_scope: { organizationId, day: dayUtc(), scope: 'org' } }, select: { sessions: true, messages: true, reservedTokens: true, callbacks: true } })])
+export async function getWebsiteReceptionistState(organizationId: string, db: Tx = prisma): Promise<WebsiteReceptionistAdminData> {
+  const [config, ready, usage] = await Promise.all([db.websiteReceptionistConfig.findUnique({ where: { organizationId } }), readiness(organizationId, db), db.websiteReceptionistUsage.findUnique({ where: { organizationId_day_scope: { organizationId, day: dayUtc(), scope: 'org' } }, select: { sessions: true, messages: true, reservedTokens: true, callbacks: true } })])
   return { settings: config ? settings(config) : null, hasSavedBusiness: ready.hasSavedBusiness, approvedDocuments: ready.approvedDocuments, hasOrganizationAi: ready.hasOrganizationAi, usage: usage ?? emptyUsage }
 }
-export async function getWebsiteReceptionistAdmin(organizationId: string, userId: string) { return safe(async () => { await admin(organizationId, userId); return adminData(organizationId) }) }
+export async function getWebsiteReceptionistAdmin(organizationId: string, userId: string) { return safe(async () => { await admin(organizationId, userId); return getWebsiteReceptionistState(organizationId) }) }
+/** Internal shared writer: caller authorizes and locks the Organization row first. */
+export async function writeWebsiteReceptionistSettings(organizationId: string, raw: unknown, tx: Tx) {
+  const { expectedUpdatedAt, acknowledged: _acknowledged, ...input } = websiteReceptionistSaveSchema.parse(raw)
+  const current = await tx.websiteReceptionistConfig.findUnique({ where: { organizationId } })
+  if ((current?.updatedAt.toISOString() ?? null) !== expectedUpdatedAt) fail('WEBSITE_CONFLICT', 409)
+  if (input.enabled) { const ready = await readiness(organizationId, tx); if (!ready.hasSavedBusiness || !ready.hasOrganizationAi || !ready.approvedDocuments) throw new AppError('WEBSITE_NOT_READY', 'Save business details, enable organization AI, and approve published library knowledge before enabling.', 400) }
+  const updatedAt = new Date(Math.max(Date.now(), (current?.updatedAt.getTime() ?? 0) + 1))
+  await tx.websiteReceptionistConfig.upsert({ where: { organizationId }, create: { organizationId, ...input, updatedAt }, update: { ...input, updatedAt } })
+}
+
 export async function saveWebsiteReceptionist(organizationId: string, userId: string, raw: unknown) {
   return safe(async () => {
     await admin(organizationId, userId)
-    const { expectedUpdatedAt, acknowledged: _acknowledged, ...input } = websiteReceptionistSaveSchema.parse(raw)
+    const input = websiteReceptionistSaveSchema.parse(raw)
     await prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT "id" FROM "Organization" WHERE "id" = ${organizationId} FOR NO KEY UPDATE`
-      const current = await tx.websiteReceptionistConfig.findUnique({ where: { organizationId } })
-      if ((current?.updatedAt.toISOString() ?? null) !== expectedUpdatedAt) fail('WEBSITE_CONFLICT', 409)
-      if (input.enabled) { const ready = await readiness(organizationId, tx); if (!ready.hasSavedBusiness || !ready.hasOrganizationAi || !ready.approvedDocuments) throw new AppError('WEBSITE_NOT_READY', 'Save business details, enable organization AI, and approve published library knowledge before enabling.', 400) }
-      const updatedAt = new Date(Math.max(Date.now(), (current?.updatedAt.getTime() ?? 0) + 1))
-      await tx.websiteReceptionistConfig.upsert({ where: { organizationId }, create: { organizationId, ...input, updatedAt }, update: { ...input, updatedAt } })
+      await writeWebsiteReceptionistSettings(organizationId, input, tx)
     })
-    return adminData(organizationId)
+    return getWebsiteReceptionistState(organizationId)
   })
 }
 async function publicConfig(publicId: string, db: Tx = prisma) {

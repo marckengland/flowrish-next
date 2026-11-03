@@ -4,6 +4,14 @@ The website receptionist answers visitors on each organization's own website. It
 
 ## Enable on a business website
 
+For guided setup, open **Settings → AI receptionist → Open guided website setup**, or visit `/receptionist/setup`. The five steps save business identity and hours, prepare approved Library documents, configure exact websites and daily budgets, rehearse locally, and explicitly enable reception. Existing settings remain available below.
+
+The saved-hours button only fills a new Library draft. Review, publish, and approve it before the website assistant can use those hours. Drafts and private phone notes are excluded. Business edits preserve phone routing and assignments; if phone reception is already enabled, the guide identifies that the shared business name and hours also affect it.
+
+The rehearsal is a scripted simulation. It uses a complete excerpt from an approved publication, a greeting, fallback guidance, and fictional callback details. It calls no provider, places no call, and saves no CRM work. It does not prove AI connectivity, answer quality, or website installation. Final activation requires separate simulation and spending acknowledgements. Changed saved inputs or a fresh page require another simulation. Enabling permits real visitor traffic to spend provider credits.
+
+Unsaved drafts require confirmation before changing steps, reloading, or following an application link. Browser Back/Forward uses a native discard prompt; declining restores the current page and can replace the browser's forward branch. Pending writes block client navigation until they finish.
+
 1. In **Settings → AI Receptionist**, save the business details.
 2. Configure the organization's AI provider in Settings. Publish the relevant library documents and approve their current revisions for receptionist use.
 3. Under **Website receptionist**, select **Load settings**. Enter each allowed website origin, including `https://`. Use exact origins, such as `https://example.com`; a subdomain needs its own entry.
@@ -48,10 +56,12 @@ Run the repository's full unit, lint, type, Prisma, and build checks. Additional
 
 ```sh
 npx vitest run --config vitest.website-receptionist.config.ts
+npx vitest run --config vitest.receptionist-setup.config.ts
 npx vitest run --config vitest.callback-handoff.config.ts
 npx vitest run --config vitest.callback-outcomes.config.ts
 npx playwright test --config playwright.website-receptionist.config.ts
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/website-receptionist-admin.spec.ts e2e/callback-handoff.spec.ts e2e/callback-outcomes.spec.ts --retries=0
+PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-setup.spec.ts --retries=0
 ```
 
 The PostgreSQL suite requires Docker and the local `pgvector/pgvector:pg16` image. It starts a disposable database and does not load production credentials. The isolated iframe suite requires neither an application server nor credentials. The admin suite requires an authenticated application target and mocks all widget settings, callback, and AI operations. Do not enable a production widget or call a real provider to run these suites.

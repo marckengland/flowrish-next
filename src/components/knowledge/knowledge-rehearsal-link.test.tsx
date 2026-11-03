@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { KnowledgeLibrary } from './knowledge-library'
 
@@ -26,10 +26,13 @@ describe('incoming rehearsal FAQ document links', () => {
     vi.stubGlobal('fetch', request)
     render(<KnowledgeLibrary initialDocumentId={id} />)
     await screen.findByText(/no saved rehearsal source/i)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Other FAQ' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Other FAQ' }))
     await screen.findByRole('button', { name: 'View rehearsal source' })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Question draft' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Question draft' }))
     await screen.findByLabelText('Document text')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'View rehearsal source' })).toBeEnabled())
     expect(await screen.findByRole('button', { name: 'View rehearsal source' })).toBeEnabled()
     expect(request.mock.calls.filter(call => String(call[0]).endsWith('/rehearsal'))).toHaveLength(1)
   })
