@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { KnowledgeLibrary } from '@/components/knowledge/knowledge-library'
 import { WebsiteReceptionistSettings } from './website-receptionist-settings'
@@ -46,7 +47,7 @@ export function ReceptionistSetupWizard(): React.JSX.Element {
     current.current = next; setSnapshot(next)
     if (first || resetDraft) setDraft(next.business.values)
     if (resetDraft) { setEditorKey(value => value + 1); setChildDirty(false); setChildBusy(false) }
-    if (first) setStep(resume(next))
+    if (first) setStep(new URLSearchParams(window.location.search).get('step') === 'installation' ? (next.website.settings?.allowedOrigins.length ? 3 : 2) : resume(next))
   }, [])
   const refresh = useCallback(async (resetDraft = false) => {
     if (locked.current) return
@@ -107,7 +108,7 @@ export function ReceptionistSetupWizard(): React.JSX.Element {
   const reviewed = !!snapshot && simulation === snapshot.version
   const missing = snapshot ? [!snapshot.business.saved && 'Save business details.', !snapshot.knowledge.approved && 'Publish and approve at least one Library document for public answers.', !snapshot.website.hasOrganizationAi && 'Save and enable an organization AI provider in Settings.', !snapshot.website.settings?.allowedOrigins.length && 'Save at least one exact HTTPS website and its limits.'].filter(Boolean) : []
   return <div className="mx-auto max-w-4xl space-y-6 pb-8">
-    <header className="space-y-2"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Website receptionist</p><h1 className="text-2xl font-semibold tracking-tight">Set up your business receptionist</h1><p className="max-w-2xl text-sm text-muted-foreground">Answer questions for visitors to your organization’s website using your approved business information. Phone reception is configured separately.</p></header>
+    <header className="space-y-2"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Website receptionist</p><h1 className="text-2xl font-semibold tracking-tight">Set up your business receptionist</h1><p className="max-w-2xl text-sm text-muted-foreground">Answer questions for visitors to your organization’s website using your approved business information. Phone reception is configured separately.</p><Link className="inline-flex min-h-11 items-center text-sm font-medium underline" href="/receptionist">Receptionist home</Link></header>
     {error && <p role="alert" className="rounded-md border border-destructive/30 p-3 text-sm text-destructive">{error}</p>}
     {notice && <p role="status" className="text-sm">{notice}</p>}
     {snapshot && draft ? <>

@@ -84,6 +84,20 @@ The queue supports missed targets or all waiting work, with 20 rows per page. Cu
 
 Business minutes exclude closed days and hours and account for daylight-saving changes. The weekly schedule has no holiday overrides or overnight openings. Targets range from 5 to 1,440 minutes and cannot exceed 52 nominal weeks of opening minutes. Calendar searches stop after 400 local dates; unusually short schedules around skipped openings may require a shorter target. Manager selection and policy acknowledgement require administrator action; deploying this feature does not enable it.
 
+## Receptionist home
+
+Open **Receptionist** in the sidebar or **Settings → AI receptionist → Open Receptionist home**. Current organization membership and either Settings permission or both CRM read/write permissions are required. The page rechecks local permissions and loads one read-only snapshot. **Refresh receptionist home** loads another snapshot; it does not poll.
+
+Settings administrators see saved business details, organization AI configuration metadata, current approved public documents, saved website limits/origins, and pending CRM handoffs. CRM members see open and overdue callback work; administrators with CRM access see the organization totals, and other members see their current assignments. Sections without permission are hidden. A manually completed task still represents open callback work until the callback lifecycle closes, but it is no longer overdue. Approved CRM work survives deletion of its source callback.
+
+Saved setup prerequisites and the website's On/Off switch are separate. This summary does not retrieve or decrypt an AI key, verify credits or connectivity, inspect an installed widget, or enable reception. Deployment-wide credentials, private phone notes, drafts, and obsolete public approvals do not satisfy website prerequisites. **Check website installation** opens the existing manual checker; it performs no check automatically and cannot replace the simulation and launch acknowledgements.
+
+Missed flags use the current enabled response policy, existing calculated deadlines, live source eligibility, and current assignments. A paused policy hides missed flags. The page shows the last successful target check, or that the first check is still pending; zero flags are not proof that every target was met. Reads do not calculate deadlines or send notifications.
+
+Tool links open existing setup, Library, callback approval, work queue, response-target, notification, and performance workflows as permissions allow. Callback handoffs, results, and launch retain their existing human review steps. Installation history, live provider health, and historical daily activity are outside this home page.
+
+Rollback: revert the home-page merge with `git revert -m 1 <merge-commit>`, then deploy normally. This release changes no schema, settings, permissions, background jobs, or business records, so there is no data rollback. Do not restore a database snapshot or rewrite main's history.
+
 ## Receptionist performance
 
 Open **Settings → AI receptionist → View receptionist performance**, or use the same link on **Callback response targets**. The dashboard requires current organization membership with Settings and CRM read/write permissions. It reads existing records and never calls a provider, contacts a visitor, approves a handoff, records a result, calculates new targets, or creates notifications.
@@ -110,10 +124,12 @@ npx vitest run --config vitest.callback-outcomes.config.ts
 npx vitest run --config vitest.callback-notifications.config.ts
 npx vitest run --config vitest.callback-response.config.ts
 npx vitest run --config vitest.callback-performance.config.ts
+npx vitest run --config vitest.receptionist-home.config.ts
 npx playwright test --config playwright.website-receptionist.config.ts
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/website-receptionist-admin.spec.ts e2e/callback-handoff.spec.ts e2e/callback-outcomes.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-setup.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-installation.spec.ts e2e/receptionist-installation-smoke.spec.ts --retries=0
+PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/receptionist-home.spec.ts e2e/receptionist-home-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-notifications.spec.ts e2e/callback-notifications-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-response.spec.ts e2e/callback-response-smoke.spec.ts --retries=0
 PLAYWRIGHT_BASE_URL=http://localhost:3197 npm run test:e2e:prod -- e2e/callback-performance.spec.ts e2e/callback-performance-smoke.spec.ts --retries=0
