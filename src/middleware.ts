@@ -86,19 +86,30 @@ const PUBLIC_ROUTES = ['/login', '/auth/callback', '/auth/confirm']
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next()
-  const website = /^\/api\/public\/website-receptionist\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/(embed|session|message|callback)$/i.exec(request.nextUrl.pathname)
-  const publicWebsite = Boolean(website && (website[1] === 'embed' ? ['GET', 'HEAD'].includes(request.method) : request.method === 'POST'))
+  const website =
+    /^\/api\/public\/website-receptionist\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/(embed|session|message|callback)$/i.exec(
+      request.nextUrl.pathname,
+    )
+  const publicWebsite = Boolean(
+    website &&
+    (website[1] === 'embed'
+      ? ['GET', 'HEAD'].includes(request.method)
+      : request.method === 'POST'),
+  )
   const embeddedWebsite = publicWebsite && website?.[1] === 'embed'
 
   // 1. Security headers
   response.headers.set('X-Content-Type-Options', 'nosniff')
   if (!embeddedWebsite) response.headers.set('X-Frame-Options', 'DENY')
-  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  response.headers.set(
+    'Strict-Transport-Security',
+    'max-age=31536000; includeSubDomains',
+  )
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.headers.set(
     'Permissions-Policy',
     // Documents keep their policy across client navigation to the microphone preview.
-    'camera=(), microphone=(self), geolocation=(), payment=()'
+    'camera=(), microphone=(self), geolocation=(), payment=()',
   )
 
   // 2. Rate limiting (skip entirely when Redis isn't configured — see
@@ -122,8 +133,8 @@ export async function middleware(request: NextRequest) {
     const limiters = getRateLimiters()
     if (limiters) {
       const ip =
-        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-        ?? '127.0.0.1'
+        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+        '127.0.0.1'
 
       const limiter = path.startsWith('/api/auth')
         ? limiters.auth
@@ -149,11 +160,13 @@ export async function middleware(request: NextRequest) {
                 'X-RateLimit-Reset': reset.toString(),
                 'X-Content-Type-Options': 'nosniff',
                 'X-Frame-Options': 'DENY',
-                'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+                'Strict-Transport-Security':
+                  'max-age=31536000; includeSubDomains',
                 'Referrer-Policy': 'strict-origin-when-cross-origin',
-                'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+                'Permissions-Policy':
+                  'camera=(), microphone=(), geolocation=(), payment=()',
               },
-            }
+            },
           )
         }
       } catch (err) {
@@ -179,8 +192,20 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
+  // Pilot entry and browser-session exchange do not grant organization access.
+  const publicPilot =
+    (path === '/pilot' && ['GET', 'HEAD'].includes(request.method)) ||
+    (path === '/api/pilot/session' &&
+      ['POST', 'DELETE'].includes(request.method)) ||
+    (path === '/api/pilot/status' && request.method === 'GET')
+  if (publicPilot) {
+    response.headers.set('Referrer-Policy', 'no-referrer')
+    return response
+  }
+
   // 3. Auth check via Supabase (skip for auth callback/confirm — they handle their own session)
-  const isAuthCallback = path.startsWith('/auth/callback') || path.startsWith('/auth/confirm')
+  const isAuthCallback =
+    path.startsWith('/auth/callback') || path.startsWith('/auth/confirm')
 
   if (isAuthCallback) {
     return response
@@ -215,16 +240,16 @@ export async function middleware(request: NextRequest) {
   // /api/inngest and the Twilio voice webhooks, which validate requests
   // separately because Twilio calls them without an app session).
   if (
-    !user
-    && isApiRoute
-    && !path.startsWith('/api/auth')
-    && !path.startsWith('/api/inngest')
-    && !path.startsWith('/api/voice/twiml')
-    && !/^\/api\/voice\/receptionist\/[^/]+$/.test(path)
+    !user &&
+    isApiRoute &&
+    !path.startsWith('/api/auth') &&
+    !path.startsWith('/api/inngest') &&
+    !path.startsWith('/api/voice/twiml') &&
+    !/^\/api\/voice\/receptionist\/[^/]+$/.test(path)
   ) {
     return NextResponse.json(
       { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },
-      { status: 401 }
+      { status: 401 },
     )
   }
 

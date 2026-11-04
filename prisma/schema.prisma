@@ -126,6 +126,7 @@ model Organization {
   websiteReceptionistCallbacks WebsiteReceptionistCallback[]
   callbackCrmHandoffs CallbackCrmHandoff[]
   waitlistCrmHandoffs WaitlistCrmHandoff[]
+  pilotInvitation WaitlistPilotInvite? @relation("PilotWorkspace")
   callbackOutcomeEvents CallbackOutcomeEvent[]
   callbackNotifications CallbackNotification[]
   callbackResponsePolicy CallbackResponsePolicy?
@@ -1188,6 +1189,8 @@ model Waitlist {
   reviewedAt    DateTime?
   reviewedById  String?
 
+  pilotInvite WaitlistPilotInvite?
+
   @@index([status])
   @@index([reviewStatus, createdAt, id])
 }
@@ -1210,6 +1213,27 @@ model WaitlistCrmHandoff {
   createdAt      DateTime     @default(now())
 
   @@index([organizationId, leadId])
+}
+
+model WaitlistPilotInvite {
+  id                     String        @id @default(uuid())
+  waitlistId             String        @unique
+  waitlist               Waitlist      @relation(fields: [waitlistId], references: [id], onDelete: Restrict)
+  email                  String
+  tokenHash              String        @unique
+  issueRequestId         String        @unique
+  generation             Int           @default(1)
+  issuedById             String
+  issuedByOrganizationId String
+  issuedAt               DateTime      @default(now())
+  expiresAt              DateTime
+  revokedAt              DateTime?
+  acceptedAt             DateTime?
+  acceptedById           String?
+  organizationId         String?       @unique
+  organization           Organization? @relation("PilotWorkspace", fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([email])
 }
 
 // ─── AI Assistant Conversations ──────────────────────────────────────────────

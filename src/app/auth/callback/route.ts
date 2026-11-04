@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { prisma } from '@/server/db/client'
+import { hasPilotInvitationForEmail } from '@/server/auth/pilot-intent'
 import { acceptInvite } from '@/server/services/organizations'
+import {
+  PILOT_COOKIE_NAME,
+  pilotTokenSchema,
+  safeAuthNext,
+} from '@/lib/pilot-onboarding'
 
 /**
  * OAuth / Magic Link callback handler.
@@ -19,14 +25,19 @@ import { acceptInvite } from '@/server/services/organizations'
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/dashboard'
+  const next = safeAuthNext(searchParams.get('next'))
+  let pilot =
+    next === '/pilot' ||
+    pilotTokenSchema.safeParse(request.cookies.get(PILOT_COOKIE_NAME)?.value)
+      .success
 
   if (!code) {
     return NextResponse.redirect(new URL('/login?error=missing_code', origin))
   }
 
   // Collect cookies that Supabase sets during the exchange
-  const cookieStore: { name: string; value: string; options: CookieOptions }[] = []
+  const cookieStore: { name: string; value: string; options: CookieOptions }[] =
+    []
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -46,9 +57,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
   if (error || !data.user) {
-    return NextResponse.redirect(
-      new URL('/login?error=auth_failed', origin),
-    )
+    return NextResponse.redirect(new URL('/login?error=auth_failed', origin))
   }
 
   const authUser = data.user
@@ -77,9 +86,18 @@ export async function GET(request: NextRequest) {
     })
   }
 
+  if (
+    !pilot &&
+    dbUser.organizationMemberships.length === 0 &&
+    authUser.email_confirmed_at &&
+    userEmail
+  ) {
+    pilot = await hasPilotInvitationForEmail(userEmail)
+  }
+
   // Check for pending invites matching this user's email
-  let redirectTo = next
-  if (dbUser.organizationMemberships.length === 0) {
+  let redirectTo = pilot ? '/pilot' : next
+  if (!pilot && dbUser.organizationMemberships.length === 0) {
     const pendingInvite = await prisma.organizationInvite.findFirst({
       where: {
         email: userEmail,

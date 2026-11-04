@@ -8,6 +8,7 @@ import { createSupabaseBrowser } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AuthBrandPanel } from '@/components/layout/auth-brand-panel'
+import { safeAuthNext } from '@/lib/pilot-onboarding'
 
 /**
  * Login page with email magic link and Google OAuth sign-in options.
@@ -69,6 +70,11 @@ export default function LoginPage() {
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        ...(safeAuthNext(
+          new URLSearchParams(window.location.search).get('next'),
+        ) === '/pilot'
+          ? { queryParams: { prompt: 'select_account' } }
+          : {}),
       },
     })
 
@@ -102,11 +108,7 @@ export default function LoginPage() {
             onClick={handleGoogleOAuth}
             disabled={busy}
           >
-            <svg
-              className="size-[17px]"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
+            <svg className="size-[17px]" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                 fill="#4285F4"
@@ -170,7 +172,10 @@ export default function LoginPage() {
             </p>
           )}
           {error && (
-            <p role="alert" className="mt-4 text-center text-sm text-danger-foreground">
+            <p
+              role="alert"
+              className="mt-4 text-center text-sm text-danger-foreground"
+            >
               {error}
             </p>
           )}

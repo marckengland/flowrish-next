@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db/client'
 import { AppError } from '@/lib/errors'
 import {
@@ -33,6 +34,7 @@ export async function createOrganization(
   name: string,
   slug: string,
   ownerId: string,
+  db: Prisma.TransactionClient = prisma,
 ) {
   if (!name.trim()) {
     throw new AppError('VALIDATION_ERROR', 'Organization name is required', 400)
@@ -45,29 +47,30 @@ export async function createOrganization(
   }
 
   // Check slug uniqueness
-  const existingOrg = await prisma.organization.findUnique({
+  const existingOrg = await db.organization.findUnique({
     where: { slug },
   })
   if (existingOrg) {
-    throw new AppError('CONFLICT', 'An organization with this slug already exists', 409)
+    throw new AppError(
+      'CONFLICT',
+      'An organization with this slug already exists',
+      409,
+    )
   }
 
   // Verify the owner user exists
-  const owner = await prisma.user.findUnique({
+  const owner = await db.user.findUnique({
     where: { id: ownerId },
   })
   if (!owner) {
     throw new AppError('NOT_FOUND', 'User not found', 404)
   }
 
-  // Create org and related records sequentially.
-  // PgBouncer (Supabase pooler) doesn't support interactive transactions,
-  // so we use sequential creates. If a step fails, the org is left in a
-  // partial state — but this is acceptable for onboarding since the user
-  // can retry, and partial orgs without members are harmless.
+  // A supplied transaction client makes all initialization writes atomic.
+  // Existing callers retain their current client and behavior.
 
   // 1. Create the Organization
-  const organization = await prisma.organization.create({
+  const organization = await db.organization.create({
     data: {
       name: name.trim(),
       slug: slug.trim(),
@@ -75,7 +78,7 @@ export async function createOrganization(
   })
 
   // 2. Create default "General" team
-  const defaultTeam = await prisma.team.create({
+  const defaultTeam = await db.team.create({
     data: {
       name: 'General',
       organizationId: organization.id,
@@ -83,10 +86,10 @@ export async function createOrganization(
   })
 
   // 3. Create default roles with system permissions
-  const roles = await createDefaultRoles(organization.id)
+  const roles = await createDefaultRoles(organization.id, db)
 
   // 4. Add owner as OrganizationMember (isDefault: true)
-  await prisma.organizationMember.create({
+  await db.organizationMember.create({
     data: {
       userId: ownerId,
       organizationId: organization.id,
@@ -96,7 +99,7 @@ export async function createOrganization(
 
   // 5. Add owner as TeamMember with OWNER role
   const ownerRole = roles.find((r) => r.name === 'OWNER')!
-  await prisma.teamMember.create({
+  await db.teamMember.create({
     data: {
       userId: ownerId,
       teamId: defaultTeam.id,
@@ -153,7 +156,11 @@ export async function inviteToOrganization(
     throw new AppError('NOT_FOUND', 'Role not found', 404)
   }
   if (role.organizationId !== null && role.organizationId !== organizationId) {
-    throw new AppError('FORBIDDEN', 'Role does not belong to this organization', 403)
+    throw new AppError(
+      'FORBIDDEN',
+      'Role does not belong to this organization',
+      403,
+    )
   }
 
   // Prevent privilege escalation: the inviter must have a role with equal or
@@ -166,7 +173,11 @@ export async function inviteToOrganization(
     include: { role: { select: { hierarchy: true } } },
   })
   if (inviterMemberships.length === 0) {
-    throw new AppError('FORBIDDEN', 'Inviter is not a member of this organization', 403)
+    throw new AppError(
+      'FORBIDDEN',
+      'Inviter is not a member of this organization',
+      403,
+    )
   }
   const inviterHighestPrivilege = Math.min(
     ...inviterMemberships.map((m) => m.role.hierarchy),
@@ -185,7 +196,11 @@ export async function inviteToOrganization(
       where: { id: teamId },
     })
     if (!team || team.organizationId !== organizationId) {
-      throw new AppError('NOT_FOUND', 'Team not found in this organization', 404)
+      throw new AppError(
+        'NOT_FOUND',
+        'Team not found in this organization',
+        404,
+      )
     }
   }
 
@@ -388,12 +403,15 @@ export async function acceptInvite(inviteId: string, userId: string) {
  * These roles are marked as `isSystem: true` and have a hierarchy value
  * that determines their power level (lower = more powerful).
  */
-async function createDefaultRoles(organizationId: string) {
+async function createDefaultRoles(
+  organizationId: string,
+  db: Prisma.TransactionClient = prisma,
+) {
   const roleNames: DefaultRole[] = ['OWNER', 'ADMIN', 'MANAGER', 'MEMBER']
   const roles = []
 
   for (const roleName of roleNames) {
-    const role = await prisma.role.create({
+    const role = await db.role.create({
       data: {
         name: roleName,
         organizationId,

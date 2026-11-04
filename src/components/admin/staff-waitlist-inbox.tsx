@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
+import { PilotInvitationPanel } from './pilot-invitation-panel'
 import {
   waitlistEntrySchema,
   waitlistListSchema,
@@ -121,6 +122,23 @@ export function StaffWaitlistInbox(): React.JSX.Element {
     setReviewed(null)
     setApproved(false)
   }
+  function applyEntry(updated: WaitlistEntry) {
+    setRows(
+      (current) =>
+        current && {
+          ...current,
+          entries: current.entries.map((row) =>
+            row.id === updated.id ? updated : row,
+          ),
+        },
+    )
+    setOptions((current) =>
+      current?.entry?.id === updated.id
+        ? { ...current, entry: updated }
+        : current,
+    )
+    clearApproval()
+  }
   async function loadPage(page: number, reviewStatus = filter) {
     await perform(async () => {
       setDenied(false)
@@ -159,21 +177,7 @@ export function StaffWaitlistInbox(): React.JSX.Element {
         waitlistEntrySchema,
         json('PATCH', { reviewStatus, expectedVersion: entry.reviewVersion }),
       )
-      setRows(
-        (current) =>
-          current && {
-            ...current,
-            entries: current.entries.map((row) =>
-              row.id === updated.id ? updated : row,
-            ),
-          },
-      )
-      setOptions((current) =>
-        current?.entry?.id === updated.id
-          ? { ...current, entry: updated }
-          : current,
-      )
-      clearApproval()
+      applyEntry(updated)
       setMessage('Review status recorded. No message was sent.')
       try {
         setRows(
@@ -395,6 +399,19 @@ export function StaffWaitlistInbox(): React.JSX.Element {
                         CRM read and write permissions are required for handoff.
                       </p>
                     )}
+                    <PilotInvitationPanel
+                      entryId={entry.id}
+                      email={entry.email}
+                      onEntryChanged={applyEntry}
+                      onAccessDenied={() => {
+                        setDenied(true)
+                        setRows(null)
+                        setOptions(null)
+                        setSelectedId(null)
+                        clearApproval()
+                        setError('Flowrish staff access is required.')
+                      }}
+                    />
                   </li>
                 ))}
               </ul>

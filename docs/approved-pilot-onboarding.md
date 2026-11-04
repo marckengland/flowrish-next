@@ -1,0 +1,32 @@
+# Approve a pilot workspace
+
+Use the private [waitlist inbox](https://flowrish.marckengland.com/staff/waitlist) with an explicitly granted Flowrish staff account.
+
+1. Open **Manage pilot invitation** for the signup.
+2. Select **Preview pilot invitation** and check the recipient email.
+3. Confirm approval, then select **Issue private pilot link**.
+4. Copy the private link and share it manually with that person. Flowrish sends no message.
+
+The link lasts seven days. Flowrish stores only its hash. Closing or reloading the panel hides the original link. If the response was lost, retrying returns invitation status without recovering or rotating the link. Revoke an unused invitation before issuing a replacement. An accepted invitation keeps its workspace receipt and cannot create another workspace.
+
+The prospect opens the private link and signs in with the invited verified email. On another device, they must reopen the private link after sign-in. They enter their business name and workspace identifier, review the details, and explicitly create their own organization. The widget starts off. The invitation grants no Flowrish staff access and copies no business documents or AI credentials.
+
+Accounts with existing workspace memberships need staff assistance. This flow does not change their default workspace. If a request has an uncertain outcome, select **Reload invitation status** before trying again. A successful creation returns its original receipt.
+
+Our team will confirm pricing. Pilot approval makes no price, discount, or trial promise.
+
+## Verify changes without providers
+
+Run the repository checks in `AGENTS.md`, including `npm run test:receptionist:mocked`. The isolated browser suite covers 30 scenarios using synthetic records and intercepted API calls. It makes no authentication, email, database, or provider requests.
+
+The additional database suite uses `vitest.pilot.config.ts` and requires `PILOT_TEST_DATABASE_URL` with the explicitly checked loopback dummy credentials. Prepare a disposable PostgreSQL container using the copied-schema and offline-SQL procedure in `AGENTS.md`. Never run `prisma db push` from this checkout.
+
+## Roll back the release
+
+If pilot sign-in or creation fails, stop sharing links. Revert the application changes and redeploy the previous application. Keep the additive `WaitlistPilotInvite` table, its index, the Prisma model, and applied migration. Its restrictive references preserve accepted workspace receipts. The previous application does not read the table.
+
+The tested reverse patch and release evidence are stored privately under `/Users/maki/.codex/flowrish-recovery/2026-11-04-approved-pilot-onboarding/`. Apply the reverse patch to a clean release checkout, review it, and deploy through the normal checks. Recovery takes one build and deployment cycle.
+
+Code rollback does not delete created organizations or undo links already shared. Revoke specific unused invitations through the staff panel before removing it, if needed. Do not drop invitation receipts, restore a whole database snapshot, edit an applied migration, or rewrite main's history.
+
+Deferred paths include onboarding an existing workspace, account switching across workspaces, automatic delivery, bulk issuance, and full invitation-generation history. Live authentication and provider responses are outside mocked verification.
