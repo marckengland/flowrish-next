@@ -38,7 +38,7 @@ export default function PublicDemoPage(): React.JSX.Element {
             Flowrish
           </Link>
           <Link
-            href="/#waitlist"
+            href="/?source=receptionist-demo#waitlist"
             className="inline-flex min-h-11 items-center rounded-xl bg-brand px-4 text-sm font-semibold text-brand-foreground hover:bg-brand-hover"
           >
             Join the waitlist

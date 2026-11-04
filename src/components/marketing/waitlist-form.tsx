@@ -13,8 +13,10 @@ import { ArrowRight, Check } from 'lucide-react'
  */
 export function WaitlistForm({
   tone = 'light',
+  source = 'landing',
 }: {
   tone?: 'light' | 'dark'
+  source?: 'landing' | 'public_demo'
 }): React.JSX.Element {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
@@ -32,7 +34,11 @@ export function WaitlistForm({
       const res = await fetch('/api/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name }),
+        body: JSON.stringify({
+          email,
+          name,
+          ...(source === 'public_demo' ? { source } : {}),
+        }),
       })
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as {
@@ -145,7 +151,9 @@ export function WaitlistForm({
         }`}
       >
         {isLoading ? 'Joining…' : 'Join the waitlist'}
-        {!isLoading && <ArrowRight className="size-[17px]" aria-hidden="true" />}
+        {!isLoading && (
+          <ArrowRight className="size-[17px]" aria-hidden="true" />
+        )}
       </button>
     </form>
   )

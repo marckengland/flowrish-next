@@ -10,6 +10,7 @@ import { UserManagement } from '@/components/admin/user-management'
 import { TeamManagement } from '@/components/admin/team-management'
 import { DeletionRequests } from '@/components/admin/deletion-requests'
 import { RoleEditor } from '@/components/admin/role-editor'
+import { StaffWaitlistLink } from '@/components/admin/staff-waitlist-link'
 
 /**
  * Admin page — user management, team hierarchy, audit log, and deletion requests.
@@ -40,6 +41,7 @@ export default function AdminPage(): React.JSX.Element {
         title="Admin"
         description="User management, roles, teams & audit trail"
       />
+      <StaffWaitlistLink />
 
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[212px_1fr] lg:items-start lg:gap-6">
         {/* Left rail navigation */}

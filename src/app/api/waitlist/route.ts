@@ -19,13 +19,14 @@ import {
 const waitlistSchema = z.object({
   email: z.string().trim().toLowerCase().email('Enter a valid email address'),
   name: z.string().trim().max(100, 'Name is too long').optional(),
+  source: z.enum(['landing', 'public_demo']).default('landing'),
 })
 
 export async function POST(request: NextRequest) {
   try {
     // Contact capture remains available when signup is open.
     const body = await request.json()
-    const { email, name: rawName } = waitlistSchema.parse(body)
+    const { email, name: rawName, source } = waitlistSchema.parse(body)
     const name = rawName && rawName.length > 0 ? rawName : undefined
 
     // Insert if new; no-op (and don't leak) if the email already exists.
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     if (!existing) {
       await prisma.waitlist.create({
-        data: { email, name, source: 'landing' },
+        data: { email, name, source },
       })
 
       // Best-effort confirmation — never block the response on delivery.

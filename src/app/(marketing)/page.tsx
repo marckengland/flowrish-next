@@ -68,7 +68,15 @@ const JSON_LD = {
  * landing page only ever renders for logged-out visitors. Everyone here is
  * funneled into the sign-up / sign-in flow.
  */
-export default async function LandingPage(): Promise<React.JSX.Element> {
+export default function LandingPage(): Promise<React.JSX.Element>
+export default function LandingPage(props: {
+  searchParams?: Promise<{ source?: string | string[] }>
+}): Promise<React.JSX.Element>
+export default async function LandingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ source?: string | string[] }>
+} = {}): Promise<React.JSX.Element> {
   let isAuthed = false
   try {
     const supabase = await createSupabaseServer()
@@ -93,6 +101,9 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
   const waitlistEnabled = isWaitlistEnabled()
   const getStartedHref = waitlistEnabled ? '#waitlist' : '/onboarding'
   const primaryLabel = waitlistEnabled ? 'Join the waitlist' : 'Get started'
+  const params = await searchParams
+  const source =
+    params?.source === 'receptionist-demo' ? 'public_demo' : 'landing'
 
   return (
     <div className="min-h-screen overflow-x-clip bg-card text-foreground">
@@ -362,7 +373,7 @@ export default async function LandingPage(): Promise<React.JSX.Element> {
             <p className="mx-auto mb-8 max-w-[520px] text-[18px] leading-[1.5] text-white/70">
               Join the waitlist and our team will email you when a spot opens.
             </p>
-            <WaitlistForm tone="dark" />
+            <WaitlistForm tone="dark" source={source} />
             <p className="mt-6 text-[14px] text-white/60">
               Already a tester?{' '}
               <Link

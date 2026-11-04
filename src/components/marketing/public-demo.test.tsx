@@ -51,7 +51,7 @@ it('renders an anonymous sample with local replies and the real waitlist contact
   ).toHaveAttribute('href', '/')
   expect(
     screen.getByRole('link', { name: 'Join the waitlist' }),
-  ).toHaveAttribute('href', '/#waitlist')
+  ).toHaveAttribute('href', '/?source=receptionist-demo#waitlist')
   expect(
     screen.queryByRole('link', { name: 'Receptionist home' }),
   ).not.toBeInTheDocument()

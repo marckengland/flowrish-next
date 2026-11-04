@@ -42,7 +42,7 @@ for (const mobile of [false, true]) {
     ).toBeVisible()
     await expect(
       page.getByRole('link', { name: 'Join the waitlist', exact: true }),
-    ).toHaveAttribute('href', '/#waitlist')
+    ).toHaveAttribute('href', '/?source=receptionist-demo#waitlist')
     await expect(
       page.getByRole('link', { name: 'Back to Flowrish', exact: true }),
     ).toHaveAttribute('href', '/')

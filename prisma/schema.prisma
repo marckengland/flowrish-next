@@ -125,6 +125,7 @@ model Organization {
   websiteReceptionistSessions WebsiteReceptionistSession[]
   websiteReceptionistCallbacks WebsiteReceptionistCallback[]
   callbackCrmHandoffs CallbackCrmHandoff[]
+  waitlistCrmHandoffs WaitlistCrmHandoff[]
   callbackOutcomeEvents CallbackOutcomeEvent[]
   callbackNotifications CallbackNotification[]
   callbackResponsePolicy CallbackResponsePolicy?
@@ -161,19 +162,21 @@ model KnowledgeDocument {
 }
 
 model KnowledgeChunk {
-  id String @id @default(uuid())
+  id             String                  @id @default(uuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  documentId String
-  document KnowledgeDocument @relation(fields: [documentId, organizationId], references: [id, organizationId], onDelete: Cascade)
-  revision Int
-  ordinal Int
-  content String
-  title String
-  category String
-  searchVector Unsupported("tsvector") @default(dbgenerated("''::tsvector"))
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documentId     String
+  document       KnowledgeDocument       @relation(fields: [documentId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  revision       Int
+  ordinal        Int
+  content        String
+  title          String
+  category       String
+  searchVector   Unsupported("tsvector") @default(dbgenerated("''::tsvector"))
+
   @@unique([documentId, revision, ordinal])
   @@index([organizationId, documentId, revision])
+  @@index([searchVector], type: Gin, map: "KnowledgeChunk_searchVector_idx")
 }
 
 model FollowUpSuggestion {
@@ -300,14 +303,15 @@ model VoiceConfig {
 }
 
 model OrganizationMember {
-  id             String       @id @default(uuid())
-  userId         String
-  organizationId String
-  user           User         @relation(fields: [userId], references: [id])
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  isDefault      Boolean      @default(false) // User's default org
+  id                    String                 @id @default(uuid())
+  userId                String
+  organizationId        String
+  user                  User                   @relation(fields: [userId], references: [id])
+  organization          Organization           @relation(fields: [organizationId], references: [id])
+  isDefault             Boolean                @default(false) // User's default org
   callbackNotifications CallbackNotification[]
-  joinedAt       DateTime     @default(now())
+  waitlistStaffAccess   WaitlistStaffAccess?
+  joinedAt              DateTime               @default(now())
 
   @@unique([userId, organizationId])
   @@index([organizationId])
@@ -1179,7 +1183,33 @@ model Waitlist {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  reviewStatus  String    @default("new")
+  reviewVersion Int       @default(0)
+  reviewedAt    DateTime?
+  reviewedById  String?
+
   @@index([status])
+  @@index([reviewStatus, createdAt, id])
+}
+
+// Server-managed grants. No customer-facing API can create or edit these.
+model WaitlistStaffAccess {
+  membershipId String             @id
+  membership   OrganizationMember @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  grantedAt    DateTime           @default(now())
+}
+
+// Snapshot IDs survive source/lead deletion and prevent duplicate handoffs.
+model WaitlistCrmHandoff {
+  waitlistId     String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  leadId         String
+  createdById    String
+  createdLead    Boolean
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, leadId])
 }
 
 // ─── AI Assistant Conversations ──────────────────────────────────────────────
