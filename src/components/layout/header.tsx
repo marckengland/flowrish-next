@@ -73,6 +73,7 @@ export function Header({
   const chatOpen = useLayoutStore((s) => s.chatOpen)
   const toggleChat = useLayoutStore((s) => s.toggleChat)
   const toggleMobileNav = useLayoutStore((s) => s.toggleMobileNav)
+  const mobileNavOpen = useLayoutStore((s) => s.mobileNavOpen)
 
   const title = pageTitle(pathname)
 
@@ -82,6 +83,8 @@ export function Header({
         type="button"
         onClick={toggleMobileNav}
         aria-label="Open navigation"
+        aria-expanded={mobileNavOpen}
+        aria-controls="primary-navigation"
         className="-ml-1 flex size-9 shrink-0 items-center justify-center rounded-[10px] text-foreground/70 transition-colors hover:bg-muted lg:hidden"
       >
         <Menu className="size-5" aria-hidden="true" />

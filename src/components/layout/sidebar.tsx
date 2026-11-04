@@ -197,6 +197,14 @@ export function Sidebar({
     setMobileNavOpen(false)
   }, [pathname, setMobileNavOpen])
   useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const desktop = window.matchMedia('(min-width: 1024px)')
+    const closeOnDesktop = () => { if (desktop.matches) setMobileNavOpen(false) }
+    closeOnDesktop()
+    desktop.addEventListener('change', closeOnDesktop)
+    return () => desktop.removeEventListener('change', closeOnDesktop)
+  }, [setMobileNavOpen])
+  useEffect(() => {
     if (!mobileNavOpen) return
     function onKey(e: KeyboardEvent): void {
       if (e.key === 'Escape') setMobileNavOpen(false)
@@ -249,13 +257,14 @@ export function Sidebar({
       ) : null}
 
       <aside
+        id="primary-navigation"
         ref={asideRef}
         tabIndex={-1}
         aria-label="Primary navigation"
         className={cn(
           // Off-canvas drawer on mobile; static rail from lg up.
           'fixed inset-y-0 left-0 z-50 flex h-full w-[264px] flex-col bg-sidebar px-3 py-3.5 text-sidebar-foreground outline-none transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-[238px] lg:shrink-0 lg:translate-x-0 lg:shadow-none',
-          mobileNavOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full',
+          mobileNavOpen ? 'visible translate-x-0 shadow-2xl' : 'invisible -translate-x-full lg:visible',
         )}
       >
         {/* Brand */}

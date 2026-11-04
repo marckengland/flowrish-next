@@ -1,13 +1,7 @@
 'use client'
 
 import { useEffect, type RefObject } from 'react'
-
-/**
- * Selector for elements that can receive keyboard focus. Mirrors the one the
- * `Dialog` primitive uses so overlays behave consistently.
- */
-const FOCUSABLE_SELECTOR =
-  'a[href], area[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), iframe, object, embed, [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
+import { focusableElements } from '@/lib/focus'
 
 /**
  * Traps keyboard focus inside `containerRef` while `active` is true, matching
@@ -34,7 +28,7 @@ export function useFocusTrap(
         : null
 
     // Move focus into the container.
-    const first = container.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+    const first = focusableElements(container)[0]
     if (first) first.focus()
     else container.focus()
 
@@ -42,9 +36,7 @@ export function useFocusTrap(
       if (event.key !== 'Tab') return
       const panel = containerRef.current
       if (!panel) return
-      const focusable = Array.from(
-        panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      ).filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null)
+      const focusable = focusableElements(panel)
 
       if (focusable.length === 0) {
         event.preventDefault()

@@ -183,10 +183,11 @@ export function TaskForm({
           placeholder="e.g. Follow up on proposal"
           maxLength={500}
           aria-invalid={state?.fieldErrors?.title ? true : undefined}
+          aria-describedby={state?.fieldErrors?.title ? 'task-title-error' : undefined}
           className={cn(inputClass, state?.fieldErrors?.title && invalidRing)}
         />
         {state?.fieldErrors?.title ? (
-          <p role="alert" className="mt-1 text-xs text-danger-foreground">
+          <p id="task-title-error" role="alert" className="mt-1 text-xs text-danger-foreground">
             {state.fieldErrors.title}
           </p>
         ) : null}
@@ -224,10 +225,11 @@ export function TaskForm({
             required
             defaultValue={defaultDueDate}
             aria-invalid={state?.fieldErrors?.dueDate ? true : undefined}
+            aria-describedby={state?.fieldErrors?.dueDate ? 'task-due-date-error' : undefined}
             className={cn(inputClass, state?.fieldErrors?.dueDate && invalidRing)}
           />
           {state?.fieldErrors?.dueDate ? (
-            <p role="alert" className="mt-1 text-xs text-danger-foreground">
+            <p id="task-due-date-error" role="alert" className="mt-1 text-xs text-danger-foreground">
               {state.fieldErrors.dueDate}
             </p>
           ) : null}
@@ -262,6 +264,7 @@ export function TaskForm({
             required
             defaultValue={defaultLead}
             aria-invalid={state?.fieldErrors?.leadId ? true : undefined}
+            aria-describedby={state?.fieldErrors?.leadId ? 'task-lead-error' : undefined}
             className={cn(selectClass, state?.fieldErrors?.leadId && invalidRing)}
           >
             {leads.length === 0 ? (
@@ -277,7 +280,7 @@ export function TaskForm({
             )}
           </select>
           {state?.fieldErrors?.leadId ? (
-            <p role="alert" className="mt-1 text-xs text-danger-foreground">
+            <p id="task-lead-error" role="alert" className="mt-1 text-xs text-danger-foreground">
               {state.fieldErrors.leadId}
             </p>
           ) : null}
@@ -296,6 +299,7 @@ export function TaskForm({
             required
             defaultValue={defaultAssignee}
             aria-invalid={state?.fieldErrors?.assigneeId ? true : undefined}
+            aria-describedby={state?.fieldErrors?.assigneeId ? 'task-assignee-error' : undefined}
             className={cn(
               selectClass,
               state?.fieldErrors?.assigneeId && invalidRing,
@@ -314,7 +318,7 @@ export function TaskForm({
             )}
           </select>
           {state?.fieldErrors?.assigneeId ? (
-            <p role="alert" className="mt-1 text-xs text-danger-foreground">
+            <p id="task-assignee-error" role="alert" className="mt-1 text-xs text-danger-foreground">
               {state.fieldErrors.assigneeId}
             </p>
           ) : null}

@@ -5,6 +5,7 @@ import { X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { focusableElements } from '@/lib/focus'
 
 export interface DialogProps {
   /** Whether the dialog is currently visible. */
@@ -44,12 +45,11 @@ const SIZE_CLASSES: Record<NonNullable<DialogProps['size']>, string> = {
 }
 
 /**
- * Focusable element selector used by both the initial focus and the
- * focus-trap machinery. Includes controls that are actually reachable
- * with Tab; hidden or explicitly opted-out elements are excluded.
+ * Track opening order so only the top dialog owns Escape and the Tab loop.
  */
-const FOCUSABLE_SELECTOR =
-  'a[href], area[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), iframe, object, embed, [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
+type FocusScope = { panel: HTMLElement; previous: HTMLElement | null }
+const focusScopes: FocusScope[] = []
+const topScope = () => focusScopes[focusScopes.length - 1]
 
 /**
  * Reference-counted body scroll lock. Every open dialog increments the
@@ -105,12 +105,17 @@ export function Dialog({
 }: DialogProps): React.JSX.Element | null {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
+  const onCloseRef = useRef(onClose)
   const titleId = useId()
   const descriptionId = useId()
+
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
   // Escape-to-close + body scroll lock + focus restore.
   useEffect(() => {
     if (!open) return
+    const panel = panelRef.current
+    if (!panel) return
 
     // Remember what was focused before we opened, so we can restore it
     // when the dialog closes.
@@ -119,34 +124,47 @@ export function Dialog({
         ? (document.activeElement as HTMLElement | null)
         : null
 
+    const scope = { panel, previous: previousFocusRef.current }
+    const descendant = focusScopes.findIndex(entry => panel.contains(entry.panel))
+    if (descendant < 0) focusScopes.push(scope)
+    else focusScopes.splice(descendant, 0, scope)
     acquireScrollLock()
 
     function onKey(event: KeyboardEvent): void {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !event.defaultPrevented && topScope() === scope) {
+        event.preventDefault()
         event.stopPropagation()
-        onClose()
+        onCloseRef.current()
       }
     }
     document.addEventListener('keydown', onKey)
 
     return () => {
       document.removeEventListener('keydown', onKey)
+      const wasTop = topScope() === scope
+      focusScopes.splice(focusScopes.indexOf(scope), 1)
+      for (const entry of focusScopes) {
+        if (entry.previous && panel.contains(entry.previous)) entry.previous = scope.previous
+      }
       releaseScrollLock()
       // Return focus to whatever the user was on before opening.
-      const previous = previousFocusRef.current
-      if (previous && typeof previous.focus === 'function') {
+      const remaining = topScope()
+      const previous = remaining && (!scope.previous || !remaining.panel.contains(scope.previous))
+        ? (focusableElements(remaining.panel)[0] ?? remaining.panel)
+        : scope.previous
+      if (wasTop && previous?.isConnected) {
         // `preventScroll` avoids the page jumping around during restore.
         previous.focus({ preventScroll: true })
       }
     }
-  }, [open, onClose])
+  }, [open])
 
   // Focus the first focusable element after open.
   useEffect(() => {
     if (!open) return
     const panel = panelRef.current
-    if (!panel) return
-    const first = panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+    if (!panel || topScope()?.panel !== panel) return
+    const first = focusableElements(panel)[0]
     if (first) {
       first.focus()
     } else {
@@ -160,10 +178,8 @@ export function Dialog({
     function onKeyDown(event: KeyboardEvent): void {
       if (event.key !== 'Tab') return
       const panel = panelRef.current
-      if (!panel) return
-      const focusable = Array.from(
-        panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      ).filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null)
+      if (!panel || topScope()?.panel !== panel) return
+      const focusable = focusableElements(panel)
 
       if (focusable.length === 0) {
         event.preventDefault()

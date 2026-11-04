@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../..', import.meta.url))
 const actionMocks = {
+  '@/lib/supabase/client': path.join(root, 'e2e/rehearsal-app/mocks/supabase-client.ts'),
   '@/server/actions/forecast': path.join(root, 'e2e/rehearsal-app/mocks/forecast-actions.ts'),
   '@/server/actions/leads': path.join(
     root,
@@ -36,6 +37,8 @@ const config = {
                 if (
                   resolved.startsWith('@/server/') ||
                   resolved.includes('/src/server/') ||
+                  resolved.startsWith('@/lib/supabase/') ||
+                  resolved.includes('/src/lib/supabase/') ||
                   /^(?:@prisma\/|@supabase\/|pg$|postgres$)/.test(resolved)
                 ) {
                   throw new Error(
