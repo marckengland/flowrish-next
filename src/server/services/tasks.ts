@@ -48,6 +48,7 @@ export async function createTask(
   data: unknown,
   userId: string,
   orgId: string,
+  leadAccessFilter: Record<string, unknown> = {},
 ) {
   // Validate input
   const validated = taskCreateSchema.parse(data)
@@ -56,11 +57,15 @@ export async function createTask(
 
   // Verify the lead exists within the organization
   const lead = await db.lead.findFirst({
-    where: { id: validated.leadId, deletedAt: null },
+    where: { ...leadAccessFilter, id: validated.leadId, deletedAt: null },
   })
 
   if (!lead) {
-    throw new AppError('LEAD_NOT_FOUND', 'The specified lead does not exist', 404)
+    throw new AppError(
+      'LEAD_NOT_FOUND',
+      'The specified lead does not exist',
+      404,
+    )
   }
 
   // Verify the assignee exists (User is not tenant-scoped, use global prisma)
@@ -69,7 +74,11 @@ export async function createTask(
   })
 
   if (!assignee) {
-    throw new AppError('ASSIGNEE_NOT_FOUND', 'The specified assignee does not exist', 404)
+    throw new AppError(
+      'ASSIGNEE_NOT_FOUND',
+      'The specified assignee does not exist',
+      404,
+    )
   }
 
   // Create the task
@@ -100,12 +109,13 @@ export async function completeTask(
   id: string,
   userId: string,
   orgId: string,
+  accessWhere: Record<string, unknown> = {},
 ) {
   const db = createTenantPrisma(orgId)
 
   // Find the task
   const task = await db.task.findFirst({
-    where: { id },
+    where: { ...accessWhere, id },
   })
 
   if (!task) {
@@ -121,7 +131,7 @@ export async function completeTask(
 
   // Mark task as complete
   const updatedTask = await db.task.update({
-    where: { id },
+    where: { ...accessWhere, id },
     data: {
       isComplete: true,
       completedAt: now,
@@ -160,12 +170,13 @@ export async function reassignTask(
   id: string,
   newAssigneeId: string,
   orgId: string,
+  accessWhere: Record<string, unknown> = {},
 ) {
   const db = createTenantPrisma(orgId)
 
   // Verify the task exists
   const task = await db.task.findFirst({
-    where: { id },
+    where: { ...accessWhere, id },
   })
 
   if (!task) {
@@ -178,12 +189,16 @@ export async function reassignTask(
   })
 
   if (!assignee) {
-    throw new AppError('ASSIGNEE_NOT_FOUND', 'The specified assignee does not exist', 404)
+    throw new AppError(
+      'ASSIGNEE_NOT_FOUND',
+      'The specified assignee does not exist',
+      404,
+    )
   }
 
   // Update the task's assignee
   const updatedTask = await db.task.update({
-    where: { id },
+    where: { ...accessWhere, id },
     data: { assigneeId: newAssigneeId },
   })
 
@@ -257,10 +272,11 @@ export async function getTasks(
 export async function getTaskById(
   id: string,
   orgId: string,
+  accessWhere: Record<string, unknown> = {},
 ): Promise<TaskWithOverdue> {
   const db = createTenantPrisma(orgId)
   const task = await db.task.findFirst({
-    where: { id },
+    where: { ...accessWhere, id },
     include: {
       lead: { select: { id: true, firstName: true, lastName: true } },
       assignee: { select: { id: true, name: true, email: true } },

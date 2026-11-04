@@ -99,7 +99,7 @@ export function LeadTable({
     { filters, page, pageSize },
     isDefaultView ? initialData : undefined,
   )
-  const leadsPage = query.data ?? initialData
+  const leadsPage = query.data ?? (isDefaultView ? initialData : undefined)
 
   const sorted = useMemo(() => {
     const rows = leadsPage?.data ?? []
@@ -180,7 +180,9 @@ export function LeadTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-row-divider">
-            {query.isError ? (
+            {query.isLoading && !leadsPage ? (
+              <TableState colSpan={7}>Loading leads…</TableState>
+            ) : query.isError ? (
               <TableState colSpan={7} tone="error">
                 Couldn&apos;t load leads.{' '}
                 {query.error instanceof Error ? query.error.message : ''}
@@ -196,7 +198,10 @@ export function LeadTable({
               sorted.map((lead) => (
                 <tr
                   key={lead.id}
-                  onClick={rowNavClick((href) => router.push(href), `/leads/${lead.id}`)}
+                  onClick={rowNavClick(
+                    (href) => router.push(href),
+                    `/leads/${lead.id}`,
+                  )}
                   className="cursor-pointer transition-colors hover:bg-background focus-within:bg-background"
                 >
                   <td className="px-4 py-3 font-semibold">

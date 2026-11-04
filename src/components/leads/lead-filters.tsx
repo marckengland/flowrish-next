@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -72,31 +72,38 @@ export function LeadFilters({
   // Persist the active filter set to localStorage so it survives navigation
   // and reloads. Loaded once after mount (SSR-safe — the server renders with
   // no filters, the client hydrates them), then written on every change.
-  const filtersHydrated = useRef(false)
+  const [filtersHydrated, setFiltersHydrated] = useState(false)
+  const [searchInput, setSearchInput] = useState(leads.search ?? '')
+  const debouncedSearch = useDebouncedValue(searchInput, 300)
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(LEADS_FILTERS_KEY)
       if (raw) {
         const parsed = JSON.parse(raw) as Record<string, unknown>
-        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          Object.keys(parsed).length > 0
+        ) {
           setLeadFilters(parsed)
+          setSearchInput(typeof parsed.search === 'string' ? parsed.search : '')
         }
       }
     } catch {
       // Ignore malformed / unavailable storage.
     } finally {
-      filtersHydrated.current = true
+      setFiltersHydrated(true)
     }
   }, [setLeadFilters])
 
   useEffect(() => {
-    if (!filtersHydrated.current) return
+    if (!filtersHydrated) return
     try {
       window.localStorage.setItem(LEADS_FILTERS_KEY, JSON.stringify(leads))
     } catch {
       // Ignore quota / unavailable storage.
     }
-  }, [leads])
+  }, [leads, filtersHydrated])
 
   const searchId = useId()
   const stageId = useId()
@@ -107,12 +114,10 @@ export function LeadFilters({
   // Local input state keeps the field responsive while the query key is
   // debounced. Seeded from the store so external "clear" actions still
   // reset the visible input.
-  const [searchInput, setSearchInput] = useState(leads.search ?? '')
-  const debouncedSearch = useDebouncedValue(searchInput, 300)
-
   useEffect(() => {
+    if (!filtersHydrated || debouncedSearch !== searchInput) return
     setLeadFilter('search', debouncedSearch)
-  }, [debouncedSearch, setLeadFilter])
+  }, [debouncedSearch, searchInput, filtersHydrated, setLeadFilter])
 
   useEffect(() => {
     // Reflect external resets in the local input (e.g. Clear button).

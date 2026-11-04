@@ -1612,13 +1612,10 @@ export async function executeChatAction(
         if (!stage) {
           // No pipeline yet — auto-create the default one through the
           // pipeline service and pick the first stage from that.
-          const { getOrCreateDefaultPipeline } = await import(
-            '@/server/services/pipeline'
-          )
+          const { getOrCreateDefaultPipeline } =
+            await import('@/server/services/pipeline')
           const pipeline = await getOrCreateDefaultPipeline(orgId)
-          stage = pipeline.stages[0]
-            ? { id: pipeline.stages[0].id }
-            : null
+          stage = pipeline.stages[0] ? { id: pipeline.stages[0].id } : null
         }
         if (!stage) {
           return {
@@ -1659,49 +1656,10 @@ export async function executeChatAction(
       }
 
       case 'create_task': {
-        const db = createTenantPrisma(orgId)
-        // Tasks must be attached to a lead. If the model didn't supply
-        // one, attach to the most recently updated lead the user can
-        // see — useful for "remind me to follow up tomorrow" style
-        // requests where the lead context is implicit.
-        let leadId = action.params.leadId
-        if (!leadId) {
-          const recent = await db.lead.findFirst({
-            where: { deletedAt: null },
-            orderBy: { updatedAt: 'desc' },
-            select: { id: true },
-          })
-          if (!recent) {
-            return {
-              success: false,
-              message: 'No leads exist to attach the task to. Create a lead first.',
-            }
-          }
-          leadId = recent.id
-        }
-
-        const dueDate = action.params.dueDate
-          ? new Date(action.params.dueDate)
-          : new Date(Date.now() + 24 * 60 * 60 * 1000)
-
-        const { createTask } = await import('@/server/services/tasks')
-        const task = await createTask(
-          {
-            title: action.params.title,
-            description: action.params.description ?? null,
-            priority: action.params.priority ?? 'MEDIUM',
-            dueDate,
-            leadId,
-            assigneeId: action.params.assigneeId ?? userId,
-          },
-          userId,
-          orgId,
-        )
-
         return {
-          success: true,
-          message: `Task "${action.params.title}" created.`,
-          data: { taskId: task.id, leadId },
+          success: false,
+          message:
+            'Task proposals require the authorized task execution endpoint.',
         }
       }
 
@@ -1779,9 +1737,8 @@ export async function executeChatAction(
       }
 
       case 'enroll_in_cadence': {
-        const { enrollLead: enrollLeadInCadence } = await import(
-          '@/server/services/cadences'
-        )
+        const { enrollLead: enrollLeadInCadence } =
+          await import('@/server/services/cadences')
         const enrollment = await enrollLeadInCadence(
           action.params.cadenceId,
           action.params.leadId,
@@ -1804,9 +1761,8 @@ export async function executeChatAction(
         // scoping, validation, and contiguous step ordering stay
         // identical. The cadence is created as DRAFT (createCadence
         // always starts DRAFT) so the user reviews/activates it.
-        const { createCadence, addStep } = await import(
-          '@/server/services/cadences'
-        )
+        const { createCadence, addStep } =
+          await import('@/server/services/cadences')
         const cadence = (await createCadence(
           { name: action.params.name },
           userId,

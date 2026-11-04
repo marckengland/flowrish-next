@@ -4,10 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import {
-  createTask as createTaskService,
-  completeTask as completeTaskService,
-  reassignTask,
-} from '@/server/services/tasks'
+  createAuthorizedTask,
+  completeAuthorizedTask,
+  updateAuthorizedTask,
+} from '@/server/services/task-access'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
 import { fieldErrorsFromZod } from '@/server/actions/field-errors'
@@ -42,20 +42,22 @@ export async function createTask(formData: FormData) {
   const data = formDataToTaskObject(formData)
 
   try {
-    const task = await createTaskService(data, session.dbUser.id, session.organizationId)
+    const task = await createAuthorizedTask(session, data)
 
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
-    db.auditEntry.create({
-      data: tenantData({
-        userId: session.dbUser.id,
-        action: 'CREATE',
-        entityType: 'Task',
-        entityId: task.id,
-      }),
-    }).catch((err) => {
-      console.error('Audit log failed (createTask):', err)
-    })
+    db.auditEntry
+      .create({
+        data: tenantData({
+          userId: session.dbUser.id,
+          action: 'CREATE',
+          entityType: 'Task',
+          entityId: task.id,
+        }),
+      })
+      .catch((err) => {
+        console.error('Audit log failed (createTask):', err)
+      })
 
     revalidatePath('/tasks')
     return { data: task }
@@ -89,21 +91,23 @@ export async function completeTask(id: string) {
   }
 
   try {
-    const task = await completeTaskService(id, session.dbUser.id, session.organizationId)
+    const task = await completeAuthorizedTask(session, id)
 
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)
-    db.auditEntry.create({
-      data: tenantData({
-        userId: session.dbUser.id,
-        action: 'UPDATE',
-        entityType: 'Task',
-        entityId: id,
-        changes: { action: 'complete' },
-      }),
-    }).catch((err) => {
-      console.error('Audit log failed (completeTask):', err)
-    })
+    db.auditEntry
+      .create({
+        data: tenantData({
+          userId: session.dbUser.id,
+          action: 'UPDATE',
+          entityType: 'Task',
+          entityId: id,
+          changes: { action: 'complete' },
+        }),
+      })
+      .catch((err) => {
+        console.error('Audit log failed (completeTask):', err)
+      })
 
     revalidatePath('/tasks')
     return { data: task }
@@ -139,40 +143,21 @@ export async function updateTask(formData: FormData) {
   try {
     const db = createTenantPrisma(session.organizationId)
 
-    // If assigneeId is being changed, use the reassignTask service
-    if (data.assigneeId) {
-      await reassignTask(id, data.assigneeId as string, session.organizationId)
-      delete data.assigneeId
-    }
-
-    // Update remaining fields if any
-    let updatedTask
-    const updateData: Record<string, unknown> = {}
-    if (data.title !== undefined) updateData.title = data.title as string
-    if (data.description !== undefined) updateData.description = data.description as string
-    if (data.dueDate !== undefined) updateData.dueDate = new Date(data.dueDate as string)
-    if (data.priority !== undefined) updateData.priority = data.priority as string
-
-    if (Object.keys(updateData).length > 0) {
-      updatedTask = await db.task.update({
-        where: { id },
-        data: updateData,
-      })
-    } else {
-      updatedTask = await db.task.findFirst({ where: { id } })
-    }
+    const updatedTask = await updateAuthorizedTask(session, id, data)
 
     // Audit log: async, non-blocking
-    db.auditEntry.create({
-      data: tenantData({
-        userId: session.dbUser.id,
-        action: 'UPDATE',
-        entityType: 'Task',
-        entityId: id,
-      }),
-    }).catch((err) => {
-      console.error('Audit log failed (updateTask):', err)
-    })
+    db.auditEntry
+      .create({
+        data: tenantData({
+          userId: session.dbUser.id,
+          action: 'UPDATE',
+          entityType: 'Task',
+          entityId: id,
+        }),
+      })
+      .catch((err) => {
+        console.error('Audit log failed (updateTask):', err)
+      })
 
     revalidatePath('/tasks')
     return { data: updatedTask }

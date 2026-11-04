@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
-import { createTask, getTasks } from '@/server/services/tasks'
+import {
+  createAuthorizedTask,
+  getAuthorizedTasks,
+} from '@/server/services/task-access'
 import { errorResponse } from '@/lib/errors'
 
 /**
@@ -25,11 +28,13 @@ export async function GET(request: NextRequest) {
       isComplete: searchParams.has('isComplete')
         ? searchParams.get('isComplete') === 'true'
         : undefined,
-      priority: (searchParams.get('priority') as 'LOW' | 'MEDIUM' | 'HIGH') ?? undefined,
+      priority:
+        (searchParams.get('priority') as 'LOW' | 'MEDIUM' | 'HIGH') ??
+        undefined,
       assigneeId: searchParams.get('assigneeId') ?? undefined,
     }
 
-    const tasks = await getTasks(session.dbUser.id, filters, session.organizationId)
+    const tasks = await getAuthorizedTasks(session, filters)
 
     return NextResponse.json({ data: tasks })
   } catch (error) {
@@ -50,7 +55,7 @@ export async function POST(request: NextRequest) {
     requirePermission(session.dbUser, 'leads:write')
 
     const body = await request.json()
-    const task = await createTask(body, session.dbUser.id, session.organizationId)
+    const task = await createAuthorizedTask(session, body)
 
     return NextResponse.json({ data: task }, { status: 201 })
   } catch (error) {

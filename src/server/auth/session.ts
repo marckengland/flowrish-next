@@ -66,7 +66,7 @@ export async function getSession(): Promise<Session | null> {
 
   // Resolve organizationId from the user's default organization membership
   const defaultMembership = dbUser.organizationMemberships.find(
-    (m) => m.isDefault
+    (m) => m.isDefault,
   )
 
   // If no default membership exists, fall back to the first membership
@@ -75,7 +75,13 @@ export async function getSession(): Promise<Session | null> {
 
   return {
     authUser: user,
-    dbUser,
+    dbUser: {
+      ...dbUser,
+      teamMemberships: dbUser.teamMemberships.filter(
+        (teamMembership) =>
+          teamMembership.team.organizationId === membership.organizationId,
+      ),
+    },
     organizationId: membership.organizationId,
   }
 }

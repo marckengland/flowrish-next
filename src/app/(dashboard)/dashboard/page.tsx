@@ -1,12 +1,18 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Calendar, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 
-import { DashboardTabs, type DashboardTabItem } from '@/components/dashboard/dashboard-tabs'
+import {
+  DashboardTabs,
+  type DashboardTabItem,
+} from '@/components/dashboard/dashboard-tabs'
 import { PageHeader } from '@/components/layout/page-header'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import { CommitVsAiPanel } from '@/components/dashboard/panels/commit-vs-ai'
-import { DealGapsPanel, type DealGapRow } from '@/components/dashboard/panels/deal-gaps'
+import {
+  DealGapsPanel,
+  type DealGapRow,
+} from '@/components/dashboard/panels/deal-gaps'
 import {
   DealHealthPanel,
   type DealHealthRow,
@@ -22,6 +28,8 @@ import {
   type RhythmActionRow,
 } from '@/components/dashboard/panels/todays-rhythm'
 import { requireSession } from '@/server/auth/session'
+import { hasPermission } from '@/server/auth/permissions'
+import { getLeadAccessFilter } from '@/server/services/access'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { prisma } from '@/server/db/client'
 import { getPipelineMetrics } from '@/server/services/dashboard'
@@ -63,6 +71,18 @@ export default async function DashboardPage({
   // this component can be reasoned about in isolation.
   if (!session) redirect('/login')
 
+  if (!hasPermission(session.dbUser, 'leads:read')) {
+    return (
+      <div className="rounded-lg border bg-card p-6">
+        <h1 className="text-lg font-semibold">Dashboard</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          You don&apos;t have permission to view the dashboard in this
+          organization.
+        </p>
+      </div>
+    )
+  }
+  const canWrite = hasPermission(session.dbUser, 'leads:write')
   const orgId = session.organizationId
   const userId = session.dbUser.id
   const params = (await searchParams) ?? {}
@@ -91,14 +111,24 @@ export default async function DashboardPage({
   const myTasksPromise = db.task.findMany({
     where: { assigneeId: userId, isComplete: false },
     include: {
-      lead: { select: { id: true, firstName: true, lastName: true, score: true, dealValue: true, lastActivityAt: true } },
+      lead: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          score: true,
+          dealValue: true,
+          lastActivityAt: true,
+        },
+      },
     },
     orderBy: { dueDate: 'asc' },
   })
 
   // Open leads (excluding closed won/lost) for Deal Health + Deal Gaps
+  const accessFilter = await getLeadAccessFilter(session.dbUser, orgId)
   const openLeadsPromise = db.lead.findMany({
-    where: { isClosed: false, deletedAt: null },
+    where: { ...accessFilter, isClosed: false, deletedAt: null },
     select: {
       id: true,
       firstName: true,
@@ -117,11 +147,10 @@ export default async function DashboardPage({
     : Promise.resolve(null)
 
   // Team members (manager+ only) for Team View
-  const teamMembersPromise: Promise<
-    { userId: string; name: string }[]
-  > = isManagerOrAbove
-    ? resolveTeamMembers(userId, orgId, hierarchy)
-    : Promise.resolve([])
+  const teamMembersPromise: Promise<{ userId: string; name: string }[]> =
+    isManagerOrAbove
+      ? resolveTeamMembers(userId, orgId, hierarchy)
+      : Promise.resolve([])
 
   const [
     metricsReport,
@@ -156,23 +185,27 @@ export default async function DashboardPage({
     .sort((a, b) => b.score - a.score)
 
   const nowMs = Date.now()
-  const rhythmActions: RhythmActionRow[] = rankedMyTasks.slice(0, 5).map((r) => ({
-    id: r.task.id,
-    title: r.task.title,
-    dueDate: r.task.dueDate,
-    priorityScore: r.score,
-    isOverdue: r.task.dueDate.getTime() < nowMs,
-    leadId: r.task.lead.id,
-    leadName: `${r.task.lead.firstName} ${r.task.lead.lastName}`.trim(),
-  }))
+  const rhythmActions: RhythmActionRow[] = rankedMyTasks
+    .slice(0, 5)
+    .map((r) => ({
+      id: r.task.id,
+      title: r.task.title,
+      dueDate: r.task.dueDate,
+      priorityScore: r.score,
+      isOverdue: r.task.dueDate.getTime() < nowMs,
+      leadId: r.task.lead.id,
+      leadName: `${r.task.lead.firstName} ${r.task.lead.lastName}`.trim(),
+    }))
   const overdueCount = rankedMyTasks.filter(
     (r) => r.task.dueDate.getTime() < nowMs,
   ).length
   const todayCount = rankedMyTasks.filter((r) => {
     const d = r.task.dueDate
-    return d.getFullYear() === now.getFullYear()
-      && d.getMonth() === now.getMonth()
-      && d.getDate() === now.getDate()
+    return (
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate()
+    )
   }).length
 
   // ── Derived: Deal Health + Deal Gaps (batched) ─────────────────────────────
@@ -296,9 +329,10 @@ export default async function DashboardPage({
 
   // ── Derived: Commit vs AI ──────────────────────────────────────────────────
   const teamCommitValue = commit ? Number(commit.commitAmount) : null
-  const risk = teamCommitValue == null
-    ? null
-    : assessForecastRisk(teamCommitValue, forecastMetrics.aiPredicted)
+  const risk =
+    teamCommitValue == null
+      ? null
+      : assessForecastRisk(teamCommitValue, forecastMetrics.aiPredicted)
 
   // ── Assemble tabs ──────────────────────────────────────────────────────────
   const activeTab = typeof params.tab === 'string' ? params.tab : undefined
@@ -324,9 +358,7 @@ export default async function DashboardPage({
     {
       value: 'health',
       label: 'Deal Health',
-      content: (
-        <DealHealthPanel leads={worstHealth} summary={healthSummary} />
-      ),
+      content: <DealHealthPanel leads={worstHealth} summary={healthSummary} />,
     },
     {
       value: 'gaps',
@@ -371,19 +403,12 @@ export default async function DashboardPage({
         title="Dashboard"
         description="Signals, forecasts and pipeline metrics for your organization."
         actions={
-          <>
-            <Button variant="outline" size="lg" type="button">
-              <Calendar className="size-4" aria-hidden="true" />
-              This month
-            </Button>
-            <Link
-              href="/leads/new"
-              className={buttonVariants({ size: 'lg' })}
-            >
+          canWrite ? (
+            <Link href="/leads/new" className={buttonVariants({ size: 'lg' })}>
               <Plus className="size-4" aria-hidden="true" />
               New lead
             </Link>
-          </>
+          ) : undefined
         }
       />
       <DashboardTabs items={items} defaultValue={activeTab} />

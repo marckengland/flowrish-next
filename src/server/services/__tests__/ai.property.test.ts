@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import fc from 'fast-check'
 
+vi.mock('@/lib/web/fetch-site', () => ({ fetchSiteText: async () => null }))
+
 vi.mock('@/server/services/org-ai-provider', () => ({ resolveOrganizationAi: async () => null }))
 
 vi.mock('@/server/services/knowledge', () => ({ getAirishKnowledge: async () => ({ text: '', sources: [] }) }))

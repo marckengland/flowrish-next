@@ -2,6 +2,16 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../..', import.meta.url))
+const actionMocks = {
+  '@/server/actions/leads': path.join(
+    root,
+    'e2e/rehearsal-app/mocks/leads-actions.ts',
+  ),
+  '@/server/actions/tasks': path.join(
+    root,
+    'e2e/rehearsal-app/mocks/tasks-actions.ts',
+  ),
+}
 const config = {
   experimental: { externalDir: true },
   webpack(config) {
@@ -15,6 +25,10 @@ const config = {
               'RehearsalServerBoundary',
               (data) => {
                 if (!data) return
+                if (Object.hasOwn(actionMocks, data.request)) {
+                  data.request = actionMocks[data.request]
+                  return
+                }
                 const resolved = data.request.startsWith('.')
                   ? path.resolve(data.context, data.request)
                   : data.request

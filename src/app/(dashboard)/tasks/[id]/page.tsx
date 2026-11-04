@@ -3,6 +3,10 @@ import { notFound } from 'next/navigation'
 import { requireSession } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getTaskById } from '@/server/services/tasks'
+import {
+  getAuthorizedTask,
+  memberTaskScope,
+} from '@/server/services/task-access'
 import { AppError } from '@/lib/errors'
 
 import { TaskDetailView } from '@/components/tasks/task-detail'
@@ -39,7 +43,7 @@ export default async function TaskDetailPage({
 
   let task
   try {
-    task = await getTaskById(id, session.organizationId)
+    task = await getAuthorizedTask(session, id)
   } catch (err) {
     if (err instanceof AppError && err.code === 'TASK_NOT_FOUND') {
       notFound()
@@ -51,7 +55,9 @@ export default async function TaskDetailPage({
     <TaskDetailView
       task={toTaskItem(task)}
       canComplete={canWrite}
-      canReassign={canWrite && !task.isComplete}
+      canReassign={
+        canWrite && !memberTaskScope(session.dbUser) && !task.isComplete
+      }
     />
   )
 }
@@ -61,9 +67,7 @@ export default async function TaskDetailPage({
  * `TaskItem` consumers expect. Mirrors the helper of the same name in
  * the tasks list page so detail and list views agree byte-for-byte.
  */
-function toTaskItem(
-  task: Awaited<ReturnType<typeof getTaskById>>,
-): TaskItem {
+function toTaskItem(task: Awaited<ReturnType<typeof getTaskById>>): TaskItem {
   const withIncludes = task as unknown as {
     lead?: { id: string; firstName: string; lastName: string } | null
     assignee?: { id: string; name: string; email: string } | null

@@ -3,11 +3,9 @@ import { z } from 'zod'
 
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
-import {
-  executeChatAction,
-  type ChatAction,
-} from '@/server/services/ai'
+import { executeChatAction, type ChatAction } from '@/server/services/ai'
 import { errorResponse } from '@/lib/errors'
+import { createTaskFromProposal } from '@/server/services/task-access'
 
 /**
  * POST /api/ai/chat/execute — Performs an AI-proposed action after
@@ -131,6 +129,17 @@ export async function POST(request: NextRequest) {
     // so require the same permission the manual cadence builder does.
     if (action.type === 'create_cadence') {
       requirePermission(session.dbUser, 'cadences:manage')
+    }
+
+    if (action.type === 'create_task') {
+      const task = await createTaskFromProposal(session, action.params)
+      return NextResponse.json({
+        data: {
+          success: true,
+          message: 'Task created.',
+          data: { taskId: task.id, leadId: task.leadId },
+        },
+      })
     }
 
     const result = await executeChatAction(

@@ -53,7 +53,16 @@ process.once('SIGTERM', () => {
   void stop().finally(() => process.exit(143))
 })
 try {
-  await success(run(['--test', 'scripts/rehearsal-safety.test.mjs'], env))
+  await success(
+    run(
+      [
+        '--test',
+        'scripts/rehearsal-safety.test.mjs',
+        'scripts/rehearsal-action-boundary.test.mjs',
+      ],
+      env,
+    ),
+  )
   const port = await freePort(),
     baseURL = `http://127.0.0.1:${port}`
   proxy = createReadOnlyProxy(baseURL, (reason) =>
@@ -121,13 +130,13 @@ try {
     readFileSync(path.join(output, 'results.json'), 'utf8'),
   )
   if (
-    results.stats.expected !== 33 ||
+    results.stats.expected !== 38 ||
     results.stats.unexpected ||
     results.stats.flaky ||
     results.stats.skipped
   )
     throw new Error(
-      'Exactly 33 passing, non-skipped, non-retried browser scenarios are required.',
+      'Exactly 38 passing, non-skipped, non-retried browser scenarios are required.',
     )
   if (readFileSync(log, 'utf8').trim())
     throw new Error(
@@ -147,5 +156,5 @@ try {
 }
 if (!process.exitCode)
   console.log(
-    '33 mocked receptionist browser scenarios passed with no guard violations.',
+    '38 mocked receptionist browser scenarios passed with no guard violations.',
   )
