@@ -64,3 +64,26 @@ it('shows safe load errors and retries reads only when requested', async () => {
   expect(fetch).toHaveBeenCalledTimes(2)
   expect(m.switchTo).not.toHaveBeenCalled()
 })
+it('keeps the current business label when its membership disappears and offers explicit recovery', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: { workspaces: [{ id: 'two', name: 'Practice Two' }] },
+          }),
+        ),
+      ),
+  )
+  render(
+    <WorkspaceSwitcher organizationId="one" organizationName="Practice One" />,
+  )
+  await screen.findByRole('option', { name: 'Practice Two' })
+  expect(screen.getByRole('combobox', { name: 'Business' })).toHaveValue('one')
+  expect(
+    screen.getByRole('link', { name: 'Choose another business' }),
+  ).toHaveAttribute('href', '/workspaces')
+  expect(m.switchTo).not.toHaveBeenCalled()
+})

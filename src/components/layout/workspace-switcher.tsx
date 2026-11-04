@@ -45,6 +45,12 @@ export function WorkspaceSwitcher({
       })
     return () => controller.abort()
   }, [attempt])
+  const unavailable = Boolean(
+    organizationId &&
+    !loading &&
+    !error &&
+    !workspaces.some((workspace) => workspace.id === organizationId),
+  )
   return (
     <div className="min-w-0 space-y-1.5">
       <label className="sr-only" htmlFor="workspace-selector">
@@ -54,7 +60,10 @@ export function WorkspaceSwitcher({
         id="workspace-selector"
         value={organizationId ?? ''}
         disabled={
-          loading || error || (Boolean(organizationId) && workspaces.length < 2)
+          loading ||
+          error ||
+          unavailable ||
+          (Boolean(organizationId) && workspaces.length < 2)
         }
         aria-busy={loading}
         onChange={(event) => switchTo(event.target.value)}
@@ -66,6 +75,11 @@ export function WorkspaceSwitcher({
           </option>
         ) : (
           <>
+            {unavailable && (
+              <option value={organizationId} disabled>
+                {organizationName ?? 'Previous business'}
+              </option>
+            )}
             {!organizationId && (
               <option value="" disabled>
                 Choose a business
@@ -79,7 +93,14 @@ export function WorkspaceSwitcher({
           </>
         )}
       </select>
-      {error ? (
+      {unavailable ? (
+        <p className="text-xs">
+          Access to this business changed.{' '}
+          <a className="underline" href="/workspaces">
+            Choose another business
+          </a>
+        </p>
+      ) : error ? (
         <p className="text-xs">
           Couldn’t load businesses.{' '}
           <button
