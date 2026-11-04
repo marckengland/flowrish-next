@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { WorkspaceBoundary } from './workspace-boundary'
 
 import { ChatbotSidebar } from '@/components/ai/chatbot-sidebar'
 import { ChatbotToggle } from '@/components/ai/chatbot-toggle'
@@ -13,6 +14,7 @@ export interface ShellProps {
   permissions: readonly Permission[]
   /** Organization display name shown in the sidebar brand area and header. */
   organizationName?: string
+  workspaceId?: string
   notificationScope?: string
   children: ReactNode
 }
@@ -33,24 +35,32 @@ export function Shell({
   user,
   permissions,
   organizationName,
+  workspaceId,
   notificationScope,
   children,
 }: ShellProps): React.JSX.Element {
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar
-        permissions={permissions}
-        organizationName={organizationName}
-        user={user}
-      />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Header user={user} organizationName={organizationName} notificationScope={notificationScope} />
-        <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-7 lg:px-8">
-          {children}
-        </main>
+    <WorkspaceBoundary organizationId={workspaceId}>
+      <div className="flex h-screen overflow-hidden bg-background">
+        <Sidebar
+          workspaceId={workspaceId}
+          permissions={permissions}
+          organizationName={organizationName}
+          user={user}
+        />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <Header
+            user={user}
+            organizationName={organizationName}
+            notificationScope={notificationScope}
+          />
+          <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-7 lg:px-8">
+            {children}
+          </main>
+        </div>
+        <ChatbotSidebar />
+        <ChatbotToggle />
       </div>
-      <ChatbotSidebar />
-      <ChatbotToggle />
-    </div>
+    </WorkspaceBoundary>
   )
 }

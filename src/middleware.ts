@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { createSupabaseMiddleware } from '@/lib/supabase/middleware'
+import {
+  selectedWorkspace,
+  WORKSPACE_COOKIE,
+  WORKSPACE_HEADER,
+  WORKSPACE_METHOD_HEADER,
+  WORKSPACE_PATH_HEADER,
+} from '@/lib/workspace-context'
 
 /**
  * Next.js middleware handling security headers, rate limiting, and authentication.
@@ -85,7 +92,10 @@ const PUBLIC_ROUTES = ['/login', '/auth/callback', '/auth/confirm']
 // --- Middleware ---
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next()
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set(WORKSPACE_METHOD_HEADER, request.method)
+  requestHeaders.set(WORKSPACE_PATH_HEADER, request.nextUrl.pathname)
+  const response = NextResponse.next({ request: { headers: requestHeaders } })
   const website =
     /^\/api\/public\/website-receptionist\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/(embed|session|message|callback)$/i.exec(
       request.nextUrl.pathname,
@@ -225,6 +235,38 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  // Supabase may have refreshed request cookies after the initial header snapshot.
+  const forwardedHeaders = new Headers(request.headers)
+  forwardedHeaders.set(WORKSPACE_METHOD_HEADER, request.method)
+  forwardedHeaders.set(WORKSPACE_PATH_HEADER, path)
+  const forwarded = NextResponse.next({
+    request: { headers: forwardedHeaders },
+  })
+  for (const [name, value] of forwarded.headers) {
+    if (name.startsWith('x-middleware-')) response.headers.set(name, value)
+  }
+
+  const chosenWorkspace = user
+    ? selectedWorkspace(request.cookies.get(WORKSPACE_COOKIE)?.value, user.id)
+    : undefined
+  const expectedWorkspace = request.headers.get(WORKSPACE_HEADER)
+  if (
+    path !== '/api/workspaces' &&
+    chosenWorkspace &&
+    expectedWorkspace &&
+    expectedWorkspace !== chosenWorkspace
+  ) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'WORKSPACE_CHANGED',
+          message: 'The active business changed. Reload before continuing.',
+        },
+      },
+      { status: 409, headers: { 'Cache-Control': 'private, no-store' } },
+    )
+  }
 
   const isPublicRoute =
     path === '/' || PUBLIC_ROUTES.some((route) => path.startsWith(route))

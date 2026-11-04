@@ -42,7 +42,7 @@ describe('KnowledgeLibrary', () => {
     render(<KnowledgeLibrary />)
     fireEvent.click(await screen.findByRole('button', { name: 'New document' }))
     fireEvent.change(screen.getByLabelText('Upload document'), { target: { files: [new File(['pdf'], 'services.pdf', { type: 'application/pdf' })] } })
-    expect(await screen.findByLabelText('Document text')).toHaveValue('Extracted services.')
+    await waitFor(() => expect(screen.getByLabelText('Document text')).toHaveValue('Extracted services.'))
     await screen.findByText('Review extracted text.')
     expect(request).toHaveBeenCalledTimes(2)
     expect(request.mock.calls[1][0]).toBe('/api/knowledge/extract')

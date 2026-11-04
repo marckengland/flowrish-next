@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  consumeEmailOAuth,
+  requireEmailOAuth,
+} from '@/server/services/email-oauth-context'
+import { requirePermission } from '@/server/auth/permissions'
 import { requireSession } from '@/server/auth/session'
 import { connectGmail } from '@/server/services/email'
 
@@ -18,7 +23,11 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error')
 
   // Helper to render the close-popup HTML with a message
-  const renderClosePage = (message: { type: string; data?: unknown; error?: string }) => {
+  const renderClosePage = (message: {
+    type: string
+    data?: unknown
+    error?: string
+  }) => {
     const html = `<!DOCTYPE html>
 <html>
 <head><title>Gmail Connection</title></head>
@@ -26,7 +35,7 @@ export async function GET(request: NextRequest) {
   <p id="status">Connecting Gmail...</p>
   <script>
     (function() {
-      var msg = ${JSON.stringify(message)};
+      var msg = ${JSON.stringify(message).replace(/</g, '\\u003c')};
       try {
         if (window.opener) {
           window.opener.postMessage(msg, window.location.origin);
@@ -42,16 +51,19 @@ export async function GET(request: NextRequest) {
   </script>
 </body>
 </html>`
-    return new NextResponse(html, {
-      status: 200,
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    })
+    return consumeEmailOAuth(
+      new NextResponse(html, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      }),
+      'gmail',
+    )
   }
 
   if (error) {
     return renderClosePage({
       type: 'gmail-oauth-error',
-      error: `Google denied access: ${error}`,
+      error: 'Google did not authorize this connection.',
     })
   }
 
@@ -64,6 +76,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const session = await requireSession()
+    requirePermission(session.dbUser, 'leads:write')
+    requireEmailOAuth(request, session, 'gmail')
     const redirectUri = `${request.nextUrl.origin}/api/email/callback`
     const result = await connectGmail(
       code,
@@ -76,8 +90,8 @@ export async function GET(request: NextRequest) {
       type: 'gmail-oauth-success',
       data: result,
     })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to connect Gmail'
+  } catch {
+    const message = 'Failed to connect Gmail. Start again in Settings.'
     return renderClosePage({
       type: 'gmail-oauth-error',
       error: message,

@@ -1,4 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
+vi.mock('next/headers', () => ({
+  cookies: async () => ({ get: () => undefined }),
+  headers: async () => new Headers(),
+}))
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), user: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServer: async () => ({ auth: { getUser: mocks.auth } }),

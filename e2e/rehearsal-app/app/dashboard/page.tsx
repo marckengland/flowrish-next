@@ -1,10 +1,14 @@
 import Link from 'next/link'
+import { cookies } from 'next/headers'
+import { WorkspaceFixture } from '../../components/workspace-fixture'
 import { PageHeader } from '@/components/layout/page-header'
 import { DashboardTabs } from '@/components/dashboard/dashboard-tabs'
 import { TodaysRhythmPanel } from '@/components/dashboard/panels/todays-rhythm'
 import { DealHealthPanel } from '@/components/dashboard/panels/deal-health'
 import { coreTask, coreLead } from '../../core-fixtures'
-export default function Page() {
+export default async function Page() {
+  const id = (await cookies()).get('mock_workspace')?.value
+  if (id) return <WorkspaceFixture id={id} />
   const task = coreTask(),
     lead = coreLead()
   return (

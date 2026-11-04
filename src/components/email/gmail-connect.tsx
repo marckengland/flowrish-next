@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { prepareMailOAuth } from '@/lib/start-mail-oauth'
 import { Loader2, Mail, Unplug } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -60,6 +61,14 @@ export function GmailConnect({
   })
   const [error, setError] = useState<string | null>(null)
   const [popupOpen, setPopupOpen] = useState(false)
+  const popupRef = useRef<Window | null>(null)
+  useEffect(
+    () => () => {
+      popupRef.current?.close()
+      popupRef.current = null
+    },
+    [],
+  )
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
 
@@ -116,7 +125,12 @@ export function GmailConnect({
    */
   const handleOAuthMessage = useCallback(
     (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return
+      if (
+        event.origin !== window.location.origin ||
+        !popupRef.current ||
+        event.source !== popupRef.current
+      )
+        return
       const data = event.data as {
         type?: string
         data?: { email: string; accountId: string }
@@ -170,7 +184,7 @@ export function GmailConnect({
     }
   }
 
-  function startOAuthFlow(): void {
+  async function startOAuthFlow(): Promise<void> {
     setError(null)
 
     if (!googleClientId) {
@@ -189,8 +203,6 @@ export function GmailConnect({
       prompt: 'consent',
     })
 
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
-
     const width = 500
     const height = 600
     const left = window.screenX + (window.outerWidth - width) / 2
@@ -198,7 +210,7 @@ export function GmailConnect({
 
     setPopupOpen(true)
     const popup = window.open(
-      authUrl,
+      'about:blank',
       'gmail-oauth',
       `width=${width},height=${height},left=${left},top=${top},popup=yes`,
     )
@@ -208,6 +220,16 @@ export function GmailConnect({
       setError(
         'Popup blocked. Please allow popups for this site and try again.',
       )
+      return
+    }
+    popupRef.current = popup
+    try {
+      await prepareMailOAuth(popup, 'gmail', params)
+    } catch {
+      popup.close()
+      popupRef.current = null
+      setPopupOpen(false)
+      setError('Connection could not start. Try again in this business.')
     }
   }
 
@@ -235,7 +257,9 @@ export function GmailConnect({
             <Mail className="size-[19px]" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[13.5px] font-semibold text-foreground">Gmail connected</p>
+            <p className="text-[13.5px] font-semibold text-foreground">
+              Gmail connected
+            </p>
             {state.email ? (
               <p className="truncate text-xs text-muted-foreground">
                 {state.email} · sending &amp; threading enabled
@@ -277,40 +301,39 @@ export function GmailConnect({
             </div>
             <ul className="space-y-1.5 text-xs text-foreground">
               <li className="flex gap-2">
-                <span aria-hidden className="text-danger-foreground">✕</span>
+                <span aria-hidden className="text-danger-foreground">
+                  ✕
+                </span>
                 <span>
                   Your refresh token is revoked at Google so it can&apos;t be
                   used again, even if a copy leaked.
                 </span>
               </li>
               <li className="flex gap-2">
-                <span aria-hidden className="text-danger-foreground">✕</span>
+                <span aria-hidden className="text-danger-foreground">
+                  ✕
+                </span>
                 <span>
-                  Your encrypted tokens and the EmailAccount record are
-                  deleted from this app.
+                  Your encrypted tokens and the EmailAccount record are deleted
+                  from this app.
                 </span>
               </li>
               <li className="flex gap-2">
-                <span aria-hidden className="text-danger-foreground">✕</span>
+                <span aria-hidden className="text-danger-foreground">
+                  ✕
+                </span>
                 <span>
-                  Outbound email, Send-test-email, and inbox sync stop
-                  working from your account until you reconnect.
+                  Outbound email, Send-test-email, and inbox sync stop working
+                  from your account until you reconnect.
                 </span>
               </li>
               <li className="flex gap-2">
-                <span aria-hidden className="text-danger-foreground">✕</span>
-                <span>
-                  Cadence steps that were going to send from your Gmail
-                  will fail their next attempt.
-                </span>
-              </li>
-              <li className="flex gap-2">
-                <span aria-hidden className="text-brand-emphasis">
-                  ✓
+                <span aria-hidden className="text-danger-foreground">
+                  ✕
                 </span>
                 <span>
-                  Past email activity in lead timelines is preserved
-                  (history isn&apos;t a credential).
+                  Cadence steps that were going to send from your Gmail will
+                  fail their next attempt.
                 </span>
               </li>
               <li className="flex gap-2">
@@ -318,8 +341,8 @@ export function GmailConnect({
                   ✓
                 </span>
                 <span>
-                  Other teammates&apos; Gmail connections are unaffected
-                  &mdash; each person manages their own.
+                  Past email activity in lead timelines is preserved (history
+                  isn&apos;t a credential).
                 </span>
               </li>
               <li className="flex gap-2">
@@ -327,8 +350,15 @@ export function GmailConnect({
                   ✓
                 </span>
                 <span>
-                  You can reconnect any time from this same screen.
+                  Other teammates&apos; Gmail connections are unaffected &mdash;
+                  each person manages their own.
                 </span>
+              </li>
+              <li className="flex gap-2">
+                <span aria-hidden className="text-brand-emphasis">
+                  ✓
+                </span>
+                <span>You can reconnect any time from this same screen.</span>
               </li>
             </ul>
             <div className="flex justify-end gap-2">
@@ -386,8 +416,8 @@ export function GmailConnect({
           </p>
         </div>
         <p className="text-sm text-muted-foreground">
-          Connect Gmail to send and track emails directly from the CRM.
-          Your OAuth tokens are encrypted at rest.
+          Connect Gmail to send and track emails directly from the CRM. Your
+          OAuth tokens are encrypted at rest.
         </p>
         <div className="mt-2">
           <Button

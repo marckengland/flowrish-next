@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import {
+  consumeEmailOAuth,
+  requireEmailOAuth,
+} from '@/server/services/email-oauth-context'
+import { requirePermission } from '@/server/auth/permissions'
 import { requireSession } from '@/server/auth/session'
 import { connectMicrosoft } from '@/server/services/microsoft-email'
 
@@ -14,7 +19,8 @@ import { connectMicrosoft } from '@/server/services/microsoft-email'
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const code = searchParams.get('code')
-  const error = searchParams.get('error_description') ?? searchParams.get('error')
+  const error =
+    searchParams.get('error_description') ?? searchParams.get('error')
 
   const renderClosePage = (message: {
     type: string
@@ -28,7 +34,7 @@ export async function GET(request: NextRequest) {
   <p id="status">Connecting Outlook…</p>
   <script>
     (function() {
-      var msg = ${JSON.stringify(message)};
+      var msg = ${JSON.stringify(message).replace(/</g, '\\u003c')};
       try {
         if (window.opener) {
           window.opener.postMessage(msg, window.location.origin);
@@ -42,16 +48,19 @@ export async function GET(request: NextRequest) {
   </script>
 </body>
 </html>`
-    return new NextResponse(html, {
-      status: 200,
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    })
+    return consumeEmailOAuth(
+      new NextResponse(html, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      }),
+      'microsoft',
+    )
   }
 
   if (error) {
     return renderClosePage({
       type: 'microsoft-oauth-error',
-      error: `Microsoft denied access: ${error}`,
+      error: 'Microsoft did not authorize this connection.',
     })
   }
   if (!code) {
@@ -63,6 +72,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const session = await requireSession()
+    requirePermission(session.dbUser, 'leads:write')
+    requireEmailOAuth(request, session, 'microsoft')
     const redirectUri = `${request.nextUrl.origin}/api/email/microsoft/callback`
     const result = await connectMicrosoft(
       code,
@@ -71,8 +82,8 @@ export async function GET(request: NextRequest) {
       redirectUri,
     )
     return renderClosePage({ type: 'microsoft-oauth-success', data: result })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to connect Outlook'
+  } catch {
+    const message = 'Failed to connect Outlook. Start again in Settings.'
     return renderClosePage({ type: 'microsoft-oauth-error', error: message })
   }
 }

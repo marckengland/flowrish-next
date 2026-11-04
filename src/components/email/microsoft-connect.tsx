@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { prepareMailOAuth } from '@/lib/start-mail-oauth'
 import { Loader2, Mail, Unplug } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -48,6 +49,14 @@ export function MicrosoftConnect({
   })
   const [error, setError] = useState<string | null>(null)
   const [popupOpen, setPopupOpen] = useState(false)
+  const popupRef = useRef<Window | null>(null)
+  useEffect(
+    () => () => {
+      popupRef.current?.close()
+      popupRef.current = null
+    },
+    [],
+  )
   const [disconnecting, setDisconnecting] = useState(false)
 
   const configured = Boolean(clientId)
@@ -71,11 +80,16 @@ export function MicrosoftConnect({
         if (cancelled) return
         setState(
           body.data
-            ? { status: 'connected', email: body.data.email, lastSyncAt: body.data.lastSyncAt }
+            ? {
+                status: 'connected',
+                email: body.data.email,
+                lastSyncAt: body.data.lastSyncAt,
+              }
             : { status: 'disconnected', email: null, lastSyncAt: null },
         )
       } catch {
-        if (!cancelled) setState({ status: 'disconnected', email: null, lastSyncAt: null })
+        if (!cancelled)
+          setState({ status: 'disconnected', email: null, lastSyncAt: null })
       }
     }
     load()
@@ -85,14 +99,23 @@ export function MicrosoftConnect({
   }, [configured])
 
   const handleMessage = useCallback((event: MessageEvent) => {
-    if (event.origin !== window.location.origin) return
+    if (
+      event.origin !== window.location.origin ||
+      !popupRef.current ||
+      event.source !== popupRef.current
+    )
+      return
     const data = event.data as {
       type?: string
       data?: { email: string; accountId: string }
       error?: string
     }
     if (data.type === 'microsoft-oauth-success' && data.data) {
-      setState({ status: 'connected', email: data.data.email, lastSyncAt: null })
+      setState({
+        status: 'connected',
+        email: data.data.email,
+        lastSyncAt: null,
+      })
       setError(null)
       setPopupOpen(false)
     } else if (data.type === 'microsoft-oauth-error') {
@@ -106,7 +129,7 @@ export function MicrosoftConnect({
     return () => window.removeEventListener('message', handleMessage)
   }, [handleMessage])
 
-  function startOAuth(): void {
+  async function startOAuth(): Promise<void> {
     setError(null)
     const params = new URLSearchParams({
       client_id: clientId,
@@ -116,20 +139,31 @@ export function MicrosoftConnect({
       scope: MS_SCOPES,
       prompt: 'select_account',
     })
-    const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params.toString()}`
     const width = 500
     const height = 640
     const left = window.screenX + (window.outerWidth - width) / 2
     const top = window.screenY + (window.outerHeight - height) / 2
     setPopupOpen(true)
     const popup = window.open(
-      authUrl,
+      'about:blank',
       'microsoft-oauth',
       `width=${width},height=${height},left=${left},top=${top},popup=yes`,
     )
     if (!popup) {
       setPopupOpen(false)
-      setError('Popup blocked. Please allow popups for this site and try again.')
+      setError(
+        'Popup blocked. Please allow popups for this site and try again.',
+      )
+      return
+    }
+    popupRef.current = popup
+    try {
+      await prepareMailOAuth(popup, 'microsoft', params)
+    } catch {
+      popup.close()
+      popupRef.current = null
+      setPopupOpen(false)
+      setError('Connection could not start. Try again in this business.')
     }
   }
 
@@ -162,7 +196,9 @@ export function MicrosoftConnect({
             <Mail className="size-[19px]" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[13.5px] font-semibold text-foreground">Outlook connected</p>
+            <p className="text-[13.5px] font-semibold text-foreground">
+              Outlook connected
+            </p>
             {state.email ? (
               <p className="truncate text-xs text-muted-foreground">
                 {state.email} · sending &amp; sync enabled
@@ -180,7 +216,11 @@ export function MicrosoftConnect({
             <span>{disconnecting ? 'Disconnecting…' : 'Disconnect'}</span>
           </Button>
         </div>
-        {error ? <p role="alert" className="text-sm text-danger-foreground">{error}</p> : null}
+        {error ? (
+          <p role="alert" className="text-sm text-danger-foreground">
+            {error}
+          </p>
+        ) : null}
       </div>
     )
   }
@@ -199,7 +239,12 @@ export function MicrosoftConnect({
           tokens are encrypted at rest.
         </p>
         <div className="mt-2">
-          <Button type="button" size="sm" onClick={startOAuth} disabled={popupOpen}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={startOAuth}
+            disabled={popupOpen}
+          >
             {popupOpen ? (
               <>
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -214,7 +259,11 @@ export function MicrosoftConnect({
           </Button>
         </div>
       </div>
-      {error ? <p role="alert" className="text-sm text-danger-foreground">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="text-sm text-danger-foreground">
+          {error}
+        </p>
+      ) : null}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 ﻿'use client'
 
 import Image from 'next/image'
+import { WorkspaceSwitcher } from './workspace-switcher'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
@@ -159,6 +160,7 @@ export interface SidebarProps {
   permissions: readonly Permission[]
   /** Optional organization display name shown in the brand area. */
   organizationName?: string
+  workspaceId?: string
   /** Current user, shown in the pinned card at the bottom of the sidebar. */
   user: SidebarUser
 }
@@ -175,6 +177,7 @@ export interface SidebarProps {
 export function Sidebar({
   permissions,
   organizationName,
+  workspaceId,
   user,
 }: SidebarProps): React.JSX.Element {
   const pathname = usePathname()
@@ -266,7 +269,7 @@ export function Sidebar({
             className="size-5 object-contain"
           />
           <span className="min-w-0 flex-1 truncate text-[16px] font-semibold">
-            {organizationName ?? 'Flowrish'}
+            {workspaceId ? 'Flowrish' : (organizationName ?? 'Flowrish')}
           </span>
           <ChevronDown
             className="hidden size-[15px] text-sidebar-foreground/45 lg:block"
@@ -282,91 +285,104 @@ export function Sidebar({
           </button>
         </div>
 
-      {/* Nav */}
-      <nav
-        aria-label="Main"
-        className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto"
-      >
-        {NAV_GROUPS.map((group, gi) => {
-          const visible = group.items.filter(isVisible)
-          if (visible.length === 0) return null
-          return (
-            <div key={group.label ?? `group-${gi}`} className="flex flex-col gap-0.5">
-              {group.label && (
-                <div className="eyebrow px-3 pb-1.5 pt-4 !text-[10px] !tracking-[0.09em] text-sidebar-foreground/40">
-                  {group.label}
-                </div>
-              )}
-              {visible.map(({ href, label, icon: Icon }) => {
-                const active = isActive(href)
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    aria-current={active ? 'page' : undefined}
-                    className={cn(
-                      'flex items-center gap-3 rounded-[10px] px-3 py-[9px] text-[13.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-                      href === '/receptionist' && 'min-h-11',
-                      active
-                        ? 'bg-brand/12 text-brand-emphasis'
-                        : 'text-sidebar-foreground/65 hover:bg-white/[0.06] hover:text-sidebar-foreground',
-                    )}
-                  >
-                    <Icon
-                      className={cn(
-                        'size-[17px] shrink-0',
-                        active ? 'text-brand' : '',
-                      )}
-                      aria-hidden="true"
-                    />
-                    <span className="truncate">{label}</span>
-                  </Link>
-                )
-              })}
-            </div>
-          )
-        })}
-      </nav>
-
-      {/* Pinned user card */}
-      <div className="mt-auto flex items-center gap-2.5 rounded-[10px] bg-white/[0.04] p-2.5">
-        {showAvatar ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={user.avatarUrl!}
-            alt=""
-            aria-hidden="true"
-            onError={() => setAvatarFailed(true)}
-            referrerPolicy="no-referrer"
-            className="size-[30px] shrink-0 rounded-full object-cover"
-          />
-        ) : (
-          <span
-            aria-hidden="true"
-            className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-sidebar-primary-foreground"
-          >
-            {initials}
-          </span>
+        {workspaceId && (
+          <div className="px-2 pb-4">
+            <WorkspaceSwitcher
+              organizationId={workspaceId}
+              organizationName={organizationName}
+              dark
+            />
+          </div>
         )}
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-semibold leading-tight">
-            {user.name}
-          </div>
-          <div className="truncate text-[11px] leading-tight text-sidebar-foreground/55">
-            {user.roleLabel ?? user.email}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={handleSignOut}
-          disabled={signingOut}
-          title="Sign out"
-          aria-label="Sign out"
-          className="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-sidebar-foreground/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:opacity-50"
+
+        {/* Nav */}
+        <nav
+          aria-label="Main"
+          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto"
         >
-          <LogOut className="size-[15px]" aria-hidden="true" />
-        </button>
-      </div>
+          {NAV_GROUPS.map((group, gi) => {
+            const visible = group.items.filter(isVisible)
+            if (visible.length === 0) return null
+            return (
+              <div
+                key={group.label ?? `group-${gi}`}
+                className="flex flex-col gap-0.5"
+              >
+                {group.label && (
+                  <div className="eyebrow px-3 pb-1.5 pt-4 !text-[10px] !tracking-[0.09em] text-sidebar-foreground/40">
+                    {group.label}
+                  </div>
+                )}
+                {visible.map(({ href, label, icon: Icon }) => {
+                  const active = isActive(href)
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn(
+                        'flex items-center gap-3 rounded-[10px] px-3 py-[9px] text-[13.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                        href === '/receptionist' && 'min-h-11',
+                        active
+                          ? 'bg-brand/12 text-brand-emphasis'
+                          : 'text-sidebar-foreground/65 hover:bg-white/[0.06] hover:text-sidebar-foreground',
+                      )}
+                    >
+                      <Icon
+                        className={cn(
+                          'size-[17px] shrink-0',
+                          active ? 'text-brand' : '',
+                        )}
+                        aria-hidden="true"
+                      />
+                      <span className="truncate">{label}</span>
+                    </Link>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </nav>
+
+        {/* Pinned user card */}
+        <div className="mt-auto flex items-center gap-2.5 rounded-[10px] bg-white/[0.04] p-2.5">
+          {showAvatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={user.avatarUrl!}
+              alt=""
+              aria-hidden="true"
+              onError={() => setAvatarFailed(true)}
+              referrerPolicy="no-referrer"
+              className="size-[30px] shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <span
+              aria-hidden="true"
+              className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-sidebar-primary-foreground"
+            >
+              {initials}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[13px] font-semibold leading-tight">
+              {user.name}
+            </div>
+            <div className="truncate text-[11px] leading-tight text-sidebar-foreground/55">
+              {user.roleLabel ?? user.email}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={signingOut}
+            title="Sign out"
+            aria-label="Sign out"
+            className="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-sidebar-foreground/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:opacity-50"
+          >
+            <LogOut className="size-[15px]" aria-hidden="true" />
+          </button>
+        </div>
       </aside>
     </>
   )
