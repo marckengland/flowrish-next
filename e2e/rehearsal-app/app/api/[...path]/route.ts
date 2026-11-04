@@ -1,8 +1,10 @@
 import { appendFileSync } from 'node:fs'
 import { homeFixture } from '@/components/receptionist/home-fixture.test-data'
+import { coreIds } from '../../../core-fixtures'
 
 export function GET(request: Request) {
   const path = new URL(request.url).pathname
+  if (path === '/api/lead-views') return Response.json({ data: [], scope: { organizationId: coreIds.organization, userId: coreIds.user } })
   if (path === '/api/receptionist/home')
     return Response.json({ data: homeFixture() })
   if (path === '/api/email/sync')

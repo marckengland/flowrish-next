@@ -29,6 +29,7 @@ async function mockCore(page: Page, baseURL: string) {
       return
     }
     if (path.startsWith('/api/')) {
+      if (path === '/api/lead-views' && method === 'GET') { await route.fulfill({ json: { data: [], scope: { organizationId: coreIds.organization, userId: coreIds.user } } }); return }
       if (method !== 'GET')
         state.writes.push({ path, body: req.postDataJSON() })
       if (path === '/api/email/sync' && method === 'GET') {
@@ -332,11 +333,12 @@ test('core audit restores saved filters and distinguishes loading, empty and fai
   baseURL,
 }) => {
   const s = await mockCore(page, baseURL!)
-  await page.addInitScript(() =>
+  await page.addInitScript((storageKey: string) =>
     localStorage.setItem(
-      'flowrish:leads:filters',
+      storageKey,
       JSON.stringify({ search: 'No match' }),
     ),
+    `flowrish:leads:filters:${coreIds.organization}:${coreIds.user}`,
   )
   await page.goto('/leads')
   await expect(page.getByRole('searchbox', { name: 'Search' })).toHaveValue(

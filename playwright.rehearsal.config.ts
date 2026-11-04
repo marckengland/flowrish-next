@@ -15,6 +15,7 @@ for (const value of [baseURL, proxy]) {
 export default defineConfig({
   testDir: './e2e',
   testMatch: [
+    'saved-lead-views.spec.ts',
     'keyboard-accessibility.spec.ts',
     'receptionist-demo.spec.ts',
     'public-receptionist-demo.spec.ts',
@@ -31,7 +32,7 @@ export default defineConfig({
     'follow-ups.spec.ts',
     'receptionist-preview.spec.ts',
   ],
-  grep: /keyboard audit|forecast history|pipeline audit|workspace switcher|core audit|pilot progress|pilot onboarding|staff waitlist|explores the public receptionist sample|practices receptionist conversation|approves .*callback handoff|records, retries|preferred business-local|uncertain timed request|fresh review after|stale business hours|new widget script|reviews a synthetic reply|onboards the entered business|keeps text preview/,
+  grep: /saved lead views|keyboard audit|forecast history|pipeline audit|workspace switcher|core audit|pilot progress|pilot onboarding|staff waitlist|explores the public receptionist sample|practices receptionist conversation|approves .*callback handoff|records, retries|preferred business-local|uncertain timed request|fresh review after|stale business hours|new widget script|reviews a synthetic reply|onboards the entered business|keeps text preview/,
   fullyParallel: false,
   workers: 1,
   retries: 0,

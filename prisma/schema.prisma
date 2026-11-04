@@ -310,12 +310,26 @@ model OrganizationMember {
   user                  User                   @relation(fields: [userId], references: [id])
   organization          Organization           @relation(fields: [organizationId], references: [id])
   isDefault             Boolean                @default(false) // User's default org
+  savedLeadViews        SavedLeadView[]
   callbackNotifications CallbackNotification[]
   waitlistStaffAccess   WaitlistStaffAccess?
   joinedAt              DateTime               @default(now())
 
   @@unique([userId, organizationId])
   @@index([organizationId])
+}
+
+model SavedLeadView {
+  id             String @id @default(uuid())
+  organizationId String
+  userId         String
+  member         OrganizationMember @relation(fields: [userId, organizationId], references: [userId, organizationId], onDelete: Cascade, onUpdate: Cascade, map: "SavedLeadView_member_fkey")
+  name           String
+  filters        Json
+  revision       Int @default(1)
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@unique([organizationId, userId, name])
 }
 
 model OrganizationInvite {

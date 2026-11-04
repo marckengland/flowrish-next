@@ -45,6 +45,7 @@ async function mock(page: Page, baseURL: string) {
     const req = route.request(), url = new URL(req.url()), path = url.pathname
     const reply = (data: unknown) => route.fulfill({ json: { data } })
     if (url.origin !== origin || /receptionist-widget/.test(path)) { state.unexpected.push(path); await route.abort(); return }
+    if (path === '/api/lead-views' && req.method() === 'GET') { await route.fulfill({ json: { data: [], scope: { organizationId: coreIds.organization, userId: coreIds.user } } }); return }
     if (path === '/api/workspaces' && req.method() === 'GET') { await reply({ workspaces: [{ id: studio, name: 'Practice Studio' }, { id: clinic, name: 'Practice Clinic' }] }); return }
     if (path === '/api/workspaces' && req.method() === 'POST') {
       const body = req.postDataJSON(); state.writes.push({ path, body })

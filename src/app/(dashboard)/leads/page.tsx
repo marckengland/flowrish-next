@@ -3,7 +3,8 @@ import { Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
-import { LeadFilters, type FilterOption } from '@/components/leads/lead-filters'
+import { type FilterOption } from '@/components/leads/lead-filters'
+import { LeadViewControls } from '@/components/leads/lead-view-controls'
 import { LeadTable } from '@/components/leads/lead-table'
 import { prisma } from '@/server/db/client'
 import { requireSession } from '@/server/auth/session'
@@ -83,7 +84,7 @@ export default async function LeadsPage(): Promise<React.JSX.Element> {
   const leadCount = initialData.pagination.total
 
   return (
-    <div className="flex max-w-[1120px] flex-col gap-5">
+    <div key={`${session.organizationId}:${session.dbUser.id}`} className="flex max-w-[1120px] flex-col gap-5">
       <PageHeader
         title="Leads"
         description={`${leadCount.toLocaleString()} ${
@@ -102,7 +103,7 @@ export default async function LeadsPage(): Promise<React.JSX.Element> {
         }
       />
 
-      <LeadFilters stages={stageOptions} assignees={assigneeOptions} />
+      <LeadViewControls organizationId={session.organizationId} userId={session.dbUser.id} pipelineId={pipeline.id} stages={stageOptions} assignees={assigneeOptions} />
 
       <LeadTable initialData={initialData} page={1} pageSize={20} />
     </div>

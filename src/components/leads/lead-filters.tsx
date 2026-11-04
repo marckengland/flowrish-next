@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useState } from 'react'
 import { X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,8 @@ export interface LeadFiltersProps {
   /** Users in the current organization eligible for assignment. */
   assignees?: readonly FilterOption[]
   className?: string
+  storageKey?: string
+  onReadyChange?: (ready: boolean) => void
 }
 
 const LEADS_FILTERS_KEY = 'flowrish:leads:filters'
@@ -63,6 +65,8 @@ export function LeadFilters({
   stages = [],
   assignees = [],
   className,
+  storageKey = LEADS_FILTERS_KEY,
+  onReadyChange,
 }: LeadFiltersProps): React.JSX.Element {
   const leads = useFiltersStore((s) => s.leads)
   const setLeadFilter = useFiltersStore((s) => s.setLeadFilter)
@@ -76,8 +80,12 @@ export function LeadFilters({
   const [searchInput, setSearchInput] = useState(leads.search ?? '')
   const debouncedSearch = useDebouncedValue(searchInput, 300)
   useEffect(() => {
+    if (storageKey !== LEADS_FILTERS_KEY) {
+      setLeadFilters({})
+      setSearchInput('')
+    }
     try {
-      const raw = window.localStorage.getItem(LEADS_FILTERS_KEY)
+      const raw = window.localStorage.getItem(storageKey)
       if (raw) {
         const parsed = JSON.parse(raw) as Record<string, unknown>
         if (
@@ -94,16 +102,20 @@ export function LeadFilters({
     } finally {
       setFiltersHydrated(true)
     }
-  }, [setLeadFilters])
+  }, [setLeadFilters, storageKey])
 
   useEffect(() => {
     if (!filtersHydrated) return
     try {
-      window.localStorage.setItem(LEADS_FILTERS_KEY, JSON.stringify(leads))
+      window.localStorage.setItem(storageKey, JSON.stringify(leads))
     } catch {
       // Ignore quota / unavailable storage.
     }
-  }, [leads, filtersHydrated])
+  }, [leads, filtersHydrated, storageKey])
+
+  useLayoutEffect(() => {
+    onReadyChange?.(filtersHydrated && debouncedSearch === searchInput && (leads.search ?? '') === searchInput.trim())
+  }, [filtersHydrated, debouncedSearch, searchInput, leads.search, onReadyChange])
 
   const searchId = useId()
   const stageId = useId()

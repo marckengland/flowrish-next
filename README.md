@@ -110,6 +110,7 @@ prisma/
 - **Rich Text Email Editor** — Tiptap-powered editor with bold, italic, underline, font families, text colors, links, and file attachments
 - **Email Threading** — Cadence follow-up emails are sent as replies in the same conversation (Gmail thread, or Outlook conversation via Graph `createReply`), tracked by `emailThreadId` on enrollments
 - **Lead Management** — Full lifecycle with pipeline stages, soft-delete, and conversion to contacts
+- **Personal saved lead views** — Named filters per workspace and user, available across devices with explicit apply, versioned edits and private ownership. See the [guide](docs/SAVED_LEAD_VIEWS.md)
 - **Duplicate Detection & Merge** — Detect potential duplicates by email/company and merge leads (activities + contacts transferred)
 - **Cadence Engine** — Multi-step sales sequences with automated task/email creation and email threading
 - **Rhythm Engine** — Priority-scored daily actions based on deal value, urgency, and engagement
