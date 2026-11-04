@@ -9,10 +9,19 @@ on:
 env:
   NODE_VERSION: '22'
 
+permissions:
+  contents: read
+
+# Do not cancel an active production migration. Keep PR runs independent.
+concurrency:
+  group: ${{ github.event_name == 'push' && 'flowrish-production-release' || format('flowrish-pr-{0}', github.event.pull_request.number) }}
+  cancel-in-progress: false
+
 jobs:
   ci:
     name: Lint, Type Check & Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     env:
       # Test/CI placeholder values — required at config-load time by prisma.config.ts
@@ -88,44 +97,56 @@ jobs:
     needs: [ci, receptionist-browser]
     # Only run after a successful merge to main — never on PRs.
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    # The job is gated on the SUPABASE_DB_URL secret existing. If the
-    # repo doesn't have it configured (for example, on a fork or in a
-    # transitional environment) we skip rather than fail the run.
-    # The connection string must include `?sslmode=require` for Supabase.
+    environment: Production
+    timeout-minutes: 15
     env:
-      DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
-      DIRECT_URL: ${{ secrets.SUPABASE_DB_URL }}
+      # Install hooks never receive production credentials.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/release
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/release
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-
-      - name: Skip when DATABASE_URL is not configured
-        id: gate
-        run: |
-          if [ -z "${{ secrets.SUPABASE_DB_URL }}" ]; then
-            echo "DATABASE_URL secret is not set; skipping migrations."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
-        if: steps.gate.outputs.skip != 'true'
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: Install dependencies
-        if: steps.gate.outputs.skip != 'true'
         run: npm ci
 
       - name: Apply Prisma migrations
-        if: steps.gate.outputs.skip != 'true'
-        # `prisma migrate deploy` applies every pending migration in
-        # `prisma/migrations/` against DATABASE_URL. It's the
-        # production-safe sibling of `migrate dev` — it never prompts
-        # and never modifies the schema beyond the migration files.
-        run: npx prisma migrate deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          CI_RESULT: ${{ needs.ci.result }}
+          BROWSER_RESULT: ${{ needs.receptionist-browser.result }}
+        run: node scripts/production-release.mjs migrate
+
+  release-ready:
+    # A skipped PR job must never satisfy the production check for the same SHA.
+    name: ${{ github.event_name == 'push' && 'Production release ready' || 'PR release not requested' }}
+    runs-on: ubuntu-latest
+    needs: [ci, receptionist-browser, migrate]
+    if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Verify exact production commit and prerequisites
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RESULT: ${{ needs.ci.result }}
+          BROWSER_RESULT: ${{ needs.receptionist-browser.result }}
+          MIGRATE_RESULT: ${{ needs.migrate.result }}
+        run: node scripts/production-release.mjs ready

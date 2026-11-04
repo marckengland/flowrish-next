@@ -1,0 +1,12 @@
+{
+  "name": "Production release ready",
+  "requires": "none",
+  "targets": ["production"],
+  "blocks": "deployment-alias",
+  "source": {
+    "kind": "git-provider",
+    "provider": "github",
+    "externalCheckName": "Production release ready"
+  },
+  "timeout": 3600
+}
