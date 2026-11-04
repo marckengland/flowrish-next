@@ -86,8 +86,8 @@ export function CommitForm({
           Submit forecast commit
         </h2>
         <p className="text-xs text-muted-foreground">
-          Record your expected revenue for the period. Used to compute
-          commit vs AI risk.
+          Record expected revenue for your assigned deals, in USD and UTC
+          reporting months. Used to compute commit vs AI risk.
         </p>
       </div>
 

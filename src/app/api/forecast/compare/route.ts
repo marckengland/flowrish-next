@@ -1,3 +1,5 @@
+import { forecastBasisStatus } from '@/lib/forecast-basis'
+import { serializeForecastSnapshot } from '@/server/services/forecast-history'
 import { forecastPeriod } from '@/lib/forecast-period'
 import { NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
@@ -40,24 +42,29 @@ export async function GET() {
     // Compare the same user and period as the forecast page.
     const latestSubmission = await db.forecastSubmission.findFirst({
       where: { userId: session.dbUser.id, period },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: {
         id: true,
         period: true,
         commitAmount: true,
         notes: true,
         createdAt: true,
+        currency: true,
+        reportingTimezone: true,
+        calculationVersion: true,
+        scope: true,
       },
     })
 
     // Calculate AI predicted value
-    const metrics = await calculatePipelineMetrics(session.organizationId)
+    const metrics = await calculatePipelineMetrics(session.organizationId, session.dbUser.id)
 
     // Assess risk level based on commit vs AI predicted
     const commitAmount = latestSubmission
       ? Number(latestSubmission.commitAmount)
       : 0
-    const riskLevel = latestSubmission ? assessForecastRisk(commitAmount, metrics.aiPredicted) : null
+    const submissionBasisStatus = latestSubmission ? forecastBasisStatus(latestSubmission, 'OWNER') : 'missing'
+    const riskLevel = submissionBasisStatus === 'verified' ? assessForecastRisk(commitAmount, metrics.aiPredicted) : null
 
     // Calculate confidence interval (±15% of AI predicted)
     const confidenceInterval = {
@@ -76,6 +83,11 @@ export async function GET() {
       orderBy: { snapshotDate: 'asc' },
       select: {
         id: true,
+        period: true,
+        currency: true,
+        reportingTimezone: true,
+        calculationVersion: true,
+        scope: true,
         totalPipeline: true,
         weightedPipeline: true,
         aiPredicted: true,
@@ -85,13 +97,16 @@ export async function GET() {
 
     return NextResponse.json({
       data: {
-        latestSubmission,
+        latestSubmission: latestSubmission ? { ...latestSubmission, commitAmount: submissionBasisStatus === 'verified' ? latestSubmission.commitAmount : null } : null,
         currency: 'USD',
-        snapshotCurrency: 'unverified',
+        snapshotCurrency: snapshots.length && snapshots.every(row => forecastBasisStatus(row, 'ORGANIZATION') === 'verified') ? 'USD' : 'unverified',
+        reportingTimezone: 'UTC',
+        scope: 'OWNER',
+        submissionBasisStatus,
         aiPredicted: metrics.aiPredicted,
         riskLevel,
         confidenceInterval,
-        snapshots,
+        snapshots: snapshots.map(serializeForecastSnapshot),
       },
     })
   } catch (error) {

@@ -1,4 +1,5 @@
 import { EmptyState, MetricCard } from '@/components/dashboard/metric-card'
+import type { ForecastBasisStatus } from '@/lib/forecast-basis'
 import { cn } from '@/lib/utils'
 import type { ForecastRisk } from '@/server/services/forecast'
 
@@ -11,6 +12,7 @@ export interface CommitVsAiPanelProps {
   risk: ForecastRisk | null
   /** YYYY-MM the commit applies to. */
   period: string
+  basisStatus?: ForecastBasisStatus | 'missing'
 }
 
 /**
@@ -25,12 +27,16 @@ export function CommitVsAiPanel({
   aiPredicted,
   risk,
   period,
+  basisStatus,
 }: CommitVsAiPanelProps): React.JSX.Element {
+  if (basisStatus === 'unverified' || basisStatus === 'incompatible') {
+    return <EmptyState title="Commitment needs a reporting basis" description="Open Forecast and submit a new USD commitment for your assigned deals before comparing." />
+  }
   if (teamCommit === null) {
     return (
       <EmptyState
         title={`No forecast submitted for ${period}`}
-        description="Submit a team commit from the Forecast page to see the comparison here."
+        description="Submit your commitment from the Forecast page to see the comparison here."
       />
     )
   }
@@ -44,11 +50,11 @@ export function CommitVsAiPanel({
     <div className="flex flex-col gap-4">
       <div className="grid gap-3.5 sm:grid-cols-3">
         <MetricCard
-          label={`Team commit (${period})`}
+          label={`Your commitment (${period})`}
           value={formatCurrency(teamCommit)}
         />
         <MetricCard
-          label="AI predicted"
+          label="Predicted for your assigned deals"
           value={formatCurrency(aiPredicted)}
           tone="brand"
         />

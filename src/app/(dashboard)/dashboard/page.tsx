@@ -1,3 +1,4 @@
+import { forecastBasisStatus } from '@/lib/forecast-basis'
 import { forecastPeriod } from '@/lib/forecast-period'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -105,6 +106,7 @@ export default async function DashboardPage({
 
   // Forecast headline metrics + win rate
   const forecastPromise = calculatePipelineMetrics(orgId)
+  const ownerForecastPromise = isManagerOrAbove ? calculatePipelineMetrics(orgId, userId) : Promise.resolve(null)
   const winRatePromise = calculateWinRate(orgId)
 
   // Tasks to feed Today's Rhythm + (optionally) Team View
@@ -142,8 +144,8 @@ export default async function DashboardPage({
   // Current-period commit for Commit vs AI (manager-only)
   const commitPromise = isManagerOrAbove
     ? prisma.forecastSubmission.findFirst({
-        where: { organizationId: orgId, period: currentPeriod },
-        orderBy: { createdAt: 'desc' },
+        where: { organizationId: orgId, userId, period: currentPeriod },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       })
     : Promise.resolve(null)
 
@@ -156,6 +158,7 @@ export default async function DashboardPage({
   const [
     metricsReport,
     forecastMetrics,
+    ownerForecastMetrics,
     winRate,
     myTasks,
     openLeads,
@@ -164,6 +167,7 @@ export default async function DashboardPage({
   ] = await Promise.all([
     metricsPromise,
     forecastPromise,
+    ownerForecastPromise,
     winRatePromise,
     myTasksPromise,
     openLeadsPromise,
@@ -329,11 +333,12 @@ export default async function DashboardPage({
   }
 
   // ── Derived: Commit vs AI ──────────────────────────────────────────────────
-  const teamCommitValue = commit ? Number(commit.commitAmount) : null
+  const commitBasisStatus = commit ? forecastBasisStatus(commit, 'OWNER') : 'missing'
+  const teamCommitValue = commit && commitBasisStatus === 'verified' ? Number(commit.commitAmount) : null
   const risk =
     teamCommitValue == null
       ? null
-      : assessForecastRisk(teamCommitValue, forecastMetrics.aiPredicted)
+      : assessForecastRisk(teamCommitValue, ownerForecastMetrics?.aiPredicted ?? 0)
 
   // ── Assemble tabs ──────────────────────────────────────────────────────────
   const activeTab = typeof params.tab === 'string' ? params.tab : undefined
@@ -385,7 +390,8 @@ export default async function DashboardPage({
       content: (
         <CommitVsAiPanel
           teamCommit={teamCommitValue}
-          aiPredicted={forecastMetrics.aiPredicted}
+          basisStatus={commitBasisStatus}
+          aiPredicted={ownerForecastMetrics?.aiPredicted ?? 0}
           risk={risk}
           period={currentPeriod}
         />

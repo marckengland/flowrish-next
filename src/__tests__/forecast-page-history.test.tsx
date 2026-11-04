@@ -1,0 +1,40 @@
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+const m = vi.hoisted(() => ({ session: vi.fn(), metrics: vi.fn(), submission: vi.fn(), history: vi.fn(), risk: vi.fn(), form: vi.fn() }))
+vi.mock('@/server/auth/session', () => ({ requireSession: m.session }))
+vi.mock('@/server/auth/entitlements', () => ({ requireEntitlement: async () => undefined }))
+vi.mock('@/server/services/forecast', () => ({ calculatePipelineMetrics: m.metrics, calculateWinRate: async () => 0, assessForecastRisk: m.risk }))
+vi.mock('@/server/services/forecast-history', () => ({ getForecastHistory: m.history }))
+vi.mock('@/server/db/middleware', () => ({ createTenantPrisma: () => ({ forecastSubmission: { findFirst: m.submission } }) }))
+vi.mock('@/components/forecast/commit-form', () => ({ CommitForm: (props: unknown) => { m.form(props); return null } }))
+import Page from '@/app/(dashboard)/forecast/page'
+beforeEach(() => {
+  vi.resetAllMocks()
+  m.session.mockResolvedValue({ organizationId: 'org', dbUser: { id: 'self', teamMemberships: [{ role: { permissions: [{ key: 'forecast:read' }, { key: 'forecast:submit' }] } }] } })
+  m.metrics.mockImplementation(async (_org, owner) => ({ totalPipeline: 200, weightedPipeline: 150, aiPredicted: owner ? 100 : 9999 }))
+  m.history.mockResolvedValue({ currency: 'USD', reportingTimezone: 'UTC', calculationVersion: 'usd-stage-v1', asOf: new Date().toISOString(), months: [], snapshots: [] })
+  m.risk.mockReturnValue('High Risk')
+})
+afterEach(cleanup)
+it('compares the personal commitment against personal metrics and renders history', async () => {
+  m.submission.mockResolvedValue({ commitAmount: 200, notes: 'Reviewed', currency: 'USD', reportingTimezone: 'UTC', calculationVersion: 'usd-stage-v1', scope: 'OWNER' })
+  render(await Page())
+  expect(m.risk).toHaveBeenCalledWith(200, 100)
+  expect(m.metrics).toHaveBeenCalledWith('org', 'self'); expect(m.history).toHaveBeenCalledWith('org', 'self')
+  expect(m.form).toHaveBeenCalledWith(expect.objectContaining({ defaultCommitAmount: 200, defaultNotes: 'Reviewed' }))
+  expect(screen.getByRole('heading', { name: 'Your monthly results' })).toBeVisible()
+})
+it('requires a new explicit commitment instead of relabeling a legacy amount or draft notes', async () => {
+  m.submission.mockResolvedValue({ commitAmount: 200, notes: 'Legacy business commitment' })
+  render(await Page())
+  expect(m.risk).not.toHaveBeenCalled()
+  expect(m.form).toHaveBeenCalledWith(expect.objectContaining({ defaultCommitAmount: null, defaultNotes: null }))
+  expect(screen.getByText(/previous commitment has an unverified/)).toBeVisible()
+})
+it('offers a read-only reload if history fails without hiding confirmed current metrics', async () => {
+  m.submission.mockResolvedValue(null); m.history.mockRejectedValue(new Error('Synthetic unavailable history'))
+  render(await Page())
+  expect(screen.getByRole('alert')).toHaveTextContent('Could not load forecast history')
+  expect(screen.getByRole('link', { name: 'Reload history' })).toHaveAttribute('href', '/forecast')
+  expect(screen.getByRole('heading', { name: 'Pipeline metrics' })).toBeInTheDocument()
+})

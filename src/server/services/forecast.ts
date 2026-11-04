@@ -1,3 +1,4 @@
+import { forecastBasis } from '@/lib/forecast-basis'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
 import { AppError } from '@/lib/errors'
@@ -36,6 +37,7 @@ export type ForecastRisk = 'On Track' | 'At Risk' | 'High Risk'
  */
 export async function calculatePipelineMetrics(
   orgId: string,
+  ownerUserId?: string,
 ): Promise<PipelineMetrics> {
   const db = createTenantPrisma(orgId)
 
@@ -45,6 +47,7 @@ export async function calculatePipelineMetrics(
       isClosed: false,
       deletedAt: null,
       currency: FORECAST_CURRENCY,
+      ...(ownerUserId ? { assignedUserId: ownerUserId } : {}),
       stage: { isClosedWon: false, isClosedLost: false },
     },
     include: {
@@ -87,6 +90,7 @@ export async function calculatePipelineMetrics(
       closeDate: { gte: thirtyDaysAgo },
       stage: { isClosedWon: true },
       currency: FORECAST_CURRENCY,
+      ...(ownerUserId ? { assignedUserId: ownerUserId } : {}),
     },
   })
 
@@ -137,6 +141,7 @@ export async function submitForecast(
       period,
       commitAmount,
       notes: notes ?? null,
+      ...forecastBasis('OWNER'),
     }),
   })
 

@@ -1,3 +1,4 @@
+import { forecastBasis } from '@/lib/forecast-basis'
 import { forecastPeriod } from '@/lib/forecast-period'
 import { inngest } from './client'
 import { prisma } from '@/server/db/client'
@@ -80,6 +81,7 @@ export const forecastSnapshotFunction = inngest.createFunction(
           await db.forecastSnapshot.create({
             data: tenantData({
               period,
+              ...forecastBasis('ORGANIZATION'),
               totalPipeline: metrics.totalPipeline,
               weightedPipeline: metrics.weightedPipeline,
               aiPredicted: metrics.aiPredicted,

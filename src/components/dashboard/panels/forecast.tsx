@@ -22,7 +22,7 @@ export function ForecastPanel({
 }: ForecastPanelProps): React.JSX.Element {
   return (
     <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-      <p className="col-span-full text-xs text-muted-foreground">Money values use USD only; other currencies are excluded without conversion. Win rate counts all currencies.</p>
+      <p className="col-span-full text-xs text-muted-foreground">Whole-business totals. Money values use USD only; other currencies are excluded without conversion. Win rate counts all currencies.</p>
       <MetricCard
         label="Total pipeline"
         value={formatCurrency(totalPipeline)}

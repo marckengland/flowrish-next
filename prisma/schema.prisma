@@ -1024,6 +1024,11 @@ model Insight {
 // ─── Forecast Models ─────────────────────────────────────────────────────────
 
 model ForecastSubmission {
+  // Null means the historical reporting basis is unknown; never infer it.
+  currency           String?
+  reportingTimezone  String?
+  calculationVersion String?
+  scope              String?
   id           String  @id @default(uuid())
   userId       String
   user         User    @relation("forecastSubmissions", fields: [userId], references: [id])
@@ -1042,6 +1047,11 @@ model ForecastSubmission {
 }
 
 model ForecastSnapshot {
+  // Null means the historical reporting basis is unknown; never infer it.
+  currency           String?
+  reportingTimezone  String?
+  calculationVersion String?
+  scope              String?
   id               String  @id @default(uuid())
   period           String
   totalPipeline    Decimal @db.Decimal(12, 2)

@@ -1,3 +1,6 @@
+import { forecastBasisStatus } from '@/lib/forecast-basis'
+import { getForecastHistory } from '@/server/services/forecast-history'
+import { ForecastHistory } from '@/components/forecast/forecast-history'
 import { forecastPeriod } from '@/lib/forecast-period'
 import { redirect } from 'next/navigation'
 
@@ -25,7 +28,7 @@ import {
  * period, and the resulting risk classification so the page paints
  * fully hydrated. All three child components are composed here:
  * - `ForecastPanel` — total / weighted / AI predicted / win rate
- * - `CommitForm`    — submit a commit (uncontrolled, Server Action)
+ * - `CommitForm`    — submit a commit (controlled, Server Action)
  * - `RiskIndicator` — On Track / At Risk / High Risk badge
  *
  * Permission model:
@@ -67,35 +70,42 @@ export default async function ForecastPage(): Promise<React.JSX.Element> {
   const db = createTenantPrisma(orgId)
 
   // Fetch everything needed to render the page in parallel.
-  const [metrics, winRate, latestSubmission] = await Promise.all([
+  const [metrics, ownerMetrics, winRate, latestSubmission, history] = await Promise.all([
     calculatePipelineMetrics(orgId),
+    calculatePipelineMetrics(orgId, userId),
     calculateWinRate(orgId),
     db.forecastSubmission.findFirst({
       where: { userId, period },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: {
         id: true,
         period: true,
         commitAmount: true,
         notes: true,
         createdAt: true,
+        currency: true,
+        reportingTimezone: true,
+        calculationVersion: true,
+        scope: true,
       },
     }),
+    getForecastHistory(orgId, userId).catch(() => null),
   ])
 
-  const teamCommit = latestSubmission
+  const verifiedCommit = latestSubmission && forecastBasisStatus(latestSubmission, 'OWNER') === 'verified'
+  const teamCommit = verifiedCommit
     ? Number(latestSubmission.commitAmount)
     : null
   const risk =
     teamCommit === null
       ? null
-      : assessForecastRisk(teamCommit, metrics.aiPredicted)
+      : assessForecastRisk(teamCommit, ownerMetrics.aiPredicted)
 
   return (
     <div className="flex max-w-[1000px] flex-col gap-[18px]">
       <PageHeader
         title="Forecast"
-        description={`${period} · commit with confidence`}
+        description={`${period} · USD · UTC reporting months`}
       />
 
       <section aria-labelledby="forecast-metrics-heading">
@@ -118,12 +128,15 @@ export default async function ForecastPage(): Promise<React.JSX.Element> {
           Your commit and commit vs AI
         </h2>
 
+        <div className="space-y-3">
+        {latestSubmission && !verifiedCommit && <p className="text-sm text-muted-foreground">Your previous commitment has an unverified or different reporting basis. Submit a new USD commitment for your assigned deals to start comparing.</p>}
         <CommitForm
           defaultPeriod={period}
           defaultCommitAmount={teamCommit}
-          defaultNotes={latestSubmission?.notes ?? null}
+          defaultNotes={verifiedCommit ? latestSubmission.notes : null}
           canSubmit={canSubmit}
         />
+        </div>
 
         {teamCommit === null || risk === null ? (
           <EmptyState
@@ -138,11 +151,11 @@ export default async function ForecastPage(): Promise<React.JSX.Element> {
           <Card>
             <CardContent className="p-5">
               <div className="mb-4 text-sm font-semibold text-foreground">
-                Commit vs AI
+                Your commitment vs predicted revenue
               </div>
               <CommitVsAiBars
                 teamCommit={teamCommit}
-                aiPredicted={metrics.aiPredicted}
+                aiPredicted={ownerMetrics.aiPredicted}
               />
               <div className="mt-[18px]">
                 <RiskIndicator risk={risk} context={period} />
@@ -151,6 +164,7 @@ export default async function ForecastPage(): Promise<React.JSX.Element> {
           </Card>
         )}
       </section>
+      <ForecastHistory report={history} error={history === null} />
     </div>
   )
 }
@@ -173,7 +187,7 @@ function CommitVsAiBars({
   return (
     <div>
       <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="text-[12.5px] text-muted-foreground">Team commit</span>
+        <span className="text-[12.5px] text-muted-foreground">Your commitment</span>
         <span className="text-xl font-semibold tnum text-foreground">
           {formatCurrency(teamCommit)}
         </span>
@@ -185,7 +199,7 @@ function CommitVsAiBars({
         />
       </div>
       <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="text-[12.5px] text-muted-foreground">AI predicted</span>
+        <span className="text-[12.5px] text-muted-foreground">Predicted for your assigned deals</span>
         <span className="text-xl font-semibold tnum text-brand-emphasis">
           {formatCurrency(aiPredicted)}
         </span>
