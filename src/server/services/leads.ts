@@ -2,7 +2,7 @@ import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
 import { leadCreateSchema, leadUpdateSchema } from '@/lib/validators/leads'
 import { AppError } from '@/lib/errors'
-import { getOrCreateDefaultPipeline, createStageTransition } from '@/server/services/pipeline'
+import { getOrCreateDefaultPipeline } from '@/server/services/pipeline'
 import { evaluateAssignmentRules } from '@/server/services/assignment'
 import type { LeadAccessFilter } from '@/server/services/access'
 
@@ -19,6 +19,7 @@ export interface PaginationParams {
  */
 export interface LeadFilters {
   stageId?: string
+  pipelineId?: string
   assignedUserId?: string
   leadStatus?: string
   tier?: string
@@ -35,27 +36,29 @@ export interface LeadFilters {
  * when none exists yet, backfilling industry/website.
  */
 async function resolveCompanyId(
-  db: ReturnType<typeof createTenantPrisma>,
+  db: Pick<ReturnType<typeof createTenantPrisma>, 'company'>,
   data: {
     companyName?: string | null
     companyIndustry?: string | null
     companyWebsite?: string | null
   },
+  orgId: string,
 ): Promise<string | undefined> {
   const name = data.companyName?.trim()
   if (!name) return undefined
 
   const existing = await db.company.findFirst({
-    where: { name: { equals: name, mode: 'insensitive' } },
+    where: { name: { equals: name, mode: 'insensitive' }, organizationId: orgId },
   })
   if (existing) return existing.id
 
   const created = await db.company.create({
-    data: tenantData({
+    data: {
+      organizationId: orgId,
       name,
       industry: data.companyIndustry?.trim() || null,
       website: data.companyWebsite?.trim() || null,
-    }),
+    },
   })
   return created.id
 }
@@ -87,7 +90,7 @@ export async function createLead(
 
   // Verify the stage exists within the org's pipeline
   const stage = await db.stage.findFirst({
-    where: { id: validated.stageId },
+    where: { id: validated.stageId, pipeline: { organizationId: orgId } },
   })
 
   if (!stage) {
@@ -95,7 +98,7 @@ export async function createLead(
   }
 
   // Link to (or create) a Company so it appears on the Companies page.
-  const companyId = await resolveCompanyId(db, validated)
+  const companyId = await resolveCompanyId(db, validated, orgId)
 
   // Create the lead
   // Note: organizationId is auto-injected by the tenant middleware at runtime
@@ -122,6 +125,8 @@ export async function createLead(
       companyLinkedinUrl: validated.companyLinkedinUrl || null,
       companyId: companyId ?? null,
       stageId: validated.stageId,
+      isClosed: Boolean(stage.isClosedWon || stage.isClosedLost),
+      closeDate: stage.isClosedWon || stage.isClosedLost ? new Date() : null,
     }),
   })
 
@@ -159,65 +164,65 @@ export async function updateLead(
   data: unknown,
   userId: string,
   orgId: string,
+  accessFilter: Record<string, unknown> = {},
 ) {
-  // Validate input (all fields optional)
   const validated = leadUpdateSchema.parse(data)
-
   const db = createTenantPrisma(orgId)
+  try {
+    return await db.$transaction(async (tx) => {
+      const where = { ...accessFilter, id, organizationId: orgId, deletedAt: null }
+      const existing = await tx.lead.findFirst({ where })
+      if (!existing) throw new AppError('LEAD_NOT_FOUND', 'Lead not found', 404)
 
-  // Verify lead exists within the org (tenant middleware enforces org ownership)
-  const existing = await db.lead.findFirst({
-    where: { id, deletedAt: null },
-  })
-
-  if (!existing) {
-    throw new AppError('LEAD_NOT_FOUND', 'Lead not found', 404)
-  }
-
-  // If stageId is being changed, verify the new stage exists
-  if (validated.stageId) {
-    const stage = await db.stage.findFirst({
-      where: { id: validated.stageId },
-    })
-
-    if (!stage) {
-      throw new AppError('STAGE_NOT_FOUND', 'The specified stage does not exist', 404)
-    }
-  }
-
-  // Build update data, only including defined fields
-  const updateData: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(validated)) {
-    if (value !== undefined) {
-      // Convert empty strings to null for optional URL/email fields
-      if (
-        value === '' &&
-        ['email', 'altEmail', 'linkedinUrl', 'companyWebsite', 'companyLinkedinUrl'].includes(key)
-      ) {
-        updateData[key] = null
-      } else {
-        updateData[key] = value
+      const updateData: Record<string, unknown> = {}
+      for (const [key, value] of Object.entries(validated)) {
+        if (value !== undefined) {
+          updateData[key] = value === '' && ['email', 'altEmail', 'linkedinUrl', 'companyWebsite', 'companyLinkedinUrl'].includes(key) ? null : value
+        }
       }
-    }
+
+      let stageChanged = false
+      if (validated.stageId) {
+        const stage = await tx.stage.findFirst({
+          where: { id: validated.stageId, pipeline: { organizationId: orgId } },
+        })
+        if (!stage) throw new AppError('STAGE_NOT_FOUND', 'The specified stage does not exist', 404)
+        stageChanged = stage.id !== existing.stageId
+        if (stageChanged) {
+          if (stage.isClosedWon && stage.isClosedLost) throw new AppError('INVALID_STAGE', 'A stage cannot be both won and lost', 400)
+          const closed = Boolean(stage.isClosedWon || stage.isClosedLost)
+          updateData.isClosed = closed
+          updateData.closeDate = closed ? new Date() : null
+        } else {
+          delete updateData.stageId
+        }
+      }
+      if (validated.companyName !== undefined) {
+        updateData.companyId = (await resolveCompanyId(tx, {
+          companyName: validated.companyName,
+          companyIndustry: validated.companyIndustry,
+          companyWebsite: validated.companyWebsite,
+        }, orgId)) ?? null
+      }
+      if (Object.keys(updateData).length === 0) return existing
+
+      // The source-stage predicate also prevents stale edits after a competing move.
+      const lead = await tx.lead.update({
+        where: { ...where, stageId: existing.stageId },
+        data: updateData,
+      })
+      if (stageChanged) {
+        await tx.stageTransition.create({
+          data: { organizationId: orgId, leadId: id, fromStageId: existing.stageId, toStageId: validated.stageId!, userId },
+        })
+      }
+      return lead
+    })
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025')
+      throw new AppError('LEAD_CHANGED', 'This lead changed. Refresh before trying again.', 409)
+    throw error
   }
-
-  // Keep the Company link in sync when the company name is edited so the
-  // lead continues to surface on the Companies page.
-  if (validated.companyName !== undefined) {
-    updateData.companyId =
-      (await resolveCompanyId(db, {
-        companyName: validated.companyName,
-        companyIndustry: validated.companyIndustry,
-        companyWebsite: validated.companyWebsite,
-      })) ?? null
-  }
-
-  const lead = await db.lead.update({
-    where: { id },
-    data: updateData,
-  })
-
-  return lead
 }
 
 /**
@@ -232,29 +237,19 @@ export async function softDeleteLead(
   id: string,
   userId: string,
   orgId: string,
+  accessFilter: Record<string, unknown> = {},
 ) {
   const db = createTenantPrisma(orgId)
-
-  // Find the lead (including already-deleted ones to check idempotency)
-  const existing = await db.lead.findFirst({
-    where: { id },
-  })
-
-  if (!existing) {
-    throw new AppError('LEAD_NOT_FOUND', 'Lead not found', 404)
-  }
-
-  // Idempotent: don't change deletedAt if already deleted
-  if (existing.deletedAt !== null) {
-    return existing
-  }
-
-  const lead = await db.lead.update({
-    where: { id },
+  // Retain record permissions while allowing idempotent deletion.
+  const where = { ...accessFilter, id, organizationId: orgId }
+  delete (where as Record<string, unknown>).deletedAt
+  const existing = await db.lead.findFirst({ where })
+  if (!existing) throw new AppError('LEAD_NOT_FOUND', 'Lead not found', 404)
+  if (existing.deletedAt !== null) return existing
+  return db.lead.update({
+    where: { ...where, deletedAt: null },
     data: { deletedAt: new Date() },
   })
-
-  return lead
 }
 
 /**
@@ -272,44 +267,9 @@ export async function moveLead(
   toStageId: string,
   userId: string,
   orgId: string,
+  accessFilter: Record<string, unknown> = {},
 ) {
-  const db = createTenantPrisma(orgId)
-
-  // Verify lead exists and is not deleted
-  const existing = await db.lead.findFirst({
-    where: { id, deletedAt: null },
-  })
-
-  if (!existing) {
-    throw new AppError('LEAD_NOT_FOUND', 'Lead not found', 404)
-  }
-
-  // Verify the target stage exists
-  const toStage = await db.stage.findFirst({
-    where: { id: toStageId },
-  })
-
-  if (!toStage) {
-    throw new AppError('STAGE_NOT_FOUND', 'The target stage does not exist', 404)
-  }
-
-  // Determine if the target stage is terminal
-  const isTerminal = toStage.isClosedWon || toStage.isClosedLost
-
-  // Create stage transition record
-  await createStageTransition(id, existing.stageId, toStageId, userId, db)
-
-  // Update lead with new stage and closed state
-  const lead = await db.lead.update({
-    where: { id },
-    data: {
-      stageId: toStageId,
-      isClosed: isTerminal,
-      closeDate: isTerminal ? new Date() : null,
-    },
-  })
-
-  return lead
+  return updateLead(id, { stageId: toStageId }, userId, orgId, accessFilter)
 }
 
 /**
@@ -326,85 +286,86 @@ export async function convertToContact(
   id: string,
   userId: string,
   orgId: string,
+  accessFilter: Record<string, unknown> = {},
 ) {
   const db = createTenantPrisma(orgId)
+  try {
+    return await db.$transaction(async tx => {
+      const where = { ...accessFilter, id, organizationId: orgId, deletedAt: null }
+      const beforeLock = await tx.lead.findFirst({ where, include: { stage: true } })
+      if (!beforeLock) throw new AppError('LEAD_NOT_FOUND', 'Lead not found', 404)
 
-  // Verify lead exists and is not deleted
-  const existing = await db.lead.findFirst({
-    where: { id, deletedAt: null },
-    include: { stage: { include: { pipeline: true } } },
-  })
+      // Serialize conversions so a repeated request reuses the first contact.
+      await tx.$queryRaw`SELECT "id" FROM "Lead" WHERE "id" = ${id} AND "organizationId" = ${orgId} FOR UPDATE`
+      const existing = await tx.lead.findFirst({ where, include: { stage: true } })
+      if (!existing || existing.stageId !== beforeLock.stageId) {
+        throw new AppError('LEAD_CHANGED', 'This lead changed. Refresh before trying again.', 409)
+      }
+      const closedWonStage = await tx.stage.findFirst({
+        where: {
+          pipelineId: existing.stage.pipelineId,
+          pipeline: { organizationId: orgId },
+          isClosedWon: true,
+          isClosedLost: false,
+        },
+      })
+      if (!closedWonStage) {
+        throw new AppError('NO_CLOSED_WON_STAGE', 'No "Closed Won" stage exists in this pipeline. Cannot convert lead.', 400)
+      }
+      const linked = await tx.leadContact.findFirst({
+        where: { leadId: id, contact: { organizationId: orgId } },
+        include: { contact: true },
+      })
+      const contact = linked?.contact ?? await tx.contact.create({
+        data: {
+          organizationId: orgId,
+          firstName: existing.firstName,
+          lastName: existing.lastName,
+          email: existing.email,
+          phone: existing.phone,
+          jobTitle: existing.title,
+          linkedinUrl: existing.linkedinUrl,
+          country: existing.country,
+          state: existing.state,
+          companyId: existing.companyId,
+        },
+      })
+      if (!linked) await tx.leadContact.create({ data: { leadId: id, contactId: contact.id } })
 
-  if (!existing) {
-    throw new AppError('LEAD_NOT_FOUND', 'Lead not found', 404)
+      const changedStage = existing.stageId !== closedWonStage.id
+      const lead = changedStage || !existing.isClosed || !existing.closeDate
+        ? await tx.lead.update({
+            where: { ...where, stageId: existing.stageId },
+            data: {
+              stageId: closedWonStage.id,
+              isClosed: true,
+              closeDate: changedStage ? new Date() : existing.closeDate ?? new Date(),
+            },
+          })
+        : existing
+      if (changedStage) {
+        await tx.stageTransition.create({
+          data: {
+            organizationId: orgId,
+            leadId: id,
+            fromStageId: existing.stageId,
+            toStageId: closedWonStage.id,
+            userId,
+          },
+        })
+      }
+      await tx.cadenceEnrollment.updateMany({
+        where: { organizationId: orgId, leadId: id, status: 'ACTIVE' },
+        data: { status: 'EXITED', exitReason: 'lead_converted' },
+      })
+      return { lead, contact }
+    })
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') {
+      throw new AppError('LEAD_CHANGED', 'This lead changed. Refresh before trying again.', 409)
+    }
+    throw error
   }
-
-  // Find the "Closed Won" stage in the lead's pipeline
-  const closedWonStage = await db.stage.findFirst({
-    where: {
-      pipelineId: existing.stage.pipelineId,
-      isClosedWon: true,
-    },
-  })
-
-  if (!closedWonStage) {
-    throw new AppError(
-      'NO_CLOSED_WON_STAGE',
-      'No "Closed Won" stage exists in this pipeline. Cannot convert lead.',
-      400,
-    )
-  }
-
-  // Create contact from lead data
-  // Note: organizationId is auto-injected by the tenant middleware at runtime
-  const contact = await db.contact.create({
-    data: tenantData({
-      firstName: existing.firstName,
-      lastName: existing.lastName,
-      email: existing.email,
-      phone: existing.phone,
-      jobTitle: existing.title,
-      linkedinUrl: existing.linkedinUrl,
-      country: existing.country,
-      state: existing.state,
-      companyId: existing.companyId,
-    }),
-  })
-
-  // Link contact to lead via LeadContact
-  const { prisma } = await import('@/server/db/client')
-  await prisma.leadContact.create({
-    data: {
-      leadId: id,
-      contactId: contact.id,
-    },
-  })
-
-  // Move lead to Closed Won stage
-  await createStageTransition(id, existing.stageId, closedWonStage.id, userId, db)
-
-  const lead = await db.lead.update({
-    where: { id },
-    data: {
-      stageId: closedWonStage.id,
-      isClosed: true,
-      closeDate: new Date(),
-    },
-  })
-
-  // Exit all active cadence enrollments for this lead
-  await db.cadenceEnrollment.updateMany({
-    where: {
-      leadId: id,
-      status: 'ACTIVE',
-    },
-    data: {
-      status: 'EXITED',
-      exitReason: 'lead_converted',
-    },
-  })
-
-  return { lead, contact }
 }
 
 /**
@@ -432,11 +393,12 @@ export async function getLeads(
     ...accessFilter,
   }
 
+  if (filters.pipelineId) where.stage = { pipelineId: filters.pipelineId }
   if (filters.stageId) {
     where.stageId = filters.stageId
   }
   if (filters.assignedUserId) {
-    where.assignedUserId = filters.assignedUserId
+    where.AND = [{ assignedUserId: filters.assignedUserId }]
   }
   if (filters.leadStatus) {
     where.leadStatus = filters.leadStatus

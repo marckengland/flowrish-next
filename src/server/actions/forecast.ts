@@ -6,6 +6,8 @@ import { ZodError, z } from 'zod'
 import { fieldErrorsFromZod } from '@/server/actions/field-errors'
 
 import { requireSession } from '@/server/auth/session'
+import { MAX_MONEY_AMOUNT } from '@/lib/money'
+import { requireEntitlement } from '@/server/auth/entitlements'
 import { requirePermission } from '@/server/auth/permissions'
 import { submitForecast as submitForecastService } from '@/server/services/forecast'
 import { createTenantPrisma } from '@/server/db/middleware'
@@ -25,7 +27,7 @@ const submitFormSchema = z.object({
   period: z
     .string()
     .regex(/^\d{4}-(?:0[1-9]|1[0-2])$/, 'Period must be in YYYY-MM format'),
-  commitAmount: z.coerce.number().min(0, 'Commit amount must be non-negative'),
+  commitAmount: z.preprocess(value => value === null || (typeof value === 'string' && !value.trim()) ? undefined : value, z.coerce.number().finite().min(0, 'Commit amount must be non-negative').max(MAX_MONEY_AMOUNT)),
   notes: z
     .string()
     .transform((value) => value.trim())
@@ -34,7 +36,7 @@ const submitFormSchema = z.object({
 
 export type SubmitForecastResult =
   | { data: { id: string } }
-  | { error: string; fieldErrors?: Record<string, string> }
+  | { error: string; fieldErrors?: Record<string, string>; uncertain?: boolean }
 
 /**
  * Submits (or updates) a forecast commit for the given period.
@@ -47,10 +49,12 @@ export type SubmitForecastResult =
 export async function submitForecast(
   formData: FormData,
 ): Promise<SubmitForecastResult> {
-  const session = await requireSession()
-  requirePermission(session.dbUser, 'forecast:submit')
-
+  let saving = false
+  let receipt: { id: string } | undefined
   try {
+    const session = await requireSession()
+    requirePermission(session.dbUser, 'forecast:submit')
+    await requireEntitlement(session.organizationId, 'forecasting')
     const parsed = submitFormSchema.parse({
       period: formData.get('period'),
       commitAmount: formData.get('commitAmount'),
@@ -60,6 +64,7 @@ export async function submitForecast(
     const notes =
       parsed.notes && parsed.notes.length > 0 ? parsed.notes : undefined
 
+    saving = true
     const result = await submitForecastService(
       session.dbUser.id,
       session.organizationId,
@@ -68,6 +73,7 @@ export async function submitForecast(
       notes,
     )
 
+    receipt = result
     // Audit log: async, non-blocking.
     const db = createTenantPrisma(session.organizationId)
     db.auditEntry
@@ -79,13 +85,16 @@ export async function submitForecast(
           entityId: result.id,
         }),
       })
-      .catch((err) => {
-        console.error('Audit log failed (submitForecast):', err)
+      .catch(() => {
+        console.error('Audit log failed (submitForecast)')
       })
 
     revalidatePath('/forecast')
     return { data: result }
   } catch (err: unknown) {
+    // A failed refresh cannot undo a confirmed save or invite a duplicate retry.
+    if (receipt) return { data: receipt }
+    if (saving) return { error: 'Could not confirm the forecast submission. Reload before submitting again.', uncertain: true }
     if (err instanceof ZodError) {
       return {
         error: err.errors[0]?.message ?? 'Validation failed',

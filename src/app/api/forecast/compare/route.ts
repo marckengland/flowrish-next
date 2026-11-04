@@ -1,3 +1,4 @@
+import { forecastPeriod } from '@/lib/forecast-period'
 import { NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
@@ -35,8 +36,10 @@ export async function GET() {
 
     const db = createTenantPrisma(session.organizationId)
 
-    // Get latest forecast submission
+    const period = forecastPeriod()
+    // Compare the same user and period as the forecast page.
     const latestSubmission = await db.forecastSubmission.findFirst({
+      where: { userId: session.dbUser.id, period },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -54,7 +57,7 @@ export async function GET() {
     const commitAmount = latestSubmission
       ? Number(latestSubmission.commitAmount)
       : 0
-    const riskLevel = assessForecastRisk(commitAmount, metrics.aiPredicted)
+    const riskLevel = latestSubmission ? assessForecastRisk(commitAmount, metrics.aiPredicted) : null
 
     // Calculate confidence interval (±15% of AI predicted)
     const confidenceInterval = {
@@ -83,6 +86,8 @@ export async function GET() {
     return NextResponse.json({
       data: {
         latestSubmission,
+        currency: 'USD',
+        snapshotCurrency: 'unverified',
         aiPredicted: metrics.aiPredicted,
         riskLevel,
         confidenceInterval,

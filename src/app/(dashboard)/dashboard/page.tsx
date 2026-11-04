@@ -1,3 +1,4 @@
+import { forecastPeriod } from '@/lib/forecast-period'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Plus } from 'lucide-react'
@@ -95,7 +96,7 @@ export default async function DashboardPage({
 
   // ── Resolve current period for Commit vs AI (YYYY-MM) ──────────────────────
   const now = new Date()
-  const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const currentPeriod = forecastPeriod(now)
 
   // ── Fetch everything we need in parallel ───────────────────────────────────
   // Pipeline metrics (respects ?from / ?to date range)

@@ -59,6 +59,7 @@ try {
         '--test',
         'scripts/rehearsal-safety.test.mjs',
         'scripts/rehearsal-action-boundary.test.mjs',
+        'scripts/forecast-rehearsal-boundary.test.mjs',
       ],
       env,
     ),
@@ -130,13 +131,13 @@ try {
     readFileSync(path.join(output, 'results.json'), 'utf8'),
   )
   if (
-    results.stats.expected !== 44 ||
+    results.stats.expected !== 52 ||
     results.stats.unexpected ||
     results.stats.flaky ||
     results.stats.skipped
   )
     throw new Error(
-      'Exactly 44 passing, non-skipped, non-retried browser scenarios are required.',
+      'Exactly 52 passing, non-skipped, non-retried browser scenarios are required.',
     )
   if (readFileSync(log, 'utf8').trim())
     throw new Error(
@@ -156,5 +157,5 @@ try {
 }
 if (!process.exitCode)
   console.log(
-    '44 mocked receptionist browser scenarios passed with no guard violations.',
+    '52 mocked receptionist browser scenarios passed with no guard violations.',
   )

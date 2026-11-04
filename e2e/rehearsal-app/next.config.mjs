@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../..', import.meta.url))
 const actionMocks = {
+  '@/server/actions/forecast': path.join(root, 'e2e/rehearsal-app/mocks/forecast-actions.ts'),
   '@/server/actions/leads': path.join(
     root,
     'e2e/rehearsal-app/mocks/leads-actions.ts',

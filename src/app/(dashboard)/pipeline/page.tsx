@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Filter, TrendingUp } from 'lucide-react'
+import { TrendingUp } from 'lucide-react'
 
 import { requireSession } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
@@ -70,7 +70,7 @@ export default async function PipelinePage(): Promise<React.JSX.Element> {
   // virtualization later (Requirement 17.4 doesn't impose a hard limit).
   const accessFilter = await getLeadAccessFilter(session.dbUser, session.organizationId)
   const firstPage = await getLeads(
-    {},
+    { pipelineId: pipeline.id },
     { page: 1, pageSize: 200 },
     accessFilter,
     session.organizationId,
@@ -84,17 +84,13 @@ export default async function PipelinePage(): Promise<React.JSX.Element> {
         title={pipeline.name}
         description={
           <>
-            <span className="tnum">{firstPage.pagination.total}</span> open
+            <span className="tnum">{firstPage.pagination.total}</span>
             deals{canMove ? null : ' · Read-only'}
           </>
         }
         actions={
           <>
-            <Button variant="outline" size="lg" type="button" title="Filter deals">
-              <Filter className="size-4" aria-hidden="true" />
-              <span>Filter</span>
-            </Button>
-            <Button
+            {hasPermission(session.dbUser, 'forecast:read') && <Button
               variant="outline"
               size="lg"
               nativeButton={false}
@@ -103,13 +99,14 @@ export default async function PipelinePage(): Promise<React.JSX.Element> {
             >
               <TrendingUp className="size-4" aria-hidden="true" />
               <span>Forecast</span>
-            </Button>
+            </Button>}
           </>
         }
       />
 
       <KanbanBoard
         stages={stages}
+        pipelineId={pipeline.id}
         initialLeads={initialLeads}
         totalLeads={firstPage.pagination.total}
         canMove={canMove}

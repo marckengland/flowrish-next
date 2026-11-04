@@ -42,6 +42,7 @@ export function ForecastPanel({
           : 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3'
       }
     >
+      <p className="col-span-full text-xs text-muted-foreground">Money values use USD only; other currencies are excluded without conversion.{showWinRate && ' Win rate counts all currencies.'}</p>
       <MetricCard
         label="Total pipeline"
         value={formatCurrency(totalPipeline)}

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
+import { getLeadAccessFilter } from '@/server/services/access'
+import { revalidatePath } from 'next/cache'
 import { moveLead } from '@/server/services/leads'
 import { errorResponse } from '@/lib/errors'
 import { z } from 'zod'
@@ -36,7 +38,13 @@ export async function PATCH(
     const body = await request.json()
     const { toStageId } = moveLeadSchema.parse(body)
 
-    const lead = await moveLead(id, toStageId, session.dbUser.id, session.organizationId)
+    const access = await getLeadAccessFilter(session.dbUser, session.organizationId)
+    const lead = await moveLead(id, toStageId, session.dbUser.id, session.organizationId, { ...access })
+    revalidatePath('/pipeline')
+    revalidatePath('/forecast')
+    revalidatePath('/dashboard')
+    revalidatePath('/leads')
+    revalidatePath('/leads/' + id)
 
     return NextResponse.json({ data: lead })
   } catch (error) {

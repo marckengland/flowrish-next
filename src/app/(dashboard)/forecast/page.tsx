@@ -1,3 +1,4 @@
+import { forecastPeriod } from '@/lib/forecast-period'
 import { redirect } from 'next/navigation'
 
 import { CommitForm } from '@/components/forecast/commit-form'
@@ -6,6 +7,8 @@ import { RiskIndicator } from '@/components/forecast/risk-indicator'
 import { EmptyState } from '@/components/dashboard/metric-card'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent } from '@/components/ui/card'
+import { AppError } from '@/lib/errors'
+import { requireEntitlement } from '@/server/auth/entitlements'
 import { requireSession } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { createTenantPrisma } from '@/server/db/middleware'
@@ -47,6 +50,13 @@ export default async function ForecastPage(): Promise<React.JSX.Element> {
         </p>
       </div>
     )
+  }
+
+  try {
+    await requireEntitlement(session.organizationId, 'forecasting')
+  } catch (error) {
+    if (!(error instanceof AppError) || error.code !== 'UPGRADE_REQUIRED') throw error
+    return <div className="rounded-md border bg-card p-6"><h1 className="text-lg font-semibold">Forecast</h1><p>Forecasting isn’t enabled for this business.</p></div>
   }
 
   const canSubmit = hasPermission(session.dbUser, 'forecast:submit')
@@ -191,8 +201,7 @@ function CommitVsAiBars({
 }
 
 function currentPeriod(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  return forecastPeriod()
 }
 
 function formatCurrency(value: number): string {

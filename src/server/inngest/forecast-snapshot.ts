@@ -1,3 +1,4 @@
+import { forecastPeriod } from '@/lib/forecast-period'
 import { inngest } from './client'
 import { prisma } from '@/server/db/client'
 import { createTenantPrisma } from '@/server/db/middleware'
@@ -37,7 +38,7 @@ export const forecastSnapshotFunction = inngest.createFunction(
 
     // Calculate current period (YYYY-MM)
     const now = new Date()
-    const period = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+    const period = forecastPeriod(now)
 
     // Calculate start of current month for closed lead counts
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))

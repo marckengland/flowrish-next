@@ -27,6 +27,7 @@ export interface LeadFilters {
   search?: string
   /** Pipeline stage ID. */
   stageId?: string
+  pipelineId?: string
   /** Assigned user ID. */
   assignedUserId?: string
   /** Lead status (NEW, CONTACTED, QUALIFIED, UNQUALIFIED, NURTURING). */

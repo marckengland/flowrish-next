@@ -1,11 +1,13 @@
 'use client'
 
-import { useActionState, useId } from 'react'
+import { forecastPeriod } from '@/lib/forecast-period'
+import { useActionState, useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { inputBaseClass } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { submitForecast } from '@/server/actions/forecast'
+import { MAX_MONEY_AMOUNT } from '@/lib/money'
 import { toast } from '@/lib/toast'
 
 export interface CommitFormProps {
@@ -25,14 +27,15 @@ type ActionResult = {
   error?: string
   fieldErrors?: Record<string, string>
   data?: { id: string }
+  uncertain?: boolean
 } | null
 
 /**
  * Client form that submits a forecast commit via the
  * `submitForecast` Server Action.
  *
- * The form is deliberately uncontrolled — the browser owns the input
- * state while the Server Action owns validation and persistence.
+ * The form keeps controlled input values so a failed action preserves the draft.
+ * The Server Action validates and persists the submitted values.
  * Uses React 19 `useActionState` so the pending/error UI stays in
  * sync with the action's lifecycle without a TanStack mutation.
  *
@@ -49,16 +52,25 @@ export function CommitForm({
   const amountId = useId()
   const notesId = useId()
 
-  const resolvedPeriod = defaultPeriod ?? currentPeriod()
+  const [period, setPeriod] = useState(defaultPeriod ?? currentPeriod())
+  const [amount, setAmount] = useState(typeof defaultCommitAmount === 'number' && Number.isFinite(defaultCommitAmount) ? String(defaultCommitAmount) : '')
+  const [notes, setNotes] = useState(defaultNotes ?? '')
 
   const [state, formAction, pending] = useActionState<ActionResult, FormData>(
     async (_prev, formData) => {
-      const result = await submitForecast(formData)
-      if (result && 'data' in result && result.data) {
-        toast.success('Forecast submitted')
-        onSuccess?.(result.data.id)
+      try {
+        const result = await submitForecast(formData)
+        if (result && 'data' in result && result.data) {
+          // UI follow-ups cannot invalidate a server-confirmed receipt.
+          try {
+            toast.success('Forecast submitted')
+            onSuccess?.(result.data.id)
+          } catch { /* Keep the saved receipt available. */ }
+        }
+        return result as ActionResult
+      } catch {
+        return { error: 'Could not confirm the forecast submission. Reload before submitting again.', uncertain: true }
       }
-      return result as ActionResult
     },
     null,
   )
@@ -92,14 +104,15 @@ export function CommitForm({
             name="period"
             type="month"
             required
-            defaultValue={resolvedPeriod}
+            value={period}
+            onChange={event => setPeriod(event.target.value)}
             aria-invalid={state?.fieldErrors?.period ? true : undefined}
             className={cn(
               inputBaseClass,
               state?.fieldErrors?.period &&
                 'border-danger focus-visible:border-danger focus-visible:ring-danger/20',
             )}
-            disabled={!canSubmit}
+            disabled={pending || !canSubmit || state?.uncertain}
           />
           {state?.fieldErrors?.period ? (
             <p role="alert" className="mt-1 text-[11px] text-danger-foreground">
@@ -107,7 +120,7 @@ export function CommitForm({
             </p>
           ) : (
             <p className="mt-1 text-[11px] text-muted-foreground">
-              YYYY-MM format (e.g. 2026-05).
+              YYYY-MM format (e.g. 2026-05). Reporting months use UTC.
             </p>
           )}
         </div>
@@ -116,7 +129,7 @@ export function CommitForm({
             htmlFor={amountId}
             className="block text-sm font-medium text-foreground mb-1.5"
           >
-            Commit amount <span className="text-danger-foreground">*</span>
+            Commit amount (USD) <span className="text-danger-foreground">*</span>
           </label>
           <input
             id={amountId}
@@ -126,12 +139,9 @@ export function CommitForm({
             step="0.01"
             inputMode="decimal"
             required
-            defaultValue={
-              typeof defaultCommitAmount === 'number' &&
-              Number.isFinite(defaultCommitAmount)
-                ? String(defaultCommitAmount)
-                : ''
-            }
+            value={amount}
+            onChange={event => setAmount(event.target.value)}
+            max={MAX_MONEY_AMOUNT}
             placeholder="0.00"
             aria-invalid={state?.fieldErrors?.commitAmount ? true : undefined}
             className={cn(
@@ -139,7 +149,7 @@ export function CommitForm({
               state?.fieldErrors?.commitAmount &&
                 'border-danger focus-visible:border-danger focus-visible:ring-danger/20',
             )}
-            disabled={!canSubmit}
+            disabled={pending || !canSubmit || state?.uncertain}
           />
           {state?.fieldErrors?.commitAmount ? (
             <p role="alert" className="mt-1 text-[11px] text-danger-foreground">
@@ -164,10 +174,11 @@ export function CommitForm({
           id={notesId}
           name="notes"
           rows={3}
-          defaultValue={defaultNotes ?? ''}
+          value={notes}
+          onChange={event => setNotes(event.target.value)}
           placeholder="Optional context for this commit"
           className={cn(inputBaseClass, 'h-auto min-h-[72px] py-2')}
-          disabled={!canSubmit}
+          disabled={pending || !canSubmit || state?.uncertain}
         />
       </div>
 
@@ -182,8 +193,9 @@ export function CommitForm({
         </p>
       ) : null}
 
+      {state?.uncertain && <a href="/forecast" className="text-sm underline">Reload saved forecast</a>}
       <div className="flex justify-end">
-        <Button type="submit" disabled={pending || !canSubmit}>
+        <Button type="submit" disabled={pending || !canSubmit || state?.uncertain}>
           {pending ? 'Submitting…' : 'Submit forecast'}
         </Button>
       </div>
@@ -197,6 +209,5 @@ export function CommitForm({
 }
 
 function currentPeriod(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  return forecastPeriod()
 }

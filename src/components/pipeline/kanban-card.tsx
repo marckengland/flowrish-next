@@ -29,6 +29,7 @@ export interface KanbanCardProps {
   lead: KanbanCardLead
   /** Whether the user may drag this card (requires `leads:write`). */
   draggable?: boolean
+  disabled?: boolean
   /** The stage this card currently sits in (drives the move control). */
   currentStageId?: string
   /** All stages, in order — offered as move targets in the keyboard menu. */
@@ -51,6 +52,7 @@ export interface KanbanCardProps {
 export function KanbanCard({
   lead,
   draggable = false,
+  disabled = false,
   currentStageId,
   stages,
   onMove,
@@ -75,9 +77,9 @@ export function KanbanCard({
 
   return (
     <div
-      draggable={draggable || undefined}
-      onDragStart={draggable ? handleDragStart : undefined}
-      onDragEnd={draggable ? handleDragEnd : undefined}
+      draggable={(draggable && !disabled) || undefined}
+      onDragStart={draggable && !disabled ? handleDragStart : undefined}
+      onDragEnd={draggable && !disabled ? handleDragEnd : undefined}
       data-lead-id={lead.id}
       aria-grabbed={draggable ? isDragging : undefined}
       className={cn(
@@ -133,11 +135,12 @@ export function KanbanCard({
           <select
             id={`move-${lead.id}`}
             value={currentStageId}
+            disabled={disabled}
             draggable={false}
             onMouseDown={(e) => e.stopPropagation()}
             onChange={(e) => {
               const to = e.target.value
-              if (to && to !== currentStageId) onMove(lead.id, to)
+              if (!disabled && to && to !== currentStageId) onMove(lead.id, to)
             }}
             className="h-7 w-full rounded-md border border-input bg-background px-2 text-[11.5px] text-muted-foreground transition-[border-color,box-shadow] focus-visible:border-brand focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/15"
           >

@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
     // Parse optional filters
     const filters = {
       stageId: searchParams.get('stageId') ?? undefined,
+      pipelineId: searchParams.get('pipelineId') ?? undefined,
       assignedUserId: searchParams.get('assignedUserId') ?? undefined,
       leadStatus: searchParams.get('leadStatus') ?? undefined,
       tier: searchParams.get('tier') ?? undefined,

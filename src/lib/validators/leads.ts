@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MAX_MONEY_AMOUNT } from '@/lib/money'
 import { sanitizedString, nullableSanitizedString } from './common'
 
 /**
@@ -30,7 +31,7 @@ export const leadCreateSchema = z.object({
   phone: nullableSanitizedString,
   title: nullableSanitizedString,
   description: nullableSanitizedString,
-  dealValue: z.coerce.number().min(0, 'Deal value must be non-negative').optional(),
+  dealValue: z.coerce.number().finite().min(0, 'Deal value must be non-negative').max(MAX_MONEY_AMOUNT).optional(),
   currency: sanitizedString.pipe(z.string().length(3)).default('USD'),
   score: z.coerce.number().int().min(0).max(100).optional(),
   leadStatus: leadStatusEnum.optional(),
@@ -59,7 +60,7 @@ export const leadUpdateSchema = z.object({
   phone: nullableSanitizedString,
   title: nullableSanitizedString,
   description: nullableSanitizedString,
-  dealValue: z.coerce.number().min(0, 'Deal value must be non-negative').optional(),
+  dealValue: z.coerce.number().finite().min(0, 'Deal value must be non-negative').max(MAX_MONEY_AMOUNT).optional(),
   currency: sanitizedString.pipe(z.string().length(3)).optional(),
   score: z.coerce.number().int().min(0).max(100).optional(),
   leadStatus: leadStatusEnum.optional(),

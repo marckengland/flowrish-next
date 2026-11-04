@@ -1,13 +1,13 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { cn } from '@/lib/utils'
 import { useKanbanStore } from '@/stores/kanban'
 import { KanbanCard, formatCurrency, type KanbanCardLead } from './kanban-card'
-import { leadsKeys, type LeadListItem, type LeadsPage } from '@/hooks/use-leads'
+import { buildLeadsQueryString, leadsKeys, type LeadListItem, type LeadsPage } from '@/hooks/use-leads'
 
 /**
  * Maximum leads pulled into the Kanban view in a single request. Kept
@@ -16,6 +16,10 @@ import { leadsKeys, type LeadListItem, type LeadsPage } from '@/hooks/use-leads'
  * hint instead of silently truncating.
  */
 const KANBAN_PAGE_SIZE = 200
+
+class PipelineRequestError extends Error {
+  constructor(message: string, public status: number) { super(message) }
+}
 
 /**
  * Stage shape needed to render a Kanban column. Each stage becomes one
@@ -45,6 +49,7 @@ export interface KanbanBoardProps {
    * `leads:write` permission so view-only roles see a read-only board.
    */
   canMove: boolean
+  pipelineId?: string
 }
 
 /**
@@ -67,15 +72,17 @@ export function KanbanBoard({
   initialLeads,
   totalLeads,
   canMove,
+  pipelineId,
 }: KanbanBoardProps): React.JSX.Element {
   const queryClient = useQueryClient()
+  const moveInFlight = useRef(false)
 
   // Match the query key the leads page uses so this view participates
   // in the same cache as the leads list. We fetch a large page because
   // the Kanban board needs to see every lead at once.
   const queryInput = useMemo(
-    () => ({ filters: {}, page: 1, pageSize: KANBAN_PAGE_SIZE }),
-    [],
+    () => ({ filters: pipelineId ? { pipelineId } : {}, page: 1, pageSize: KANBAN_PAGE_SIZE }),
+    [pipelineId],
   )
 
   const initialData = useMemo<LeadsPage>(
@@ -95,7 +102,7 @@ export function KanbanBoard({
     queryKey: leadsKeys.list(queryInput),
     queryFn: async (): Promise<LeadsPage> => {
       const res = await fetch(
-        `/api/leads?page=1&pageSize=${KANBAN_PAGE_SIZE}`,
+        `/api/leads${buildLeadsQueryString(queryInput)}`,
         {
           method: 'GET',
           headers: { Accept: 'application/json' },
@@ -110,7 +117,7 @@ export function KanbanBoard({
         } catch {
           // ignore
         }
-        throw new Error(message)
+        throw new PipelineRequestError(message, res.status)
       }
       return (await res.json()) as LeadsPage
     },
@@ -133,19 +140,31 @@ export function KanbanBoard({
         } catch {
           // ignore
         }
-        throw new Error(message)
+        throw new PipelineRequestError(message, res.status)
       }
       return vars
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: leadsKeys.all })
+    onSuccess: (_result, vars) => {
+      const stage = stages.find(item => item.id === vars.toStageId)
+      if (stage) queryClient.setQueryData<LeadsPage>(leadsKeys.list(queryInput), current => current && ({ ...current, data: current.data.map(lead => lead.id === vars.leadId ? { ...lead, stageId: stage.id, stage: { ...lead.stage, ...stage } } : lead) }))
+    },
+    onSettled: async () => {
+      try { await queryClient.invalidateQueries({ queryKey: leadsKeys.all }) }
+      finally { moveInFlight.current = false }
     },
   })
 
+  const denied = leadsQuery.error instanceof PipelineRequestError && [401, 403].includes(leadsQuery.error.status)
+  const writeDenied = moveMutation.error instanceof PipelineRequestError && [401, 403].includes(moveMutation.error.status)
+  function move(leadId: string, toStageId: string) {
+    if (!canMove || moveInFlight.current || leadsQuery.isFetching || leadsQuery.isError || writeDenied) return
+    moveInFlight.current = true
+    moveMutation.mutate({ leadId, toStageId })
+  }
   const pagination = leadsQuery.data?.pagination
   const leads = useMemo(
-    () => leadsQuery.data?.data ?? [],
-    [leadsQuery.data],
+    () => denied ? [] : (leadsQuery.data?.data ?? []),
+    [leadsQuery.data, denied],
   )
 
   const leadsByStage = useMemo(
@@ -173,6 +192,8 @@ export function KanbanBoard({
         </span>
       </div>
 
+      {leadsQuery.isError && <div role="alert" className="rounded-[10px] bg-danger-subtle p-3 text-sm"><p>Couldn’t refresh pipeline. Moving is paused until the data is refreshed.</p><button type="button" className="mt-2 underline" disabled={leadsQuery.isFetching} onClick={() => { void leadsQuery.refetch() }}>Refresh pipeline</button></div>}
+      {writeDenied && <p className="text-sm">Your access changed. <a href="/pipeline" className="underline">Reload pipeline permissions</a></p>}
       {moveMutation.isError && (
         <p className="rounded-[10px] bg-danger-subtle px-3 py-2 text-xs text-danger-foreground" role="alert">
           {(moveMutation.error as Error | undefined)?.message ??
@@ -192,7 +213,7 @@ export function KanbanBoard({
 
       {/* Horizontal scroll so columns stay readable on small screens instead
           of being crushed to unusable widths (standard kanban behaviour). */}
-      <div className="-mx-1 overflow-x-auto px-1 pb-2">
+      <div className="relative -mx-1 overflow-x-auto px-1 pb-2">
         <div
           className="grid gap-3.5"
           style={{
@@ -207,14 +228,13 @@ export function KanbanBoard({
             stages={stages}
             leads={leadsByStage.get(stage.id) ?? []}
             canMove={canMove}
-            onMove={(leadId, toStageId) =>
-              moveMutation.mutate({ leadId, toStageId })
-            }
+            busy={isBusy || leadsQuery.isError || writeDenied}
+            onMove={move}
             onDropLead={(leadId) => {
               const lead = leads.find((l) => l.id === leadId)
               if (!lead) return
               if (lead.stageId === stage.id) return
-              moveMutation.mutate({ leadId, toStageId: stage.id })
+              move(leadId, stage.id)
             }}
           />
           ))}
@@ -234,6 +254,7 @@ function StageColumn({
   stages,
   leads,
   canMove,
+  busy,
   onDropLead,
   onMove,
 }: {
@@ -241,6 +262,7 @@ function StageColumn({
   stages: readonly KanbanStage[]
   leads: readonly KanbanCardLead[]
   canMove: boolean
+  busy: boolean
   onDropLead: (leadId: string) => void
   onMove: (leadId: string, toStageId: string) => void
 }): React.JSX.Element {
@@ -252,7 +274,7 @@ function StageColumn({
   const isDragOver = canMove && dragOverStageId === stage.id && !!draggingLeadId
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>): void => {
-    if (!canMove) return
+    if (!canMove || busy) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
     if (dragOverStageId !== stage.id) {
@@ -261,7 +283,7 @@ function StageColumn({
   }
 
   const handleDragLeave = (event: React.DragEvent<HTMLDivElement>): void => {
-    if (!canMove) return
+    if (!canMove || busy) return
     // Only clear when the cursor actually leaves the column, not when
     // moving between children — `relatedTarget` being outside the column
     // is the reliable signal for that.
@@ -275,7 +297,7 @@ function StageColumn({
   }
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>): void => {
-    if (!canMove) return
+    if (!canMove || busy) return
     event.preventDefault()
     setDragOverStage(null)
     const payloadId = event.dataTransfer.getData('text/plain')
@@ -328,6 +350,7 @@ function StageColumn({
             key={lead.id}
             lead={lead}
             draggable={canMove}
+            disabled={busy}
             currentStageId={stage.id}
             stages={stages}
             onMove={onMove}

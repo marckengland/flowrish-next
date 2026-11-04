@@ -1,6 +1,7 @@
 import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
 import { AppError } from '@/lib/errors'
+import { FORECAST_CURRENCY, MAX_MONEY_AMOUNT } from '@/lib/money'
 
 /**
  * Revenue Forecasting Service
@@ -43,6 +44,8 @@ export async function calculatePipelineMetrics(
     where: {
       isClosed: false,
       deletedAt: null,
+      currency: FORECAST_CURRENCY,
+      stage: { isClosedWon: false, isClosedLost: false },
     },
     include: {
       stage: {
@@ -68,7 +71,7 @@ export async function calculatePipelineMetrics(
     // Win probability = stage.order / total stages in pipeline
     if (lead.stage && lead.stage.pipeline) {
       const totalStages = lead.stage.pipeline.stages.length
-      const winProbability = totalStages > 0 ? lead.stage.order / totalStages : 0
+      const winProbability = totalStages > 0 ? Math.min(1, Math.max(0, lead.stage.order / totalStages)) : 0
       weightedPipeline += dealValue * winProbability
     }
   }
@@ -83,6 +86,7 @@ export async function calculatePipelineMetrics(
       deletedAt: null,
       closeDate: { gte: thirtyDaysAgo },
       stage: { isClosedWon: true },
+      currency: FORECAST_CURRENCY,
     },
   })
 
@@ -121,8 +125,8 @@ export async function submitForecast(
     throw new AppError('INVALID_PERIOD', 'Period must be in YYYY-MM format', 400)
   }
 
-  if (commitAmount < 0) {
-    throw new AppError('INVALID_AMOUNT', 'Commit amount must be non-negative', 400)
+  if (!Number.isFinite(commitAmount) || commitAmount < 0 || commitAmount > MAX_MONEY_AMOUNT) {
+    throw new AppError('INVALID_AMOUNT', 'Commit amount must be finite, non-negative and within the supported range', 400)
   }
 
   const db = createTenantPrisma(orgId)

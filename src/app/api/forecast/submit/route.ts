@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { MAX_MONEY_AMOUNT } from '@/lib/money'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
 import { requireEntitlement } from '@/server/auth/entitlements'
@@ -10,7 +11,7 @@ const forecastSubmitSchema = z.object({
   period: z
     .string()
     .regex(/^\d{4}-(?:0[1-9]|1[0-2])$/, 'Period must be in YYYY-MM format'),
-  commitAmount: z.number().min(0, 'Commit amount must be non-negative'),
+  commitAmount: z.number().finite().min(0, 'Commit amount must be non-negative').max(MAX_MONEY_AMOUNT),
   notes: z.string().optional(),
 })
 

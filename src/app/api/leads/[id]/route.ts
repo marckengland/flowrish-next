@@ -53,7 +53,12 @@ export async function PATCH(
     const { id } = paramsSchema.parse(await params)
     const body = await request.json()
 
-    const lead = await updateLead(id, body, session.dbUser.id, session.organizationId)
+    const access = await getLeadAccessFilter(session.dbUser, session.organizationId)
+    const lead = await updateLead(id, body, session.dbUser.id, session.organizationId, { ...access })
+    revalidatePath('/pipeline')
+    revalidatePath('/forecast')
+    revalidatePath('/dashboard')
+    revalidatePath('/leads/' + id)
 
     return NextResponse.json({ data: lead })
   } catch (error) {
@@ -78,7 +83,9 @@ export async function DELETE(
 
     const { id } = paramsSchema.parse(await params)
 
-    const lead = await softDeleteLead(id, session.dbUser.id, session.organizationId)
+    const access = await getLeadAccessFilter(session.dbUser, session.organizationId)
+    const lead = await softDeleteLead(id, session.dbUser.id, session.organizationId, { ...access })
+    for (const path of ['/pipeline', '/forecast', '/dashboard']) revalidatePath(path)
 
     revalidatePath('/leads')
 

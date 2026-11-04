@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireSession } from '@/server/auth/session'
+import { getLeadAccessFilter } from '@/server/services/access'
 import { requirePermission } from '@/server/auth/permissions'
 import { createLead as createLeadService, updateLead as updateLeadService, softDeleteLead, convertToContact as convertToContactService } from '@/server/services/leads'
 import { createTenantPrisma } from '@/server/db/middleware'
@@ -93,7 +94,12 @@ export async function updateLead(formData: FormData) {
   delete data.id
 
   try {
-    const lead = await updateLeadService(id, data, session.dbUser.id, session.organizationId)
+    const access = await getLeadAccessFilter(session.dbUser, session.organizationId)
+    const lead = await updateLeadService(id, data, session.dbUser.id, session.organizationId, { ...access })
+    revalidatePath('/pipeline')
+    revalidatePath('/forecast')
+    revalidatePath('/dashboard')
+    revalidatePath('/leads/' + id)
 
     // Audit log: async, non-blocking
     // Note: organizationId is auto-injected by the tenant middleware at runtime
@@ -141,7 +147,9 @@ export async function deleteLead(id: string) {
   }
 
   try {
-    const lead = await softDeleteLead(id, session.dbUser.id, session.organizationId)
+    const access = await getLeadAccessFilter(session.dbUser, session.organizationId)
+    const lead = await softDeleteLead(id, session.dbUser.id, session.organizationId, { ...access })
+    for (const path of ['/pipeline', '/forecast', '/dashboard']) revalidatePath(path)
 
     // Audit log: async, non-blocking
     // Note: organizationId is auto-injected by the tenant middleware at runtime
@@ -187,11 +195,14 @@ export async function convertLead(id: string) {
   }
 
   try {
+    const access = await getLeadAccessFilter(session.dbUser, session.organizationId)
     const result = await convertToContactService(
       id,
       session.dbUser.id,
       session.organizationId,
+      { ...access },
     )
+    for (const path of ['/pipeline', '/forecast', '/dashboard']) revalidatePath(path)
 
     // Audit log: async, non-blocking
     const db = createTenantPrisma(session.organizationId)

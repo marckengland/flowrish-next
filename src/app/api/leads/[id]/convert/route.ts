@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
+import { getLeadAccessFilter } from '@/server/services/access'
+import { revalidatePath } from 'next/cache'
 import { convertToContact } from '@/server/services/leads'
 import { errorResponse } from '@/lib/errors'
 import { z } from 'zod'
@@ -29,7 +31,9 @@ export async function POST(
 
     const { id } = paramsSchema.parse(await params)
 
-    const result = await convertToContact(id, session.dbUser.id, session.organizationId)
+    const access = await getLeadAccessFilter(session.dbUser, session.organizationId)
+    const result = await convertToContact(id, session.dbUser.id, session.organizationId, { ...access })
+    for (const path of ['/leads', `/leads/${id}`, '/contacts', '/pipeline', '/forecast', '/dashboard']) revalidatePath(path)
 
     return NextResponse.json({ data: result }, { status: 201 })
   } catch (error) {
