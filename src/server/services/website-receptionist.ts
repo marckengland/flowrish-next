@@ -30,15 +30,57 @@ async function admin(organizationId: string, userId: string) {
   const member = await prisma.organizationMember.findUnique({ where: { userId_organizationId: { userId, organizationId } }, select: { id: true } })
   if (!member || !(await getEffectivePermissions(userId, organizationId)).has('admin:settings')) throw new AppError('FORBIDDEN', 'Administrator access to this organization is required.', 403)
 }
-async function readiness(organizationId: string, db: Tx = prisma) {
+export async function readiness(organizationId: string, db: Tx = prisma) {
   const [business, ai, approvedDocuments] = await Promise.all([
-    db.receptionistConfig.findUnique({ where: { organizationId }, select: { settings: true } }),
-    db.aiProviderConfig.findUnique({ where: { organizationId }, select: { provider: true, model: true, enabled: true, dailyRequestLimit: true, dailyTokenLimit: true, maxOutputTokens: true, maxInputBytes: true, updatedAt: true } }),
-    db.knowledgeDocument.count({ where: { organizationId, archivedAt: null, publishedAt: { not: null }, publishedText: { not: null }, publishedRevision: { not: null }, receptionistApprovedRevision: { equals: db.knowledgeDocument.fields.publishedRevision } } }),
+    db.receptionistConfig.findUnique({
+      where: { organizationId },
+      select: { settings: true },
+    }),
+    db.aiProviderConfig.findUnique({
+      where: { organizationId },
+      select: {
+        provider: true,
+        model: true,
+        enabled: true,
+        dailyRequestLimit: true,
+        dailyTokenLimit: true,
+        maxOutputTokens: true,
+        maxInputBytes: true,
+        updatedAt: true,
+      },
+    }),
+    db.knowledgeDocument.count({
+      where: {
+        organizationId,
+        archivedAt: null,
+        publishedAt: { not: null },
+        publishedText: { not: null },
+        publishedRevision: { not: null },
+        receptionistApprovedRevision: {
+          equals: db.knowledgeDocument.fields.publishedRevision,
+        },
+      },
+    }),
   ])
   const parsed = receptionistConfigSchema.safeParse(business?.settings)
-  const aiValid = ai?.enabled && aiProviderSettingsSchema.safeParse({ provider: ai.provider, model: ai.model, enabled: ai.enabled, dailyRequestLimit: ai.dailyRequestLimit, dailyTokenLimit: ai.dailyTokenLimit, maxOutputTokens: ai.maxOutputTokens, maxInputBytes: ai.maxInputBytes, expectedUpdatedAt: ai.updatedAt.toISOString() }).success
-  return { hasSavedBusiness: parsed.success, businessName: parsed.success ? parsed.data.businessName : '', approvedDocuments, hasOrganizationAi: !!aiValid }
+  const aiValid =
+    ai?.enabled &&
+    aiProviderSettingsSchema.safeParse({
+      provider: ai.provider,
+      model: ai.model,
+      enabled: ai.enabled,
+      dailyRequestLimit: ai.dailyRequestLimit,
+      dailyTokenLimit: ai.dailyTokenLimit,
+      maxOutputTokens: ai.maxOutputTokens,
+      maxInputBytes: ai.maxInputBytes,
+      expectedUpdatedAt: ai.updatedAt.toISOString(),
+    }).success
+  return {
+    hasSavedBusiness: parsed.success,
+    businessName: parsed.success ? parsed.data.businessName : '',
+    approvedDocuments,
+    hasOrganizationAi: !!aiValid,
+  }
 }
 function settings(config: WebsiteReceptionistConfig) { return websiteSettingsSchema.parse({ publicId: config.publicId, enabled: config.enabled, allowedOrigins: config.allowedOrigins, dailyMessageLimit: config.dailyMessageLimit, dailyTokenLimit: config.dailyTokenLimit, dailyCallbackLimit: config.dailyCallbackLimit, updatedAt: config.updatedAt.toISOString() }) }
 export async function getWebsiteReceptionistState(organizationId: string, db: Tx = prisma): Promise<WebsiteReceptionistAdminData> {

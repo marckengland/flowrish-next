@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { PilotInvitationPanel } from './pilot-invitation-panel'
+import { PilotProgressPanel } from './pilot-progress-panel'
 import {
   waitlistEntrySchema,
   waitlistListSchema,
@@ -121,6 +122,14 @@ export function StaffWaitlistInbox(): React.JSX.Element {
   const clearApproval = () => {
     setReviewed(null)
     setApproved(false)
+  }
+  function denyAccess() {
+    setDenied(true)
+    setRows(null)
+    setOptions(null)
+    setSelectedId(null)
+    clearApproval()
+    setError('Flowrish staff access is required.')
   }
   function applyEntry(updated: WaitlistEntry) {
     setRows(
@@ -403,14 +412,12 @@ export function StaffWaitlistInbox(): React.JSX.Element {
                       entryId={entry.id}
                       email={entry.email}
                       onEntryChanged={applyEntry}
-                      onAccessDenied={() => {
-                        setDenied(true)
-                        setRows(null)
-                        setOptions(null)
-                        setSelectedId(null)
-                        clearApproval()
-                        setError('Flowrish staff access is required.')
-                      }}
+                      onAccessDenied={denyAccess}
+                    />
+                    <PilotProgressPanel
+                      entryId={entry.id}
+                      email={entry.email}
+                      onAccessDenied={denyAccess}
                     />
                   </li>
                 ))}

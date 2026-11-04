@@ -15,13 +15,29 @@ Accounts with existing workspace memberships need staff assistance. This flow do
 
 Our team will confirm pricing. Pilot approval makes no price, discount, or trial promise.
 
+## Check the next setup step
+
+Select **Check pilot setup progress** on a signup in the staff inbox. The panel loads only when requested. Use **Refresh pilot progress** to check again; it does not poll or change the customer's settings.
+
+For a joined pilot, staff see business details saved, approved services/pricing guidance/FAQ categories, organization AI configured with limits, an allowed website saved, widget state, and the latest saved browser rehearsal review. Missing categories count as unfinished preparation in this staff checklist. This does not change the receptionist's enablement policy.
+
+A rehearsal counts as passed only when it is finished, saved, and marked passed. A changed business version or configuration or any Library document updated after that report was saved requires another rehearsal. This is a saved review, not proof of live AI quality, connectivity, or the latest unsaved local simulation.
+
+Progress resolves the workspace through the accepted pilot invitation and original owner's retained membership. It exposes no customer documents, conversation text, review notes, or credentials. Removed access makes progress unavailable. When staff access is revoked, the inbox clears prospect information as soon as a request detects the denial.
+
+The suggested next step ends at manual review with the business. Checking progress never enables the widget or calls an AI provider. Detailed setup history and unsaved simulation tracking are deferred.
+
 ## Verify changes without providers
 
-Run the repository checks in `AGENTS.md`, including `npm run test:receptionist:mocked`. The isolated browser suite covers 30 scenarios using synthetic records and intercepted API calls. It makes no authentication, email, database, or provider requests.
+Run the repository checks in `AGENTS.md`, including `npm run test:receptionist:mocked`. The isolated browser suite covers 33 scenarios using synthetic records and intercepted API calls. It makes no authentication, email, database, or provider requests.
 
 The additional database suite uses `vitest.pilot.config.ts` and requires `PILOT_TEST_DATABASE_URL` with the explicitly checked loopback dummy credentials. Prepare a disposable PostgreSQL container using the copied-schema and offline-SQL procedure in `AGENTS.md`. Never run `prisma db push` from this checkout.
 
+Run the read-only progress projection tests separately with `vitest.pilot-progress.config.ts` against the same disposable schema. Do not run the two database suites concurrently because the onboarding suite checks global fixture counts.
+
 ## Roll back the release
+
+A progress-only release needs a code revert; it changes no schema or stored data.
 
 If pilot sign-in or creation fails, stop sharing links. Revert the application changes and redeploy the previous application. Keep the additive `WaitlistPilotInvite` table, its index, the Prisma model, and applied migration. Its restrictive references preserve accepted workspace receipts. The previous application does not read the table.
 
