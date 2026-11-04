@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/write-release-metadata.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck:fast": "tsgo --noEmit",

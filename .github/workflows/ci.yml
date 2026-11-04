@@ -150,3 +150,23 @@ jobs:
           BROWSER_RESULT: ${{ needs.receptionist-browser.result }}
           MIGRATE_RESULT: ${{ needs.migrate.result }}
         run: node scripts/production-release.mjs ready
+
+  production-smoke:
+    name: ${{ github.event_name == 'push' && 'Production smoke verification' || 'PR smoke not requested' }}
+    runs-on: ubuntu-latest
+    needs: [release-ready]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 8
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Verify the live production commit and anonymous access
+        env:
+          SMOKE_EXPECTED_SHA: ${{ github.sha }}
+        run: node scripts/production-smoke.mjs
