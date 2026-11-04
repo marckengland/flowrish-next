@@ -7,7 +7,7 @@ import { PrivateBetaBadge } from '@/components/ui/private-beta-badge'
  * Left-hand dark brand panel shared by the sign-in and onboarding screens.
  *
  * Design: near-black surface with a blurred emerald glow, the lily logo +
- * wordmark, a headline, subhead, two stat cards, and a compliance line.
+ * wordmark, a headline, subhead, two feature cards, and a product summary.
  */
 export function AuthBrandPanel(): React.JSX.Element {
   return (
@@ -37,32 +37,32 @@ export function AuthBrandPanel(): React.JSX.Element {
           REVENUE PLATFORM
         </div>
         <h1 className="mb-5 max-w-[440px] text-[42px] font-bold leading-[1.05] tracking-[-0.03em] text-balance">
-          The CRM that does the busywork.
+          Keep your sales work in one place.
         </h1>
         <p className="mb-9 max-w-[400px] text-[16px] leading-[1.6] text-white/70">
-          Logging, follow-ups and forecasting on autopilot — so your reps spend
-          their day closing, not updating fields.
+          Manage leads, review follow-up drafts and track your pipeline with
+          Flowrish.
         </p>
         <div className="flex gap-3.5">
           <div className="flex-1 rounded-xl border border-white/10 bg-white/[0.05] p-4">
             <div className="mb-2 font-mono text-[10px] tracking-[0.06em] text-white/50">
-              HRS SAVED / REP / WK
+              FOLLOW-UPS
             </div>
-            <div className="tnum text-[28px] font-semibold text-[oklch(0.82_0.14_156)]">
-              6.2
+            <div className="text-[22px] font-semibold text-[oklch(0.82_0.14_156)]">
+              Review drafts
             </div>
           </div>
           <div className="flex-1 rounded-xl border border-white/10 bg-white/[0.05] p-4">
             <div className="mb-2 font-mono text-[10px] tracking-[0.06em] text-white/50">
-              FORECAST ACCURACY
+              FORECASTING
             </div>
-            <div className="tnum text-[28px] font-semibold text-white">94%</div>
+            <div className="text-[22px] font-semibold text-white">Track your pipeline</div>
           </div>
         </div>
       </div>
 
       <div className="relative font-mono text-[12px] text-white/40">
-        SOC 2 Type II · GDPR · 99.9% uptime
+        Lead management · Follow-up approvals · Pipeline forecasting
       </div>
     </div>
   )
