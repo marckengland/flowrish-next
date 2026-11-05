@@ -1,3 +1,5 @@
+import { approvalInput, type ApprovalInput } from '@/lib/follow-up-approval'
+import { assertReviewedApproval, approvalAuditFields } from './follow-up-approval-guard'
 import { z } from 'zod'
 import { followUpFilterSchema } from '@/lib/follow-up-filters'
 import { followUpFilterSql } from './follow-up-filter-sql'
@@ -19,7 +21,8 @@ export const followUpReviewSchema = z.object({
   dueDate: z.string().datetime({ offset: true }).optional(),
 }).strict()
 
-export async function reviewFollowUp(organizationId: string, userId: string, id: string, input: unknown) {
+export async function reviewFollowUp(organizationId: string, userId: string, id: string, input: unknown, reviewed?: ApprovalInput) {
+  if (reviewed) reviewed = approvalInput.parse(reviewed)
   const values = followUpReviewSchema.parse(input)
   requireFollowUpWrites()
   return safeFollowUp(() => prisma.$transaction(async tx => {
@@ -35,6 +38,8 @@ export async function reviewFollowUp(organizationId: string, userId: string, id:
     if (!suggestion) throw followUpUnavailable()
     if (suggestion.leadId !== before.leadId || suggestion.taskId !== before.taskId || suggestion.sourceType !== before.sourceType || suggestion.sourceId !== before.sourceId) throw followUpChanged()
     const { lead } = await followUpLead(tx, organizationId, userId, suggestion.leadId, true)
+    if (reviewed && (values.action !== 'approve' || values.title !== reviewed.title || values.description !== reviewed.description || values.dueDate !== reviewed.dueDate)) throw followUpChanged()
+    if (reviewed && await assertReviewedApproval(tx, organizationId, userId, suggestion, reviewed)) return followUpView(suggestion, lead)
     if (suggestion.status !== 'PENDING') return followUpView(suggestion, lead)
     let taskId = suggestion.taskId
     if (suggestion.sourceType === 'CALL' && !taskId) throw followUpUnavailable()
@@ -50,7 +55,8 @@ export async function reviewFollowUp(organizationId: string, userId: string, id:
       taskId = task.id
     }
     const result = await tx.followUpSuggestion.update({ where: { id, organizationId, assigneeId: userId }, data: { taskId, ...(suggestion.taskId ? {} : { title: values.title ?? suggestion.title, description: values.description ?? suggestion.description }) } })
-    await tx.auditEntry.create({ data: { organizationId, userId, action: 'UPDATE', entityType: 'FollowUpSuggestion', entityId: id, changes: { status, taskId } } })
+    const approval = reviewed && taskId ? await approvalAuditFields(tx, organizationId, userId, suggestion.leadId, taskId, reviewed) : undefined
+    await tx.auditEntry.create({ data: { ...(reviewed ? { id: reviewed.requestId } : {}), organizationId, userId, action: 'UPDATE', entityType: 'FollowUpSuggestion', entityId: id, changes: { status, taskId, ...(approval ? { approval } : {}) } } })
     const final = await followUpLead(tx, organizationId, userId, suggestion.leadId, true)
     return followUpView(result, final.lead)
   }, { timeout: 20000 }))

@@ -1,4 +1,6 @@
 'use client'
+import { FollowUpBulkApproval, canBulkApprove } from './follow-up-bulk-approval'
+import type { ApprovalReceipt } from '@/lib/follow-up-approval'
 import { SavedFollowUpViews } from './saved-follow-up-views'
 import type { SavedFollowUpSettings } from '@/lib/saved-follow-up-views'
 import type { FollowUpPageMeta } from '@/lib/follow-up-page'
@@ -102,6 +104,11 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   const [pageError, setPageError] = useState('')
   const [bulkSelected, setBulkSelected] = useState<string[]>([])
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [approvalOpen, setApprovalOpen] = useState(false), [approvalBusy, setApprovalBusy] = useState(false)
+  const [, setEditorRevision] = useState(0)
+  const [approvalLocked, setApprovalLocked] = useState(false)
+  const approvalLockRef = useRef(false)
+  const approvedRetained = useRef(new Set<string>())
   const bulkRetained = useRef(new Set<string>()), bulkBusyRef = useRef(false)
   const [callbackCatchUp, setCallbackCatchUp] = useState<FollowUpPageMeta['callbackCatchUp']>()
   const retryCatchUp = useRef(false)
@@ -119,14 +126,23 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   const readEpoch = useRef(0)
   const openDrafts = useRef(new Set<string>())
   const dirtyEditors = useRef(new Set<string>())
-  const trackEditor = useCallback((id: string, dirty: boolean) => { const had = dirtyEditors.current.has(id); if (dirty) dirtyEditors.current.add(id); else dirtyEditors.current.delete(id); if (had !== dirty) readEpoch.current++ }, [])
+  const trackEditor = useCallback((id: string, dirty: boolean) => { const had = dirtyEditors.current.has(id); if (dirty) dirtyEditors.current.add(id); else dirtyEditors.current.delete(id); if (had !== dirty) { readEpoch.current++; setEditorRevision(value => value + 1) } }, [])
   const changeBulkSelection = useCallback((ids: string[]) => {
-    if (bulkBusyRef.current || ids.length > BULK_SNOOZE_LIMIT) return
+    if (bulkBusyRef.current || ids.length > BULK_SNOOZE_LIMIT || approvalLockRef.current && ids.length > 0) return
+    if (!ids.length) { approvalLockRef.current = false; setApprovalLocked(false) }
+    approvedRetained.current = new Set([...approvedRetained.current].filter(id => ids.includes(id)))
     const previous = bulkRetained.current
     bulkRetained.current = new Set(ids); readEpoch.current++; setBulkSelected(ids)
-    if (!ids.length && previous.size && status === 'PENDING') setItems(rows => rows.filter(row => !previous.has(row.id) || openDrafts.current.has(row.id) || dirtyEditors.current.has(row.id) || !row.snooze?.until || new Date(row.snooze.until).getTime() <= Date.now()))
+    if (!ids.length && previous.size && (status === 'PENDING' || status === 'SNOOZED')) setItems(rows => rows.filter(row => !previous.has(row.id) || openDrafts.current.has(row.id) || dirtyEditors.current.has(row.id) || row.status === 'PENDING' && (status === 'SNOOZED' ? Boolean(row.snooze?.until && new Date(row.snooze.until).getTime() > Date.now()) : !row.snooze?.until || new Date(row.snooze.until).getTime() <= Date.now())))
   }, [status])
   const changeBulkBusy = useCallback((busy: boolean) => { bulkBusyRef.current = busy; setBulkBusy(busy); if (busy) { abortPages(); setPageTask(null); readEpoch.current++ } }, [abortPages])
+  const changeApprovalBusy = useCallback((busy: boolean) => { setApprovalBusy(busy); changeBulkBusy(busy) }, [changeBulkBusy])
+  const retainApprovalReview = useCallback((ids: string[], locked: boolean) => { approvedRetained.current = new Set(ids); approvalLockRef.current = locked; setApprovalLocked(locked) }, [])
+  const bulkApprovalChanged = useCallback((receipt: Extract<ApprovalReceipt, { state: 'confirmed' }>) => {
+    readEpoch.current++
+    approvedRetained.current.add(receipt.id)
+    setItems(rows => rows.map(row => row.id === receipt.id ? { ...row, status: 'APPROVED', taskId: receipt.task.id, title: receipt.task.title, description: receipt.task.description } : row))
+  }, [])
   const bulkSnoozeChanged = useCallback((updated: BulkSnoozeReceipt, reminderOnly = false) => {
     readEpoch.current++
     if (updated.id === focusedReplyId && !openDrafts.current.has(updated.id) && !dirtyEditors.current.has(updated.id)) hiddenFocused.current = updated.snooze?.until ? updated.id : null
@@ -156,7 +172,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     setFilterDraft(emptyFilters)
     setFilterError('')
     setItems([])
-    bulkRetained.current.clear(); setBulkSelected([])
+    approvalLockRef.current = false; setApprovalLocked(false); approvedRetained.current.clear(); bulkRetained.current.clear(); setBulkSelected([])
     openDrafts.current.clear(); dirtyEditors.current.clear()
     setNavigation(null)
     setFocusedError('')
@@ -168,7 +184,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     if (target === status) return true
     if (typeof target === 'object' && 'filters' in target && JSON.stringify(target.filters) === JSON.stringify(filters) && (!target.filters.dueOnly || status === 'PENDING')) { setNavigation(null); setFilterDraft(target.filters); return true }
     if (typeof target === 'object' && 'settings' in target && target.settings.status === status && JSON.stringify(target.settings.filters) === JSON.stringify(filters)) { setNavigation(null); setFilterDraft(target.settings.filters); return true }
-    if (!discard && (openDrafts.current.size > 0 || typeof target === 'object' && 'settings' in target && dirtyEditors.current.size > 0)) { setNavigation(target); return false }
+    if (!discard && (approvalLockRef.current || openDrafts.current.size > 0 || typeof target === 'object' && 'settings' in target && dirtyEditors.current.size > 0)) { setNavigation(target); return false }
     setNavigation(null)
     changeBulkSelection([])
     abortPages(); setPageTask(null); setPageError(''); pageFailed.current = false; pagesLoaded.current = 1; setNextCursor(null); setCallbackCatchUp(undefined)
@@ -246,12 +262,13 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   }, [emailOrganizationId, emailUserId, revoked, readLoadedPages])
 
   useEffect(() => {
-    const valid = new Set(items.filter(canBulkSnooze).map(row => row.id))
+    if (approvalLocked && writeAllowed) return
+    const valid = new Set(items.filter(row => canBulkSnooze(row) || approvedRetained.current.has(row.id) && row.status === 'APPROVED').map(row => row.id))
     if (!writeAllowed || bulkSelected.some(id => !valid.has(id))) {
       const next = writeAllowed ? bulkSelected.filter(id => valid.has(id)) : []
       if (next.length !== bulkSelected.length) { bulkRetained.current = new Set(next); readEpoch.current++; setBulkSelected(next) }
     }
-  }, [items, writeAllowed, bulkSelected])
+  }, [items, writeAllowed, bulkSelected, approvalLocked])
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -268,7 +285,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       {children}
       {emailMatchContext && !revoked && <EmailMatchInbox context={emailMatchContext} initialMessageId={initialMessageId} canWrite={writeAllowed} onResolved={() => navigate('refresh')} />}
       {emailMatchContext && !revoked && <details className="min-w-0 rounded-lg border bg-card p-4" onToggle={event => event.currentTarget.open && setViewsOpen(true)}><summary className="cursor-pointer rounded text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">Saved views</summary>{viewsOpen && <div className="mt-3"><SavedFollowUpViews context={emailMatchContext} settings={{ status, filters }} disabled={loading || bulkBusy} onApply={settings => { setFilterError(''); navigate({ settings }) }} onAccessLost={invalidate} /></div>}</details>}
-      {navigation && <section role="group" aria-label="Open draft confirmation" className="rounded-lg border bg-card p-4"><p className="text-sm">{typeof navigation === 'object' && 'settings' in navigation ? 'You have unsaved follow-up edits. Applying this view will discard them.' : 'You have an open email draft. Continuing will discard its unsent edits.'}</p><div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => setNavigation(null)}>Keep editing</Button><Button type="button" onClick={() => navigate(navigation, true)}>{typeof navigation === 'object' ? 'settings' in navigation ? 'Discard and apply view' : 'filters' in navigation ? 'Discard and apply filters' : 'Discard and open reply' : navigation === 'refresh' ? 'Discard and refresh' : 'Discard and change tab'}</Button></div></section>}
+      {navigation && <section role="group" aria-label={approvalLocked ? "Approval results confirmation" : "Open draft confirmation"} className="rounded-lg border bg-card p-4"><p className="text-sm">{approvalLocked ? 'Task approval results are still open. Continuing discards these results and any open email draft edits. Approved tasks are kept.' : typeof navigation === 'object' && 'settings' in navigation ? 'You have unsaved follow-up edits. Applying this view will discard them.' : 'You have an open email draft. Continuing will discard its unsent edits.'}</p><div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => setNavigation(null)}>Keep editing</Button><Button type="button" onClick={() => navigate(navigation, true)}>{typeof navigation === 'object' ? 'settings' in navigation ? 'Discard and apply view' : 'filters' in navigation ? 'Discard and apply filters' : 'Discard and open reply' : navigation === 'refresh' ? 'Discard and refresh' : 'Discard and change tab'}</Button></div></section>}
       {snoozeNotice && <p role="status" className="text-sm">{snoozeNotice}</p>}
       {focusedError && <p role="alert" className="text-sm text-destructive">{focusedError}</p>}
       <section role="search" aria-label="Follow-up filters" className="space-y-3 rounded-lg border bg-card p-4">
@@ -289,9 +306,11 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
         <p className="text-xs text-muted-foreground">Catch-up includes all accessible callbacks. New follow-ups appear in Pending; your filters stay applied.</p>
         {pageTask === 'catch-up' && <p role="status" className="text-sm">Catching up callbacks…</p>}
         {pageError && retryCatchUp.current && <p role="alert" className="text-sm text-destructive">{pageError}</p>}
-        <div className="flex flex-wrap gap-2">{callbackCatchUp.hasMore && <Button type="button" variant="outline" disabled={pageTask !== null || Boolean(pageError)} onClick={() => void readLoadedPages(pagesLoaded.current, true, true)}>Continue catch-up</Button>}{pageError && retryCatchUp.current && <Button type="button" variant="outline" disabled={pageTask !== null} onClick={() => void readLoadedPages(retryDepth.current, true, true)}>Retry catch-up</Button>}</div>
+        <div className="flex flex-wrap gap-2">{callbackCatchUp.hasMore && <Button type="button" variant="outline" disabled={pageTask !== null || Boolean(pageError)} onClick={() => void readLoadedPages(pagesLoaded.current, true, true)}>Continue catch-up</Button>}{pageError && retryCatchUp.current && <Button type="button" variant="outline" disabled={pageTask !== null || bulkBusy} onClick={() => void readLoadedPages(retryDepth.current, true, true)}>Retry catch-up</Button>}</div>
       </section>}
-      {!loading && !revoked && writeAllowed && emailMatchContext && (items.some(canBulkSnooze) || bulkSelected.length > 0) && <FollowUpBulkSnooze key={JSON.stringify([status, filters, revision])} items={items} selectedIds={bulkSelected} onSelectionChange={changeBulkSelection} context={emailMatchContext} disabled={!writeAllowed} onChanged={bulkSnoozeChanged} onVerified={row => bulkSnoozeChanged(row, true)} onRefresh={() => void readLoadedPages(pagesLoaded.current, true)} refreshing={pageTask !== null} onAccessLost={invalidate} onBusyChange={changeBulkBusy} />}
+      {approvalLocked && <p role="status" className="text-sm">Task approval results are kept. Check or clear approval results before starting another bulk action.</p>}
+      {!loading && !revoked && writeAllowed && emailMatchContext && <details className="min-w-0 rounded-lg border bg-card p-4" onToggle={event => { if (event.currentTarget.open) setApprovalOpen(true) }}><summary className="cursor-pointer rounded text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">Bulk task approval</summary>{approvalOpen && <div className="mt-3"><FollowUpBulkApproval key={JSON.stringify([status, filters, revision])} items={items} selectedIds={bulkSelected} blockedIds={[...dirtyEditors.current]} context={emailMatchContext} disabled={!writeAllowed} otherBusy={bulkBusy && !approvalBusy} refreshing={pageTask !== null} onSelectionChange={changeBulkSelection} onChanged={bulkApprovalChanged} onAccessLost={invalidate} onBusyChange={changeApprovalBusy} onRetainReview={retainApprovalReview} /></div>}</details>}
+      {!loading && !revoked && writeAllowed && emailMatchContext && (items.some(canBulkSnooze) || bulkSelected.length > 0) && <FollowUpBulkSnooze key={JSON.stringify([status, filters, revision])} items={items} selectedIds={bulkSelected} onSelectionChange={changeBulkSelection} context={emailMatchContext} disabled={!writeAllowed || approvalBusy || approvalLocked} onChanged={bulkSnoozeChanged} onVerified={row => bulkSnoozeChanged(row, true)} onRefresh={() => void readLoadedPages(pagesLoaded.current, true)} refreshing={pageTask !== null} onAccessLost={invalidate} onBusyChange={changeBulkBusy} />}
       <div role="tablist" aria-label="Follow-up status" className="flex w-fit max-w-full flex-wrap gap-1 rounded-lg border bg-muted/40 p-1">
         {tabs.map((tab) => <button key={tab.value} id={`follow-ups-${tab.value}`} type="button" role="tab" disabled={bulkBusy} aria-selected={status === tab.value} aria-controls="follow-up-panel" tabIndex={status === tab.value ? 0 : -1} onKeyDown={(event) => {
           const index = tabs.findIndex((value) => value.value === tab.value)
@@ -303,7 +322,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       </div>
       {!writeAllowed && <p className="text-sm text-muted-foreground">You have read-only access. Ask a team member with lead editing permission to review these follow-ups.</p>}
       <section id="follow-up-panel" role="tabpanel" aria-labelledby={`follow-ups-${status}`} aria-busy={loading} className="min-w-0">
-        {loading ? <p role="status" className="py-12 text-center text-sm text-muted-foreground">Loading follow-ups…</p> : error ? <div className="rounded-lg border bg-card p-6"><p role="alert" className="text-sm text-destructive">{error}</p><Button variant="outline" className="mt-3" onClick={() => navigate('refresh')}>Try again</Button></div> : items.length === 0 ? <div className="flex flex-col items-center rounded-xl border border-dashed bg-card px-5 py-14 text-center"><Inbox className="mb-3 size-7 text-muted-foreground" aria-hidden="true" /><h2 className="font-medium">{hasFollowUpFilters(filters) ? 'No follow-ups match these filters.' : `No ${status.toLowerCase()} follow-ups`}</h2><p className="mt-1 max-w-md text-sm text-muted-foreground">{status === 'PENDING' ? 'New replies from synced sales conversations and confirmed receptionist callbacks will appear here.' : 'Reviewed follow-ups will appear here.'}</p></div> : <div className="grid min-w-0 gap-4">{items.map((item) => <div key={item.id} className="space-y-2">{writeAllowed && emailMatchContext && canBulkSnooze(item) && <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" aria-label={`Select follow-up for ${item.lead.firstName} ${item.lead.lastName}: ${item.title}`} checked={bulkSelected.includes(item.id)} disabled={bulkBusy || (!bulkSelected.includes(item.id) && bulkSelected.length >= BULK_SNOOZE_LIMIT)} onChange={event => changeBulkSelection(event.target.checked ? [...bulkSelected, item.id] : bulkSelected.filter(id => id !== item.id))} />Select for bulk snooze</label>}<FollowUpCard item={item} batchBusy={bulkBusy} canWrite={writeAllowed} context={emailMatchContext} onAccessLost={invalidate} onComposerChange={trackComposer} onEditorChange={trackEditor} onSnoozeChanged={(updated) => {
+        {loading ? <p role="status" className="py-12 text-center text-sm text-muted-foreground">Loading follow-ups…</p> : error ? <div className="rounded-lg border bg-card p-6"><p role="alert" className="text-sm text-destructive">{error}</p><Button variant="outline" className="mt-3" onClick={() => navigate('refresh')}>Try again</Button></div> : items.length === 0 ? <div className="flex flex-col items-center rounded-xl border border-dashed bg-card px-5 py-14 text-center"><Inbox className="mb-3 size-7 text-muted-foreground" aria-hidden="true" /><h2 className="font-medium">{hasFollowUpFilters(filters) ? 'No follow-ups match these filters.' : `No ${status.toLowerCase()} follow-ups`}</h2><p className="mt-1 max-w-md text-sm text-muted-foreground">{status === 'PENDING' ? 'New replies from synced sales conversations and confirmed receptionist callbacks will appear here.' : 'Reviewed follow-ups will appear here.'}</p></div> : <div className="grid min-w-0 gap-4">{items.map((item) => <div key={item.id} className="space-y-2">{writeAllowed && emailMatchContext && canBulkSnooze(item) && <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" aria-label={`${approvalOpen ? 'Select follow-up for bulk actions' : 'Select follow-up for'} ${item.lead.firstName} ${item.lead.lastName}: ${item.title}`} checked={bulkSelected.includes(item.id)} disabled={bulkBusy || approvalLocked || (!bulkSelected.includes(item.id) && bulkSelected.length >= BULK_SNOOZE_LIMIT)} onChange={event => changeBulkSelection(event.target.checked ? [...bulkSelected, item.id] : bulkSelected.filter(id => id !== item.id))} />{approvalOpen && canBulkApprove(item) ? 'Select for bulk actions' : 'Select for bulk snooze'}</label>}<FollowUpCard item={item} batchBusy={bulkBusy} canWrite={writeAllowed} context={emailMatchContext} onAccessLost={invalidate} onComposerChange={trackComposer} onEditorChange={trackEditor} onSnoozeChanged={(updated) => {
           readEpoch.current++; hiddenFocused.current = updated.id; openDrafts.current.delete(updated.id)
           setItems(current => current.flatMap(row => row.id !== updated.id ? [row] : (status === 'SNOOZED' && updated.snooze?.until || status === 'PENDING' && !filters.dueOnly && !updated.snooze?.until) ? [{ ...row, ...updated }] : []))
           setSnoozeNotice(updated.snooze?.until ? 'Follow-up snoozed. Find it in Snoozed.' : 'Follow-up awake. Find it in Pending.')
@@ -313,7 +332,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       {!loading && !revoked && (pageSupported || pageError) && <section aria-label="Follow-up pagination" className="space-y-3">
         {pageTask && pageTask !== 'catch-up' && <p role="status" className="text-sm text-muted-foreground">{pageTask === 'more' ? 'Loading more follow-ups…' : 'Checking follow-ups…'}</p>}
         {pageError && !retryCatchUp.current && <p role="alert" className="text-sm text-destructive">{pageError}</p>}
-        <div className="flex flex-wrap gap-2">{nextCursor && <Button type="button" variant="outline" disabled={pageTask !== null} onClick={() => void readLoadedPages(pagesLoaded.current + 1, true)}>Load more</Button>}{pageError && !retryCatchUp.current && <Button type="button" variant="outline" disabled={pageTask !== null} onClick={() => void readLoadedPages(retryDepth.current, true)}>Retry loading</Button>}</div>
+        <div className="flex flex-wrap gap-2">{nextCursor && <Button type="button" variant="outline" disabled={pageTask !== null || bulkBusy} onClick={() => void readLoadedPages(pagesLoaded.current + 1, true)}>Load more</Button>}{pageError && !retryCatchUp.current && <Button type="button" variant="outline" disabled={pageTask !== null || bulkBusy} onClick={() => void readLoadedPages(retryDepth.current, true)}>Retry loading</Button>}</div>
         {pageSupported && !nextCursor && !callbackCatchUp?.hasMore && !pageTask && !pageError && <p className="text-xs text-muted-foreground">All matching follow-ups are loaded.</p>}
       </section>}
       <p className="text-xs text-muted-foreground">{pageSupported ? `${items.length} loaded items assigned to you, including retained drafts and focused replies. Load more keeps your filters and unsent drafts.` : 'Showing up to 100 recent items assigned to you, plus open drafts and a focused reply.'} Email sources are previews, and draft text is a starting template. Approving a task does not send an email.</p>
@@ -343,9 +362,9 @@ function FollowUpCard({ item, canWrite, context, batchBusy = false, onAccessLost
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   useEffect(() => { if (!canWrite) { requestVersion.current++; setCompose(false); setConfirmReplace(false); setGenerating(false); setBusy(false) } }, [canWrite])
   useEffect(() => {
-    setResult(current => ({ ...current, status: item.status, taskId: item.taskId, snooze: item.snooze, snoozeVersion: item.snoozeVersion }))
+    setResult(current => ({ ...current, status: item.status, taskId: item.taskId, ...(item.status === 'APPROVED' ? { title: item.title, description: item.description } : {}), snooze: item.snooze, snoozeVersion: item.snoozeVersion }))
     if (item.status === 'DISMISSED') { requestVersion.current++; setCompose(false); setConfirmReplace(false) }
-  }, [item.status, item.taskId, item.snooze, item.snoozeVersion])
+  }, [item.status, item.taskId, item.title, item.description, item.snooze, item.snoozeVersion])
   const generated = Boolean(result.draftVersion && result.draftContext)
   const recipient = generated ? result.draftContext!.recipientEmail : item.lead.email
   const canGenerate = canWrite && result.sourceType === 'EMAIL' && result.status !== 'DISMISSED'
