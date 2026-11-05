@@ -15,6 +15,7 @@ for (const value of [baseURL, proxy]) {
 export default defineConfig({
   testDir: './e2e',
   testMatch: [
+    'saved-follow-up-views.spec.ts',
     'saved-lead-views.spec.ts',
     'bulk-lead-updates.spec.ts',
     'safe-lead-merges.spec.ts',
@@ -44,7 +45,7 @@ export default defineConfig({
     'follow-ups.spec.ts',
     'receptionist-preview.spec.ts',
   ],
-  grep: /bulk follow-up snooze|callback catch-up progress|follow-up load more|follow-up search|follow-up history|follow-up snooze|contact preferences|follow-up access|email notifications|merge-aware replies|safe lead merges|bulk lead updates|saved lead views|keyboard audit|forecast history|pipeline audit|workspace switcher|core audit|pilot progress|pilot onboarding|staff waitlist|explores the public receptionist sample|practices receptionist conversation|approves .*callback handoff|records, retries|preferred business-local|uncertain timed request|fresh review after|stale business hours|new widget script|reviews a synthetic reply|onboards the entered business|keeps text preview/,
+  grep: /saved follow-up views|bulk follow-up snooze|callback catch-up progress|follow-up load more|follow-up search|follow-up history|follow-up snooze|contact preferences|follow-up access|email notifications|merge-aware replies|safe lead merges|bulk lead updates|saved lead views|keyboard audit|forecast history|pipeline audit|workspace switcher|core audit|pilot progress|pilot onboarding|staff waitlist|explores the public receptionist sample|practices receptionist conversation|approves .*callback handoff|records, retries|preferred business-local|uncertain timed request|fresh review after|stale business hours|new widget script|reviews a synthetic reply|onboards the entered business|keeps text preview/,
   fullyParallel: false,
   workers: 1,
   retries: 0,

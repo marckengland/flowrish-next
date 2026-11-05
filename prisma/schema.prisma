@@ -347,6 +347,7 @@ model OrganizationMember {
   isDefault             Boolean                @default(false) // User's default org
   emailNotificationReads EmailNotificationRead[]
   followUpSnoozes FollowUpSnooze[]
+  savedFollowUpViews SavedFollowUpView[]
   savedLeadViews        SavedLeadView[]
   bulkLeadUpdates       BulkLeadUpdate[]
   callbackNotifications CallbackNotification[]
@@ -364,6 +365,19 @@ model SavedLeadView {
   member         OrganizationMember @relation(fields: [userId, organizationId], references: [userId, organizationId], onDelete: Cascade, onUpdate: Cascade, map: "SavedLeadView_member_fkey")
   name           String
   filters        Json
+  revision       Int @default(1)
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@unique([organizationId, userId, name])
+}
+
+model SavedFollowUpView {
+  id             String @id @default(uuid())
+  organizationId String
+  userId         String
+  member         OrganizationMember @relation(fields: [userId, organizationId], references: [userId, organizationId], onDelete: Cascade, onUpdate: Cascade, map: "SavedFollowUpView_member_fkey")
+  name           String
+  settings       Json
   revision       Int @default(1)
   updatedAt      DateTime @default(now()) @updatedAt
 

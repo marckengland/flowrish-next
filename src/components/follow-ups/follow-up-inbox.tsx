@@ -1,4 +1,6 @@
 'use client'
+import { SavedFollowUpViews } from './saved-follow-up-views'
+import type { SavedFollowUpSettings } from '@/lib/saved-follow-up-views'
 import type { FollowUpPageMeta } from '@/lib/follow-up-page'
 
 import Link from 'next/link'
@@ -22,7 +24,7 @@ import { followUpFilterSchema, hasFollowUpFilters, type FollowUpFilters } from '
 
 type FollowUpStatus = 'PENDING' | 'APPROVED' | 'DISMISSED'
 type FollowUpView = FollowUpStatus | 'SNOOZED'
-type Navigation = 'refresh' | FollowUpView | { replyId: string | undefined } | { filters: FollowUpFilters }
+type Navigation = 'refresh' | FollowUpView | { replyId: string | undefined } | { filters: FollowUpFilters } | { settings: SavedFollowUpSettings }
 const emptyFilters = followUpFilterSchema.parse({})
 
 export interface FollowUpItem {
@@ -88,6 +90,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   const [revoked, setRevoked] = useState(false)
   const revokedRef = useRef(false)
   const [status, setStatus] = useState<FollowUpView>('PENDING')
+  const [viewsOpen, setViewsOpen] = useState(false)
   const [filters, setFilters] = useState<FollowUpFilters>(emptyFilters)
   const [filterDraft, setFilterDraft] = useState<FollowUpFilters>(emptyFilters)
   const [filterError, setFilterError] = useState('')
@@ -164,12 +167,14 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     if (bulkBusyRef.current) return false
     if (target === status) return true
     if (typeof target === 'object' && 'filters' in target && JSON.stringify(target.filters) === JSON.stringify(filters) && (!target.filters.dueOnly || status === 'PENDING')) { setNavigation(null); setFilterDraft(target.filters); return true }
-    if (!discard && openDrafts.current.size > 0) { setNavigation(target); return false }
+    if (typeof target === 'object' && 'settings' in target && target.settings.status === status && JSON.stringify(target.settings.filters) === JSON.stringify(filters)) { setNavigation(null); setFilterDraft(target.settings.filters); return true }
+    if (!discard && (openDrafts.current.size > 0 || typeof target === 'object' && 'settings' in target && dirtyEditors.current.size > 0)) { setNavigation(target); return false }
     setNavigation(null)
     changeBulkSelection([])
     abortPages(); setPageTask(null); setPageError(''); pageFailed.current = false; pagesLoaded.current = 1; setNextCursor(null); setCallbackCatchUp(undefined)
     readEpoch.current++
-    if (typeof target === 'object' && 'filters' in target) { setFilters(target.filters); setFilterDraft(target.filters); if (target.filters.dueOnly) setStatus('PENDING'); setRevision(value => value + 1) }
+    if (typeof target === 'object' && 'settings' in target) { setFilters(target.settings.filters); setFilterDraft(target.settings.filters); setStatus(target.settings.status); setRevision(value => value + 1) }
+    else if (typeof target === 'object' && 'filters' in target) { setFilters(target.filters); setFilterDraft(target.filters); if (target.filters.dueOnly) setStatus('PENDING'); setRevision(value => value + 1) }
     else if (typeof target === 'object') { setFocusedReplyId(target.replyId); setStatus('PENDING'); setRevision(value => value + 1) }
     else if (target === 'refresh') setRevision(value => value + 1)
     else { if (target !== 'PENDING') { setFilters(current => ({ ...current, dueOnly: false })); setFilterDraft(current => ({ ...current, dueOnly: false })) }; setStatus(target) }
@@ -262,7 +267,8 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       </div>
       {children}
       {emailMatchContext && !revoked && <EmailMatchInbox context={emailMatchContext} initialMessageId={initialMessageId} canWrite={writeAllowed} onResolved={() => navigate('refresh')} />}
-      {navigation && <section role="group" aria-label="Open draft confirmation" className="rounded-lg border bg-card p-4"><p className="text-sm">You have an open email draft. Continuing will discard its unsent edits.</p><div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => setNavigation(null)}>Keep editing</Button><Button type="button" onClick={() => navigate(navigation, true)}>{typeof navigation === 'object' ? 'filters' in navigation ? 'Discard and apply filters' : 'Discard and open reply' : navigation === 'refresh' ? 'Discard and refresh' : 'Discard and change tab'}</Button></div></section>}
+      {emailMatchContext && !revoked && <details className="min-w-0 rounded-lg border bg-card p-4" onToggle={event => event.currentTarget.open && setViewsOpen(true)}><summary className="cursor-pointer rounded text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">Saved views</summary>{viewsOpen && <div className="mt-3"><SavedFollowUpViews context={emailMatchContext} settings={{ status, filters }} disabled={loading || bulkBusy} onApply={settings => { setFilterError(''); navigate({ settings }) }} onAccessLost={invalidate} /></div>}</details>}
+      {navigation && <section role="group" aria-label="Open draft confirmation" className="rounded-lg border bg-card p-4"><p className="text-sm">{typeof navigation === 'object' && 'settings' in navigation ? 'You have unsaved follow-up edits. Applying this view will discard them.' : 'You have an open email draft. Continuing will discard its unsent edits.'}</p><div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => setNavigation(null)}>Keep editing</Button><Button type="button" onClick={() => navigate(navigation, true)}>{typeof navigation === 'object' ? 'settings' in navigation ? 'Discard and apply view' : 'filters' in navigation ? 'Discard and apply filters' : 'Discard and open reply' : navigation === 'refresh' ? 'Discard and refresh' : 'Discard and change tab'}</Button></div></section>}
       {snoozeNotice && <p role="status" className="text-sm">{snoozeNotice}</p>}
       {focusedError && <p role="alert" className="text-sm text-destructive">{focusedError}</p>}
       <section role="search" aria-label="Follow-up filters" className="space-y-3 rounded-lg border bg-card p-4">
