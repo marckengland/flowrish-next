@@ -69,6 +69,7 @@ export async function listFollowUps(organizationId: string, userId: string, stat
     const access = await currentFollowUpAccess(tx, organizationId, userId)
     const owned = await tx.task.findMany({ where: { organizationId, assigneeId: userId, isComplete: false, lead: { organizationId, mergedIntoId: null, AND: [access.filter] } }, select: { id: true, leadId: true } })
     const touched = new Set<string>()
+    let callbacksCreated = 0
     const lockSource = async (leadId: string, taskId: string) => {
       const { lead } = await followUpLead(tx, organizationId, userId, leadId)
       const task = await tx.task.findFirst({ where: { id: taskId, organizationId, assigneeId: userId, isComplete: false, leadId: lead.id } })
@@ -78,17 +79,18 @@ export async function listFollowUps(organizationId: string, userId: string, stat
     const callbackLeadScope = callbackAssigned === undefined ? Prisma.sql`TRUE` : typeof callbackAssigned === 'string' ? Prisma.sql`l."assignedUserId"=${callbackAssigned}` : callbackAssigned.in.length ? Prisma.sql`l."assignedUserId" IN (${Prisma.join(callbackAssigned.in)})` : Prisma.sql`FALSE`
     // Committed source keys are the checkpoint. Exclude represented calls before
     // LIMIT so repeated first-page reads advance without resetting reviewed work.
-    const candidates = !after && owned.length ? await tx.$queryRaw<Array<{ id: string }>>`WITH callback_candidates AS (
+    const queryCallbacks = (limit: number, scope: Prisma.Sql) => tx.$queryRaw<Array<{ id: string }>>`WITH callback_candidates AS (
       SELECT c.id FROM "ReceptionistCall" c
       JOIN "Task" t ON t.id=c."taskId" AND t."organizationId"=c."organizationId" AND t."leadId"=c."leadId"
       JOIN "Lead" l ON l.id=c."leadId" AND l."organizationId"=c."organizationId"
       WHERE c."organizationId"=${organizationId} AND c.status='completed'
         AND t."assigneeId"=${userId} AND t."isComplete"=false
-        AND l."deletedAt" IS NULL AND l."mergedIntoId" IS NULL AND (${callbackLeadScope})
+        AND l."deletedAt" IS NULL AND l."mergedIntoId" IS NULL AND (${scope})
         AND NOT EXISTS (SELECT 1 FROM "FollowUpSuggestion" f WHERE f."organizationId"=c."organizationId"
           AND f."sourceKey"=('[' || '"call",' || to_json(c.id)::text || ']'))
-      ORDER BY c."createdAt" ASC,c.id ASC LIMIT ${100}
-    ) SELECT id FROM callback_candidates` : []
+      ORDER BY c."createdAt" ASC,c.id ASC LIMIT ${limit}
+    ) SELECT id FROM callback_candidates`
+    const candidates = !after && owned.length ? await queryCallbacks(100, callbackLeadScope) : []
     const callbacks = candidates.length ? await tx.receptionistCall.findMany({ where: { organizationId, id: { in: candidates.map(row => row.id) }, status: 'completed', taskId: { in: owned.map(task => task.id) }, leadId: { not: null } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 100 }) : []
     const pending = owned.length ? await tx.followUpSuggestion.findMany({ where: { organizationId, sourceType: 'CALL', status: 'PENDING', taskId: { in: owned.map(task => task.id) }, assigneeId: { not: userId } }, orderBy: { id: 'asc' }, take: 100 }) : []
     const leadIds = [...new Set([...callbacks.map(row => row.leadId!), ...pending.map(row => row.leadId)])].sort()
@@ -104,6 +106,7 @@ export async function listFollowUps(organizationId: string, userId: string, stat
       const sourceKey = JSON.stringify(['call', call.id])
       await tx.$queryRaw`SELECT id FROM "FollowUpSuggestion" WHERE "organizationId"=${organizationId} AND "sourceKey"=${sourceKey} FOR UPDATE`
       const created = await tx.followUpSuggestion.createMany({ data: { organizationId, assigneeId: userId, leadId: task.leadId!, sourceKey, sourceType: 'CALL', sourceId: call.id, sourceText: task.description ?? '', title: task.title, description: task.description ?? '', taskId: task.id }, skipDuplicates: true })
+      callbacksCreated += created.count
       if (created.count) touched.add(task.leadId!)
     }
     if (owned.length) {
@@ -154,6 +157,7 @@ export async function listFollowUps(organizationId: string, userId: string, stat
       const lead = byId.get(row.leadId)
       return lead ? [snoozeView(followUpView(row, lead), snoozeById.get(row.id) ?? null)] : []
     })
+    const callbackCatchUp = paging && !after ? { created: callbacksCreated, hasMore: (await queryCallbacks(1, leadScope)).length > 0 } : undefined
     const current = await currentFollowUpAccess(tx, organizationId, userId)
     if (JSON.stringify(current.filter) !== JSON.stringify(final.filter)) throw followUpUnavailable()
     let nextCursor: string | null = null
@@ -163,6 +167,6 @@ export async function listFollowUps(organizationId: string, userId: string, stat
       if (!anchor) throw followUpChanged()
       nextCursor = encodeFollowUpCursor(cursorScope, anchor)
     }
-    return { items, canWrite: current.canWrite, ...(paging ? { page: { nextCursor, accessVersion: followUpPageAccessVersion(current.filter) } } : {}) }
+    return { items, canWrite: current.canWrite, ...(paging ? { page: { nextCursor, accessVersion: followUpPageAccessVersion(current.filter), ...(callbackCatchUp ? { callbackCatchUp } : {}) } } : {}) }
   }, { timeout: 20000 }))
 }
