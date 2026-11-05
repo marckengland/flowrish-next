@@ -26,7 +26,7 @@ Keep the additive schema and audits. Do not edit the applied migration, drop the
 
 ## Local verification record
 
-On 2026-11-05, Node 22 checks passed: 2,181 tests across 324 files, lint, production build, strict TypeScript, and fast TypeScript. All 88 mocked browser scenarios passed with no network/write guard violations; the 82 prior scenarios remained included. Desktop and 390px review screenshots were inspected.
+On 2026-11-05, Node 22 checks passed: 2,182 tests across 324 files, lint, production build, strict TypeScript, and fast TypeScript. All 88 mocked browser scenarios passed with no network/write guard violations; the 82 prior scenarios remained included. Desktop and 390px review screenshots were inspected.
 
 An owned PostgreSQL 17 container applied all 38 migrations. The drill verified failed-DDL rollback, the pending index, JSON constraint, anonymous RLS denial, unique merged-target routing, ambiguity holds, mailbox-owner isolation, concurrent confirmation replay, stale versions, a new conflicting address during a message wait, role/scope revocation during lead and workflow waits, and rollback after a failed final audit. No task or widget activation occurred. The container and its temporary data were removed.
 

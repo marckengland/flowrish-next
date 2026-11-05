@@ -20,3 +20,6 @@ it('clears private data on revoked access and rejects stale scope responses', as
 it('allows read-only inspection without mutation controls', async () => {
   render(<EmailMatchInbox context={context} canWrite={false} onResolved={resolved} />); fireEvent.click(await screen.findByRole('button', { name: 'Review match' })); await screen.findByText('Practice Clinic'); expect(screen.queryByRole('button', { name: 'Confirm email match' })).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Dismiss match review' })).not.toBeInTheDocument(); await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
 })
+it('clears stale message details when the mailbox or message is no longer available', async () => {
+  await review(); fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'Message review is no longer available.' } }), { status: 404 })); fireEvent.click(screen.getByLabelText(/I reviewed/)); fireEvent.click(screen.getByRole('button', { name: 'Dismiss match review' })); await screen.findByText('Message review is no longer available.'); expect(screen.queryByText('Please call')).not.toBeInTheDocument(); expect(screen.queryByText('Practice Clinic')).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Review match' })).not.toBeInTheDocument(); expect(resolved).not.toHaveBeenCalled()
+})

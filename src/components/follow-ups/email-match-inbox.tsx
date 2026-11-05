@@ -26,6 +26,7 @@ function ScopedEmailMatches({ context, canWrite, onResolved }: { context: EmailM
   }
   function failed(cause: unknown) {
     if (cause instanceof ReviewError && ([401, 403].includes(cause.status) || /CONTEXT|WORKSPACE/.test(cause.code))) { revoke(); return }
+    if (cause instanceof ReviewError && (cause.status === 404 || cause.code === 'EMAIL_SOURCE_CHANGED')) { setItems([]); setPreview(null); setPending(null) }
     setError(cause instanceof Error ? cause.message : 'Unable to review this message.')
   }
   async function load() {
