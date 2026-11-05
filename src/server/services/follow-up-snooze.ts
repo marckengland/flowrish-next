@@ -47,3 +47,24 @@ export async function changeFollowUpSnooze(organizationId: string, userId: strin
     return snoozeView(followUpView(row, final.lead), saved)
   }, { timeout: 20000 }))
 }
+
+/** Read-only confirmation after an uncertain save; never materializes follow-ups. */
+export async function readFollowUpSnooze(organizationId: string, userId: string, id: string) {
+  return safeFollowUp(() => prisma.$transaction(async db => {
+    await lockFollowUpMember(db, organizationId, userId)
+    const where = { id, organizationId, assigneeId: userId }, before = await db.followUpSuggestion.findFirst({ where })
+    if (!before || before.status !== 'PENDING') throw followUpUnavailable()
+    await db.$queryRaw`SELECT id FROM "Lead" WHERE id=${before.leadId} AND "organizationId"=${organizationId} FOR SHARE`
+    if (before.taskId) await db.$queryRaw`SELECT id FROM "Task" WHERE id=${before.taskId} AND "organizationId"=${organizationId} FOR SHARE`
+    await db.$queryRaw`SELECT id FROM "FollowUpSuggestion" WHERE id=${id} AND "organizationId"=${organizationId} FOR SHARE`
+    const row = await db.followUpSuggestion.findFirst({ where })
+    if (!row || row.status !== 'PENDING') throw followUpUnavailable()
+    if (row.leadId !== before.leadId || row.taskId !== before.taskId) throw followUpChanged()
+    await followUpLead(db, organizationId, userId, row.leadId)
+    if (row.sourceType === 'CALL' && !row.taskId) throw followUpUnavailable()
+    if (row.taskId && !await db.task.findFirst({ where: { id: row.taskId, organizationId, leadId: row.leadId, assigneeId: userId, isComplete: false } })) throw followUpUnavailable()
+    const existing = await db.followUpSnooze.findUnique({ where: { organizationId_userId_followUpId: { organizationId, userId, followUpId: id } } })
+    const value = snoozeView(row, existing), final = await followUpLead(db, organizationId, userId, row.leadId)
+    return { data: { id: row.id, snoozeVersion: value.snoozeVersion, snooze: value.snooze }, canWrite: final.access.canWrite }
+  }, { timeout: 20000 }))
+}

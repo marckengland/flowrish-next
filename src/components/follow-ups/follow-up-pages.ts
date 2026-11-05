@@ -6,7 +6,7 @@ import {followUpData,FollowUpClientError} from '@/lib/follow-up-client'
 type Input={status:string;filters:FollowUpFilters;context?:FollowUpContext;depth:number;retained:readonly string[];signal:AbortSignal}
 /** Refresh a contiguous window, then merge once so keyed drafts stay mounted. */
 export async function readFollowUpPages<T extends {id:string;createdAt:string}>(input:Input) {
-  if(input.retained.length>100)throw new Error('Close some open drafts before loading more; up to 100 drafts can be retained at once.')
+  if(input.retained.length>100)throw new Error('Finish or close some editors before loading more; up to 100 edited or selected follow-ups can be retained at once.')
   const items=new Map<string,T>(),seen=new Set<string>()
   let after:string|undefined,nextCursor:string|null=null,accessVersion:string|undefined,canWrite:boolean|undefined,pages=0
   let callbackCatchUp:FollowUpPageMeta['callbackCatchUp']=undefined
