@@ -311,6 +311,7 @@ model OrganizationMember {
   organization          Organization           @relation(fields: [organizationId], references: [id])
   isDefault             Boolean                @default(false) // User's default org
   savedLeadViews        SavedLeadView[]
+  bulkLeadUpdates       BulkLeadUpdate[]
   callbackNotifications CallbackNotification[]
   waitlistStaffAccess   WaitlistStaffAccess?
   joinedAt              DateTime               @default(now())
@@ -330,6 +331,24 @@ model SavedLeadView {
   updatedAt      DateTime @default(now()) @updatedAt
 
   @@unique([organizationId, userId, name])
+}
+
+model BulkLeadUpdate {
+  id             String @id @default(uuid())
+  organizationId String
+  userId         String
+  member         OrganizationMember @relation(fields: [userId, organizationId], references: [userId, organizationId], onDelete: Cascade, onUpdate: Cascade, map: "BulkLeadUpdate_member_fkey")
+  requestHash    String
+  change         Json
+  snapshots      Json
+  targetHash     String?
+  expiresAt      DateTime
+  appliedAt      DateTime?
+  updatedCount   Int?
+  unchangedCount Int?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, userId, appliedAt, expiresAt])
 }
 
 model OrganizationInvite {

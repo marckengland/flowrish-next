@@ -105,7 +105,7 @@ export default async function LeadsPage(): Promise<React.JSX.Element> {
 
       <LeadViewControls organizationId={session.organizationId} userId={session.dbUser.id} pipelineId={pipeline.id} stages={stageOptions} assignees={assigneeOptions} />
 
-      <LeadTable initialData={initialData} page={1} pageSize={20} />
+      <LeadTable initialData={initialData} page={1} pageSize={20} bulk={canWrite ? { organizationId: session.organizationId, userId: session.dbUser.id } : undefined} />
     </div>
   )
 }

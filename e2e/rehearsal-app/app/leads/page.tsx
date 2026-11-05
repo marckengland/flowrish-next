@@ -3,8 +3,8 @@ import { PageHeader } from '@/components/layout/page-header'
 import { LeadViewControls } from '@/components/leads/lead-view-controls'
 import { LeadTable } from '@/components/leads/lead-table'
 import { coreLead, coreStages, coreIds } from '../../core-fixtures'
-export default async function Page({ searchParams }: { searchParams: Promise<{ viewScope?: string }> }) {
-  const { viewScope } = await searchParams
+export default async function Page({ searchParams }: { searchParams: Promise<{ viewScope?: string; bulk?: string }> }) {
+  const { viewScope, bulk } = await searchParams
   const organizationId = viewScope === 'other-workspace' ? '66666666-6666-4666-8666-666666666666' : coreIds.organization
   const userId = viewScope === 'other-user' ? '77777777-7777-4777-8777-777777777777' : coreIds.user
   return (
@@ -21,9 +21,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ v
         assignees={[{ value: userId, label: 'Practice Owner' }]}
       />
       <LeadTable
+        bulk={bulk === 'enabled' ? { organizationId, userId } : undefined}
         initialData={{
-          data: [coreLead()],
-          pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+          data: bulk === 'enabled' ? [coreLead(), { ...coreLead(), id: '99999999-9999-4999-8999-999999999999', firstName: 'Second' }] : [coreLead()],
+          pagination: { page: 1, pageSize: 20, total: bulk === 'enabled' ? 2 : 1, totalPages: 1 },
         }}
       />
     </div>

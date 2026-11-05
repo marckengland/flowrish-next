@@ -40,6 +40,8 @@ export type LeadFilterKey = keyof LeadFilters
 
 export interface FiltersState {
   leads: LeadFilters
+  /** Explicit view replacement invalidates a reviewed selection even for equal filters. */
+  leadViewRevision: number
   /**
    * Set a single lead filter value. Passing `''`, `null`, or `undefined`
    * clears the filter. This is the typical handler bound to `<select>`
@@ -67,6 +69,7 @@ function normalize(
 
 export const useFiltersStore = create<FiltersState>((set) => ({
   leads: { ...emptyLeadFilters },
+  leadViewRevision: 0,
   setLeadFilter: (key, value) =>
     set((state) => {
       const next = { ...state.leads }
@@ -79,7 +82,7 @@ export const useFiltersStore = create<FiltersState>((set) => ({
       return { leads: next }
     }),
   setLeadFilters: (filters) =>
-    set(() => {
+    set((state) => {
       // Normalize all values so '' is never retained.
       const normalized: LeadFilters = {}
       for (const [k, v] of Object.entries(filters)) {
@@ -88,7 +91,7 @@ export const useFiltersStore = create<FiltersState>((set) => ({
           normalized[k as LeadFilterKey] = n
         }
       }
-      return { leads: normalized }
+      return { leads: normalized, leadViewRevision: state.leadViewRevision + 1 }
     }),
   resetLeadFilters: () => set({ leads: { ...emptyLeadFilters } }),
 }))

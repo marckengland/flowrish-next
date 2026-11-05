@@ -1,6 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ComponentProps } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { BulkLeadControls } from './bulk-lead-controls'
+import { BULK_LEAD_LIMIT, type BulkLeadSelected } from '@/lib/bulk-lead-updates'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Loader2, Target } from 'lucide-react'
@@ -47,6 +50,7 @@ export interface LeadTableProps {
   page?: number
   /** Default page size to request. */
   pageSize?: number
+  bulk?: { organizationId: string; userId: string }
 }
 
 /**
@@ -65,9 +69,12 @@ export function LeadTable({
   initialData,
   page: initialPage = 1,
   pageSize: initialPageSize = 20,
+  bulk,
 }: LeadTableProps): React.JSX.Element {
   const router = useRouter()
+  const [selection, setSelection] = useState<{ context: string; rows: BulkLeadSelected }>({ context: '', rows: [] })
   const filters = useFiltersStore((s) => s.leads)
+  const viewRevision = useFiltersStore((s) => s.leadViewRevision)
   const [sortKey, setSortKey] = usePersistentState<SortKey>(
     'flowrish:leads:sortKey',
     'createdAt',
@@ -106,6 +113,13 @@ export function LeadTable({
     return sortLeads(rows, sortKey, sortDir)
   }, [leadsPage, sortKey, sortDir])
 
+  const selectionContext = JSON.stringify([bulk?.organizationId, bulk?.userId, filtersKey, viewRevision, page, pageSize, (leadsPage?.data ?? []).map(lead => [lead.id, lead.updatedAt])])
+  useEffect(() => { setSelection({ context: selectionContext, rows: [] }) }, [selectionContext])
+  const selected = selection.context === selectionContext && !query.isError ? selection.rows : []
+  function choose(lead: LeadListItem, checked: boolean) {
+    setSelection({ context: selectionContext, rows: checked ? [...selected.filter(row => row.id !== lead.id), { id: lead.id, expectedUpdatedAt: lead.updatedAt }].slice(0, BULK_LEAD_LIMIT) : selected.filter(row => row.id !== lead.id) })
+  }
+
   function toggleSort(nextKey: string): void {
     const key = nextKey as SortKey
     if (key === sortKey) {
@@ -130,10 +144,12 @@ export function LeadTable({
         <span>Updating…</span>
       </div>
 
+      {bulk && <CachedBulkLeadControls key={`${bulk.organizationId}:${bulk.userId}`} {...bulk} contextKey={selectionContext} selection={query.isFetching ? [] : selected} onApplied={() => setSelection({ context: '', rows: [] })} />}
       <div className="overflow-x-auto rounded-lg border bg-card">
         <table className="w-full min-w-[860px] text-sm">
           <thead className="border-b bg-muted/40 text-left">
             <tr>
+              {bulk && <th scope="col" className="px-3"><input type="checkbox" className="size-5" aria-label="Select all leads on this page" checked={sorted.length > 0 && selected.length === sorted.length} disabled={query.isFetching || query.isError || !sorted.length || sorted.length > BULK_LEAD_LIMIT} onChange={event => setSelection({ context: selectionContext, rows: event.target.checked ? sorted.map(lead => ({ id: lead.id, expectedUpdatedAt: lead.updatedAt })) : [] })} /></th>}
               <SortableTh
                 label="Name"
                 sortKey="name"
@@ -181,15 +197,15 @@ export function LeadTable({
           </thead>
           <tbody className="divide-y divide-row-divider">
             {query.isLoading && !leadsPage ? (
-              <TableState colSpan={7}>Loading leads…</TableState>
+              <TableState colSpan={bulk ? 8 : 7}>Loading leads…</TableState>
             ) : query.isError ? (
-              <TableState colSpan={7} tone="error">
+              <TableState colSpan={bulk ? 8 : 7} tone="error">
                 Couldn&apos;t load leads.{' '}
                 {query.error instanceof Error ? query.error.message : ''}
               </TableState>
             ) : sorted.length === 0 ? (
               <TableState
-                colSpan={7}
+                colSpan={bulk ? 8 : 7}
                 icon={<Target className="size-5" aria-hidden="true" />}
                 title="No leads match the current filters"
                 description="Adjust or clear your filters, or add a lead to get started."
@@ -204,6 +220,7 @@ export function LeadTable({
                   )}
                   className="cursor-pointer transition-colors hover:bg-background focus-within:bg-background"
                 >
+                  {bulk && <td className="px-3"><input type="checkbox" className="size-5" aria-label={`Select ${fullName(lead)}`} checked={selected.some(row => row.id === lead.id)} disabled={query.isFetching || query.isError || (!selected.some(row => row.id === lead.id) && selected.length >= BULK_LEAD_LIMIT)} onChange={event => choose(lead, event.target.checked)} /></td>}
                   <td className="px-4 py-3 font-semibold">
                     <Link
                       href={`/leads/${lead.id}`}
@@ -266,6 +283,11 @@ export function LeadTable({
       )}
     </div>
   )
+}
+
+function CachedBulkLeadControls(props: ComponentProps<typeof BulkLeadControls>) {
+  const queryClient = useQueryClient()
+  return <BulkLeadControls {...props} onApplied={() => { props.onApplied(); void queryClient.invalidateQueries({ queryKey: ['leads'] }) }} />
 }
 
 function fullName(lead: LeadListItem): string {
