@@ -75,6 +75,8 @@ export function Header({
   const toggleMobileNav = useLayoutStore((s) => s.toggleMobileNav)
   const mobileNavOpen = useLayoutStore((s) => s.mobileNavOpen)
 
+  const notificationParts = notificationScope?.split(':')
+  const emailContext = notificationParts?.length === 2 && notificationParts[0] && notificationParts[1] ? { organizationId: notificationParts[0], userId: notificationParts[1] } : undefined
   const title = pageTitle(pathname)
 
   return (
@@ -122,7 +124,7 @@ export function Header({
 
         <ThemeToggle />
 
-        <NotificationBell scope={notificationScope} />
+        <NotificationBell scope={notificationScope} emailContext={emailContext} />
 
         <button
           type="button"

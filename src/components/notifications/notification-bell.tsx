@@ -2,10 +2,13 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Bell } from 'lucide-react'
+import { EMAIL_NOTIFICATION_EVENT, emailNotificationCount, type EmailNotificationContext } from '@/lib/email-notifications'
+import { emailNotificationData, emailNotificationHeaders } from '@/lib/email-notification-client'
+import { WORKSPACE_EVENT } from '@/lib/workspace-context'
 import { callbackNotificationCount } from '@/lib/callback-notifications'
 
-export function NotificationBell({ scope = 'session' }: { scope?: string }): React.JSX.Element { return <BellState key={scope} /> }
-function BellState(): React.JSX.Element {
+export function NotificationBell({ scope = 'session', emailContext }: { scope?: string; emailContext?: EmailNotificationContext }): React.JSX.Element { return <BellState key={`${scope}:${emailContext?.organizationId ?? ''}:${emailContext?.userId ?? ''}`} emailContext={emailContext} /> }
+function BellState({ emailContext }: { emailContext?: EmailNotificationContext }): React.JSX.Element {
   const [count, setCount] = useState<number | null>(null)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
@@ -14,17 +17,22 @@ function BellState(): React.JSX.Element {
       if (!active || pending || document.visibilityState !== 'visible' || !explicit && Date.now() - lastAttempt < 60000) return
       const controller = new AbortController(); pending = controller; lastAttempt = Date.now()
       try {
-        const response = await fetch('/api/callback-notifications/count', { headers: { 'X-Flowrish-Response-Targets': '1' }, cache: 'no-store', signal: controller.signal })
+        const [response, emailResponse] = await Promise.all([fetch('/api/callback-notifications/count', { headers: { 'X-Flowrish-Response-Targets': '1' }, cache: 'no-store', signal: controller.signal }), emailContext ? fetch('/api/email-notifications/count', { headers: emailNotificationHeaders(emailContext), cache: 'no-store', signal: controller.signal }) : Promise.resolve(null)])
         if (!response.ok) throw new Error('Unavailable')
         const next = callbackNotificationCount.parse((await response.json()).data)
-        if (active && !controller.signal.aborted) { setCount(next.unread); setFailed(false) }
+        const email = emailResponse && emailContext ? emailNotificationCount.parse(await emailNotificationData(emailResponse, emailContext)).unread : 0
+        if (active && !controller.signal.aborted) { setCount(next.unread + email); setFailed(false) }
       } catch { if (active && !controller.signal.aborted) { setCount(null); setFailed(true) } }
       finally { if (pending === controller) pending = null; if (active && refreshAgain) { refreshAgain = false; void load(true) } }
     }
     const automatic = () => { void load() }, changed = () => { if (pending) refreshAgain = true; else void load(true) }
+    const workspaceChanged = () => { active = false; pending?.abort(); setCount(null); setFailed(true) }
+    window.addEventListener(WORKSPACE_EVENT, workspaceChanged); window.addEventListener(EMAIL_NOTIFICATION_EVENT, changed)
     void load(); const timer = window.setInterval(automatic, 60000)
     document.addEventListener('visibilitychange', automatic); window.addEventListener('focus', automatic); window.addEventListener('flowrish:callback-notifications-changed', changed)
-    return () => { active = false; pending?.abort(); window.clearInterval(timer); document.removeEventListener('visibilitychange', automatic); window.removeEventListener('focus', automatic); window.removeEventListener('flowrish:callback-notifications-changed', changed) }
+    return () => { window.removeEventListener(WORKSPACE_EVENT, workspaceChanged); window.removeEventListener(EMAIL_NOTIFICATION_EVENT, changed); active = false; pending?.abort(); window.clearInterval(timer); document.removeEventListener('visibilitychange', automatic); window.removeEventListener('focus', automatic); window.removeEventListener('flowrish:callback-notifications-changed', changed) }
+    // Context changes remount BellState before a response can cross accounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const label = failed ? 'Notifications, count unavailable' : count ? `Notifications, ${count} unread` : 'Notifications'
   return <Link href="/notifications" title={label} aria-label={label} className="relative flex size-[38px] items-center justify-center rounded-[10px] border bg-card text-foreground/60 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">

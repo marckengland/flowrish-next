@@ -1,10 +1,12 @@
 'use client'
 import Link from 'next/link'
+import { EmailNotificationInbox } from './email-notification-inbox'
+import type { EmailNotificationContext } from '@/lib/email-notifications'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { callbackNotificationAck, callbackNotificationList, notificationHref, notificationTitle, type CallbackNotificationList } from '@/lib/callback-notifications'
 
-export function NotificationInbox(): React.JSX.Element {
+export function NotificationInbox({ emailContext }: { emailContext?: EmailNotificationContext } = {}): React.JSX.Element {
   const [data, setData] = useState<CallbackNotificationList | null>(null)
   const [filter, setFilter] = useState<'unread' | 'all'>('unread')
   const [page, setPage] = useState(1)
@@ -47,7 +49,9 @@ export function NotificationInbox(): React.JSX.Element {
     finally { if (controller.current === request) controller.current = null; if (mounted.current && !request.signal.aborted) setBusy(false) }
   }
   return <div className="mx-auto max-w-3xl space-y-5 pb-8">
-    <header className="space-y-2"><h1 className="text-2xl font-semibold tracking-tight">Notifications</h1><p className="max-w-2xl text-sm text-muted-foreground">Callback requests and work that currently needs your attention. Alerts are checked every five minutes; the bell refreshes while you use Flowrish.</p><Link href="/callbacks/response-targets" className="inline-flex min-h-11 items-center text-sm font-medium underline">View callback response targets</Link></header>
+    <header className="space-y-2"><h1 className="text-2xl font-semibold tracking-tight">Notifications</h1><p className="max-w-2xl text-sm text-muted-foreground">{emailContext ? 'Email reviews, callback requests, and work that currently needs your attention. Email alerts refresh every minute; callbacks are checked every five minutes.' : 'Callback requests and work that currently needs your attention. Alerts are checked every five minutes; the bell refreshes while you use Flowrish.'}</p><Link href="/callbacks/response-targets" className="inline-flex min-h-11 items-center text-sm font-medium underline">View callback response targets</Link></header>
+    {emailContext && <EmailNotificationInbox context={emailContext} />}
+    {emailContext && <h2 className="font-semibold">Callback alerts</h2>}
     <div className="flex flex-wrap items-end gap-3"><label className="grid gap-1.5 text-sm font-medium">Notification filter<select className="min-h-11 rounded-md border bg-background px-3 py-2" disabled={busy} value={filter} onChange={event => { void load(event.target.value as 'unread' | 'all', 1) }}><option value="unread">Unread</option><option value="all">All current alerts</option></select></label><Button variant="outline" disabled={busy} onClick={() => { void load(filter, page) }}>Refresh notifications</Button></div>
     {busy && <p role="status" className="text-sm text-muted-foreground">Loading notifications…</p>}
     {notice && <p role="status" className="text-sm">{notice}</p>}

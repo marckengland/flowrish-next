@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { EMAIL_NOTIFICATION_EVENT, focusedEmailReply } from '@/lib/email-notifications'
+import { EmailNotificationError, emailNotificationData, emailNotificationHeaders } from '@/lib/email-notification-client'
 import { EmailMatchInbox, type EmailMatchContext } from './email-match-inbox'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, Inbox, Mail, Phone, RotateCw } from 'lucide-react'
@@ -9,6 +11,7 @@ import { EmailCompose } from '@/components/email/email-compose'
 import { cn } from '@/lib/utils'
 
 type FollowUpStatus = 'PENDING' | 'APPROVED' | 'DISMISSED'
+type Navigation = 'refresh' | FollowUpStatus | { replyId: string | undefined }
 
 export interface FollowUpItem {
   id: string
@@ -62,40 +65,54 @@ async function responseData<T>(response: Response): Promise<T> {
   return body.data as T
 }
 
-export function FollowUpInbox({ canWrite, children, emailMatchContext }: { canWrite: boolean; children?: ReactNode; emailMatchContext?: EmailMatchContext }): React.JSX.Element {
+export function FollowUpInbox({ canWrite, children, emailMatchContext, initialMessageId, initialReplyId }: { canWrite: boolean; children?: ReactNode; emailMatchContext?: EmailMatchContext; initialMessageId?: string; initialReplyId?: string }): React.JSX.Element {
+  const emailOrganizationId = emailMatchContext?.organizationId, emailUserId = emailMatchContext?.userId
   const [status, setStatus] = useState<FollowUpStatus>('PENDING')
   const [items, setItems] = useState<FollowUpItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
-  const [navigation, setNavigation] = useState<'refresh' | FollowUpStatus | null>(null)
+  const [navigation, setNavigation] = useState<Navigation | null>(null)
+  const [focusedReplyId, setFocusedReplyId] = useState(initialReplyId)
+  const [focusedError, setFocusedError] = useState('')
   const openDrafts = useRef(new Set<string>())
   const trackComposer = useCallback((id: string, open: boolean) => {
     if (open) openDrafts.current.add(id)
     else openDrafts.current.delete(id)
   }, [])
 
-  function navigate(target: 'refresh' | FollowUpStatus, discard = false): boolean {
+  function navigate(target: Navigation, discard = false): boolean {
     if (target === status) return true
     if (!discard && openDrafts.current.size > 0) { setNavigation(target); return false }
     setNavigation(null)
-    if (target === 'refresh') setRevision(value => value + 1)
+    if (typeof target === 'object') { setFocusedReplyId(target.replyId); setStatus('PENDING'); setRevision(value => value + 1) }
+    else if (target === 'refresh') setRevision(value => value + 1)
     else setStatus(target)
     return true
   }
 
   useEffect(() => {
+    if (initialReplyId !== focusedReplyId) navigate({ replyId: initialReplyId })
+    // Incoming review links use the same open-draft confirmation as refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialReplyId])
+  useEffect(() => {
     let current = true
+    const emailContext = emailOrganizationId && emailUserId ? { organizationId: emailOrganizationId, userId: emailUserId } : undefined
     setLoading(true)
     setError(null)
     setItems([])
-    fetch(`/api/follow-ups?status=${status}`)
-      .then(responseData<FollowUpItem[]>)
-      .then((data) => { if (current) setItems(data) })
+    setFocusedError('')
+    const focused = focusedReplyId && emailContext && status === 'PENDING' ? fetch(`/api/email-notifications/follow-up/${focusedReplyId}`, { cache: 'no-store', headers: emailNotificationHeaders(emailContext) })
+      .then(response => emailNotificationData(response, emailContext))
+      .then(value => { const item = focusedEmailReply.parse(value); if (item.id !== focusedReplyId) throw new Error('The requested email reply changed. Refresh to try again.'); return item })
+      .catch(cause => { if (cause instanceof EmailNotificationError && ([401, 403].includes(cause.status) || /CONTEXT|WORKSPACE/.test(cause.code))) throw cause; if (current) setFocusedError(cause instanceof Error ? cause.message : 'Requested reply is no longer available.'); return null }) : Promise.resolve(null)
+    Promise.all([fetch(`/api/follow-ups?status=${status}`).then(responseData<FollowUpItem[]>), focused])
+      .then(([rows, item]) => { if (current) setItems(item ? [item, ...rows.filter(row => row.id !== item.id)] : focusedReplyId && emailContext ? rows.filter(row => row.id !== focusedReplyId) : rows) })
       .catch((cause) => { if (current) setError(cause instanceof Error ? cause.message : 'Unable to load follow-ups.') })
       .finally(() => { if (current) setLoading(false) })
     return () => { current = false }
-  }, [status, revision])
+  }, [status, revision, focusedReplyId, emailOrganizationId, emailUserId])
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -110,8 +127,9 @@ export function FollowUpInbox({ canWrite, children, emailMatchContext }: { canWr
         </Button>
       </div>
       {children}
-      {emailMatchContext && <EmailMatchInbox context={emailMatchContext} canWrite={canWrite} onResolved={() => navigate('refresh')} />}
-      {navigation && <section role="group" aria-label="Open draft confirmation" className="rounded-lg border bg-card p-4"><p className="text-sm">You have an open email draft. Continuing will discard its unsent edits.</p><div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => setNavigation(null)}>Keep editing</Button><Button type="button" onClick={() => navigate(navigation, true)}>{navigation === 'refresh' ? 'Discard and refresh' : 'Discard and change tab'}</Button></div></section>}
+      {emailMatchContext && <EmailMatchInbox context={emailMatchContext} initialMessageId={initialMessageId} canWrite={canWrite} onResolved={() => navigate('refresh')} />}
+      {navigation && <section role="group" aria-label="Open draft confirmation" className="rounded-lg border bg-card p-4"><p className="text-sm">You have an open email draft. Continuing will discard its unsent edits.</p><div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => setNavigation(null)}>Keep editing</Button><Button type="button" onClick={() => navigate(navigation, true)}>{typeof navigation === 'object' ? 'Discard and open reply' : navigation === 'refresh' ? 'Discard and refresh' : 'Discard and change tab'}</Button></div></section>}
+      {focusedError && <p role="alert" className="text-sm text-destructive">{focusedError}</p>}
       <div role="tablist" aria-label="Follow-up status" className="flex w-fit max-w-full gap-1 rounded-lg border bg-muted/40 p-1">
         {tabs.map((tab) => <button key={tab.value} id={`follow-ups-${tab.value}`} type="button" role="tab" aria-selected={status === tab.value} aria-controls="follow-up-panel" tabIndex={status === tab.value ? 0 : -1} onKeyDown={(event) => {
           const index = tabs.findIndex((value) => value.value === tab.value)
@@ -191,6 +209,7 @@ function FollowUpCard({ item, canWrite, onComposerChange }: { item: FollowUpItem
       }))
       setResult(current => ({ ...current, ...data }))
       if (action === 'dismiss') setCompose(false)
+      window.dispatchEvent(new Event(EMAIL_NOTIFICATION_EVENT))
       setNotice(action === 'approve' ? 'Follow-up approved. Your task is ready.' : 'Follow-up dismissed.')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to update this follow-up.')
@@ -200,7 +219,7 @@ function FollowUpCard({ item, canWrite, onComposerChange }: { item: FollowUpItem
   }
 
   return (
-    <article aria-label={`Follow-up for ${fullName}`} className="min-w-0 rounded-xl border bg-card p-4 sm:p-6">
+    <article id={`follow-up-${item.id}`} aria-label={`Follow-up for ${fullName}`} className="min-w-0 rounded-xl border bg-card p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2"><Icon className="size-4 shrink-0 text-brand" aria-hidden="true" /><Link className="break-words text-sm font-semibold underline-offset-4 hover:underline" href={`/leads/${item.lead.id}`}>{fullName}</Link><span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{result.status.toLowerCase()}</span></div>
         <time dateTime={item.createdAt} className="text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleDateString()}</time>

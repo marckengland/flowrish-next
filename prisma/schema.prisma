@@ -311,6 +311,7 @@ model OrganizationMember {
   user                  User                   @relation(fields: [userId], references: [id])
   organization          Organization           @relation(fields: [organizationId], references: [id])
   isDefault             Boolean                @default(false) // User's default org
+  emailNotificationReads EmailNotificationRead[]
   savedLeadViews        SavedLeadView[]
   bulkLeadUpdates       BulkLeadUpdate[]
   callbackNotifications CallbackNotification[]
@@ -1527,4 +1528,14 @@ model CallbackResponseTarget {
 
   @@id([organizationId, callbackId, phase])
   @@index([organizationId, policyVersion, dueAt])
+}
+
+model EmailNotificationRead {
+  organizationId String
+  userId String
+  member OrganizationMember @relation(fields: [userId, organizationId], references: [userId, organizationId], onDelete: Cascade, onUpdate: Cascade, map: "EmailNotificationRead_member_fkey")
+  key String
+  readAt DateTime @default(now())
+
+  @@id([organizationId, userId, key])
 }
