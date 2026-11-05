@@ -24,10 +24,16 @@ Progress must never disclose another workspace/user's backlog, survive stale acc
 
 ## Verification and rollback
 
-Passed 2,351 tests in 363 files, lint, production build, both post-build type checks, and all 136 guarded browser scenarios. All 130 existing scenarios and every network/write guard remain. Desktop/mobile checks cover filters, mounted drafts, explicit retry, delayed responses, stale account denial, empty/read-only results, and keyboard activation. The mobile screenshot was visually inspected.
+Passed 2,354 tests in 364 files, lint, production build, both post-build type checks, and all 136 guarded browser scenarios. All 130 existing scenarios and every network/write guard remain. Desktop/mobile checks cover filters, mounted drafts, explicit retry, delayed responses, stale account denial, empty/read-only results, and keyboard activation. The mobile screenshot was visually inspected.
 
 The fresh whole-branch review found one retry race when a composer opens during a failing request. A new regression failed before the fix and passed after it; the full suite then passed. Failed active reads pause automatic retry while preserving new draft edits.
 
 The disposable PostgreSQL 17 drill verified actual progress counts of 100, 100, 5, and 0, correct remaining-work flags, no continuation receipt, and concurrent receipt counts matching actual claims. All prior assertions for 225 callbacks, 20 reviewed suggestions, 240 ineligible sources, ownership, unique claims, transaction rollback, and safe retry remain and passed. All 41 migrations/privacy checks passed and the owned container was removed.
 
 Rollback is a normal code revert; valid follow-ups already created by inbox reads remain, preserving later draft edits and review decisions. No dependencies, schema changes, widget activation, or production test writes were introduced. Live providers and email delivery were not exercised. Progress describes the last confirmed check rather than a cumulative cross-device total.
+
+## Already-open client compatibility
+
+Progress metadata is requested explicitly with `x-flowrish-callback-progress: 1` alongside paged list requests. Callers without this capability receive the exact original two-field page shape, which strict decoders in already-open tabs accept. Invalid or unpaged capability requests are rejected. Updated clients also accept older servers without progress metadata. This adds one request header and avoids requiring an open draft to be discarded for a reload. New API regressions failed before the fix and passed afterward.
+
+Roll back both progress commits together to the pre-feature version; reverting only the capability fix would restore the old-tab compatibility issue. Preserve valid follow-ups created by normal inbox use.

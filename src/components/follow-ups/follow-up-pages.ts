@@ -1,5 +1,5 @@
 'use client'
-import {FOLLOW_UP_PAGE_HEADER,followUpPageMeta,type FollowUpPageMeta} from '@/lib/follow-up-page'
+import {FOLLOW_UP_PAGE_HEADER,FOLLOW_UP_PROGRESS_HEADER,followUpPageMeta,type FollowUpPageMeta} from '@/lib/follow-up-page'
 import {followUpListQuery,type FollowUpFilters} from '@/lib/follow-up-filters'
 import {followUpHeaders,type FollowUpContext} from '@/lib/follow-up-access'
 import {followUpData,FollowUpClientError} from '@/lib/follow-up-client'
@@ -15,7 +15,7 @@ export async function readFollowUpPages<T extends {id:string;createdAt:string}>(
     const query=followUpListQuery(input.status,input.filters)
     if(after)query.set('after',after)
     for(const id of input.retained)query.append('retain',id)
-    const result=await followUpData<T[]>(await fetch(`/api/follow-ups?${query}`,{method:'GET',cache:'no-store',headers:{...(input.context?followUpHeaders(input.context):{}),[FOLLOW_UP_PAGE_HEADER]:'1'},signal:input.signal}),input.context)
+    const result=await followUpData<T[]>(await fetch(`/api/follow-ups?${query}`,{method:'GET',cache:'no-store',headers:{...(input.context?followUpHeaders(input.context):{}),[FOLLOW_UP_PAGE_HEADER]:'1',[FOLLOW_UP_PROGRESS_HEADER]:'1'},signal:input.signal}),input.context)
     if(!Array.isArray(result.data)||result.data.some(row=>!row||typeof row.id!=='string'))throw new Error('Unexpected follow-up page. Refresh to try again.')
     const page=result.page===undefined&&!after?null:followUpPageMeta.parse(result.page)
     if(accessVersion!==undefined&&page?.accessVersion!==accessVersion)throw new FollowUpClientError('Permissions changed while loading follow-ups. Reload before continuing.',409,'FOLLOW_UP_CONTEXT_CHANGED')
