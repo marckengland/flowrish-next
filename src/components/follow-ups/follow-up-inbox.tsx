@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { FollowUpSnoozeControls } from './follow-up-snooze'
+import { FollowUpHistory } from './follow-up-history'
 import type { SnoozeMetadata } from '@/lib/follow-up-snooze'
 import { EMAIL_NOTIFICATION_EVENT, focusedEmailReply } from '@/lib/email-notifications'
 import { EmailNotificationError, emailNotificationData, emailNotificationHeaders } from '@/lib/email-notification-client'
@@ -315,6 +316,7 @@ function FollowUpCard({ item, canWrite, context, onAccessLost, onComposerChange,
         {result.taskId && <Link className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/tasks/${result.taskId}`}>Open task</Link>}
         {canWrite && result.status !== 'DISMISSED' && recipient && result.draftBody && <Button type="button" variant="outline" disabled={busy || generating || snoozing} onClick={() => setCompose((value) => !value)}>{compose ? 'Close draft' : 'Review email draft'}</Button>}
       </div>
+      {context && <FollowUpHistory id={item.id} context={context} revision={`${result.status}:${result.taskId}:${result.snoozeVersion}`} onAccessLost={onAccessLost} />}
       {compose && canWrite && result.status !== 'DISMISSED' && result.draftBody && recipient && <div className="mt-5 min-w-0 border-t pt-5"><p className="mb-3 text-xs text-muted-foreground">{generated ? 'Review and edit this contextual reply before sending. The recipient, mailbox and conversation are bound to this draft.' : 'Review and edit this template before sending. This starts a new email; check the subject and recipient.'}</p><EmailCompose key={result.draftVersion ?? 'template'} leadId={item.lead.id} leadEmail={recipient} leadName={fullName} defaultSubject={result.draftSubject ?? ''} defaultBody={draftHtml(result.draftBody)} followUpId={item.id} followUpContext={context} onAccessLost={() => onAccessLost(undefined, item.id)} {...(generated ? { draftVersion: result.draftVersion!, replyToThreadId: result.draftContext!.threadId, replySubject: result.draftSubject ?? '' } : {})} onSent={() => { setCompose(false); setNotice('Email sent. Task review is tracked separately.') }} /></div>}
     </article>
   )
