@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { followUpFilterSchema } from '@/lib/follow-up-filters'
+import { followUpFilterSql } from './follow-up-filter-sql'
 import { snoozeView } from './follow-up-snooze'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db/client'
@@ -53,7 +55,8 @@ export async function reviewFollowUp(organizationId: string, userId: string, id:
 }
 
 /** Materializes authorized callback work; pending reviews follow their task owner. */
-export async function listFollowUps(organizationId: string, userId: string, status = 'PENDING', retainedIds: readonly string[] = []) {
+export async function listFollowUps(organizationId: string, userId: string, status = 'PENDING', retainedIds: readonly string[] = [], rawFilters: unknown = {}) {
+  const filters = followUpFilterSchema.parse(rawFilters)
   const retained = z.array(z.string().min(1).max(128)).max(100).parse(retainedIds)
   if (!['PENDING', 'APPROVED', 'DISMISSED', 'SNOOZED'].includes(status)) throw new AppError('VALIDATION_ERROR', 'Invalid follow-up status', 400)
   return safeFollowUp(() => prisma.$transaction(async tx => {
@@ -105,7 +108,7 @@ export async function listFollowUps(organizationId: string, userId: string, stat
     // drafts/focused rows are revalidated independently of status and pagination.
     const view = status === 'SNOOZED' ? Prisma.sql`status='PENDING' AND until>timezone('UTC',statement_timestamp())` : status === 'PENDING' ? Prisma.sql`status='PENDING' AND (until IS NULL OR until<=timezone('UTC',statement_timestamp()))` : Prisma.sql`status=${status}`
     const eligible = await tx.$queryRaw<Array<{ id: string }>>`WITH eligible AS (
-      SELECT f.id,f."createdAt",f.status,s.until FROM "FollowUpSuggestion" f
+      SELECT f.id,f."createdAt",f.status,s.until,f."sourceType",concat_ws(' ',l."firstName",l."lastName",l.email,f.title) AS "searchText" FROM "FollowUpSuggestion" f
       LEFT JOIN "FollowUpSnooze" s ON s."organizationId"=f."organizationId" AND s."userId"=${userId} AND s."followUpId"=f.id
       JOIN "Lead" l ON l.id=f."leadId" AND l."organizationId"=${organizationId}
       WHERE f."organizationId"=${organizationId} AND f."assigneeId"=${userId}
@@ -114,7 +117,7 @@ export async function listFollowUps(organizationId: string, userId: string, stat
           SELECT 1 FROM "Task" t WHERE t.id=f."taskId" AND t."organizationId"=${organizationId}
             AND t."assigneeId"=${userId} AND t."leadId"=f."leadId" AND t."isComplete"=false))
     ), selected AS (
-      (SELECT id,"createdAt" FROM eligible WHERE ${view} ORDER BY "createdAt" DESC,id LIMIT 100)
+      (SELECT id,"createdAt" FROM eligible WHERE ${view} AND (${followUpFilterSql(filters)}) ORDER BY "createdAt" DESC,id LIMIT 100)
       UNION (SELECT id,"createdAt" FROM eligible WHERE ${retainScope})
     ) SELECT id FROM selected ORDER BY "createdAt" DESC,id`
     const rows = await tx.followUpSuggestion.findMany({ where: { organizationId, assigneeId: userId, id: { in: eligible.map(row => row.id) } }, orderBy: { createdAt: 'desc' } })

@@ -2,13 +2,13 @@
 
 Run `npm run test:receptionist:mocked` from the repository root. Install the existing browser dependency first if needed: `npx playwright install chromium`.
 
-The command builds this separate fixture application and runs the 118 browser scenarios. It imports the real client components, uses synthetic read data, and runs without authentication or production credentials. It does not import the production middleware, server modules, database, or auth client.
+The command builds this separate fixture application and runs the 124 browser scenarios. It imports the real client components, uses synthetic read data, and runs without authentication or production credentials. It does not import the production middleware, server modules, database, or auth client.
 
 Workspace scenarios use a synthetic `mock_workspace` cookie only in this fixture app. They exercise the real selector and fetch boundary, full document reloads, stale-context recovery, and notifications to other tabs. The fixture cookie never selects a production organization. Server unit tests separately exercise real middleware/session membership and OAuth boundaries with mocked identities and providers.
 
 The runner removes inherited credentials and URLs. Server sockets can reach only its selected loopback ports; private environment files cannot be read (the checked-in `.env.example` template is permitted). Chromium uses a proxy that permits fixture reads and blocks every other destination or unmocked mutation. Negative probes verify these guards before the workflows run. Any guard violation fails the command even if the UI swallows the error. Results are under the ignored `test-results/rehearsal/` directory.
 
-There is no auth setup, saved browser session, retry, or production base URL. All 118 scenarios must pass without skips. Update the explicit selection and count together when adding coverage. CI runs this command alongside the unit suite; migrations wait for both checks. CI generates the project's Prisma types with dummy URLs and makes no database connection.
+There is no auth setup, saved browser session, retry, or production base URL. All 124 scenarios must pass without skips. Update the explicit selection and count together when adding coverage. CI runs this command alongside the unit suite; migrations wait for both checks. CI generates the project's Prisma types with dummy URLs and makes no database connection.
 
 This fixture checks client workflows. Production authentication and database transactions remain separate coverage. The normal Flowrish app gains no test login mode or fixture routes. Production receptionist/widget settings are never changed.
 
@@ -25,3 +25,5 @@ Eight keyboard-audit scenarios exercise real dialogs, lead/task forms, mobile na
 Six personal follow-up snooze scenarios cover tomorrow/custom local time, mobile layout, explicit wake, callback reminder links, revision-specific read receipts, draft-discard consent, uncertain saves and stale/read-only access. All original 106 scenarios and network/write guards remain. Separate disposable PostgreSQL checks verify actual transaction rollback, due filtering, current ownership, mailbox proof and private schema constraints.
 
 Six follow-up activity-history scenarios add desktop/mobile viewing, due-time explanations, unsent-draft retention, scanned-page navigation, unsupported legacy rows, explicit read retry, closed delayed reads and stale/revoked access. Every history request is a scoped GET; all original 112 scenarios and network/write guards remain.
+
+Six follow-up search scenarios cover desktop/mobile literal search and source filters, due reminders and tabs, draft-discard confirmation for Apply/Clear, read errors/empty matches, filtered draft polls and read-only/stale/revoked access. All original 118 scenarios and guards remain. The isolated PostgreSQL drill separately proves filtering before the100-item limit with more than100 synthetic records.
