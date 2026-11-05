@@ -8,7 +8,7 @@ vi.mock('@/server/services/follow-up-drafts', () => ({ generateFollowUpDraft: mo
 import { POST } from './route'
 const id = '11111111-1111-4111-8111-111111111111'
 beforeEach(() => { vi.resetAllMocks(); mocks.session.mockResolvedValue({ organizationId: 'org', dbUser: { id: 'user' } }); mocks.generate.mockResolvedValue({ id, subject: 'Draft', body: 'Reviewed later' }) })
-const request = (body: unknown) => new NextRequest('https://example.com/api/follow-ups/item/draft', { method: 'POST', body: JSON.stringify(body) })
+const request = (body: unknown) => new NextRequest('https://example.com/api/follow-ups/item/draft', { method: 'POST', headers: { origin: 'https://example.com', 'content-type': 'application/json', 'x-flowrish-workspace': 'org', 'x-flowrish-follow-up-scope': JSON.stringify(['org', 'user']) }, body: JSON.stringify(body) })
 describe('contextual draft API', () => {
   it('uses the current session and explicit generation instructions', async () => {
     const response = await POST(request({ instructions: 'Ask about scope', userId: 'other' }), { params: Promise.resolve({ id }) })

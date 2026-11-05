@@ -81,6 +81,7 @@ export default async function DashboardLayout({
       }}
       permissions={Array.from(permissionSet)}
       organizationName={organization?.name}
+      userId={session.dbUser.id}
       workspaceId={session.organizationId}
       notificationScope={`${session.organizationId}:${session.dbUser.id}`}
     >

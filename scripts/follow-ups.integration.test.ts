@@ -90,7 +90,7 @@ describe('follow-up inbox on disposable PostgreSQL', () => {
   })
 
   it('rejects another user or tenant and commits one task under eight concurrent approvals', async () => {
-    const item = (await service.listFollowUps(orgId, userId))[0]
+    const item = (await service.listFollowUps(orgId, userId)).items[0]
     await expect(service.reviewFollowUp(otherOrgId, userId, item.id, { action: 'approve' })).rejects.toThrow()
     await expect(service.reviewFollowUp(orgId, strangerId, item.id, { action: 'approve' })).rejects.toThrow()
     await Promise.all(Array.from({ length: 8 }, () => service.reviewFollowUp(orgId, userId, item.id, { action: 'approve', title: 'Call Jane tomorrow', description: 'Reviewed source', dueDate: '2026-11-03T01:00:00.000Z' })))
@@ -117,8 +117,8 @@ describe('follow-up inbox on disposable PostgreSQL', () => {
     const task = await db.task.create({ data: { organizationId: orgId, assigneeId: userId, leadId, title: 'Callback Jane', description: 'Caller confirmed this callback', dueDate: new Date() } })
     await db.receptionistCall.create({ data: { organizationId: orgId, callSid: randomUUID(), status: 'completed', leadId, taskId: task.id, state: {} } })
     const before = await db.task.count()
-    const first = await service.listFollowUps(orgId, userId)
-    const second = await service.listFollowUps(orgId, userId)
+    const { items: first } = await service.listFollowUps(orgId, userId)
+    const { items: second } = await service.listFollowUps(orgId, userId)
     const callbacks = second.filter(row => row.sourceType === 'CALL')
     expect(first.filter(row => row.sourceType === 'CALL')).toHaveLength(1)
     expect(callbacks).toHaveLength(1)

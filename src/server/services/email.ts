@@ -3,6 +3,7 @@ import { tenantData } from '@/server/db/types'
 import { encrypt, decrypt } from '@/lib/encryption'
 import { env } from '@/lib/env'
 import { AppError } from '@/lib/errors'
+import { normalizeEmail } from '@/lib/email-routing'
 import {
   replacePersonalizationTags as replaceTags,
   type PersonalizationLead,
@@ -429,6 +430,8 @@ export interface SendEmailOptions {
   replyMessageId?: string
   replyReferences?: string
   reviewedFollowUp?: { id: string; version: string }
+  followUpTemplateId?: string
+  manualActor?: boolean
 }
 
 export async function sendEmail(
@@ -444,22 +447,31 @@ export async function sendEmail(
   const db = createTenantPrisma(orgId)
 
   // Get the lead for personalization data
-  const lead = await db.lead.findFirst({
+  const initialLead = await db.lead.findFirst({
     where: { id: leadId, deletedAt: null },
   })
 
-  if (!lead) {
+  if (!initialLead) {
     throw new AppError('LEAD_NOT_FOUND', 'Lead not found', 404)
   }
 
+  let lead = initialLead
   const recipientEmail = options.recipientEmail ?? lead.email
   if (!recipientEmail) throw new AppError('LEAD_NO_EMAIL', 'Lead does not have an email address', 400)
-  const aliasRecipient = options.recipientEmail && ![lead.email, lead.altEmail].some((email) => email?.trim().toLowerCase() === recipientEmail.trim().toLowerCase())
+  const protectedSend = Boolean(options.manualActor || options.reviewedFollowUp || options.followUpTemplateId)
+  let mailboxBinding: { id: string; userId: string; email: string; provider: string } | undefined
   const verifyRecipient = async () => {
-    if (!aliasRecipient) return
-    if (!options.reviewedFollowUp) throw new AppError('INVALID_RECIPIENT', 'The recipient no longer belongs to this lead.', 409)
-    const { verifyFollowUpRecipient } = await import('./follow-up-drafts')
-    await verifyFollowUpRecipient(orgId, userId, leadId, threadId, options.accountId, recipientEmail, options.reviewedFollowUp)
+    if (protectedSend) {
+      const { authorizeManualEmail, verifyFollowUpRecipient, verifyFollowUpTemplate } = await import('./follow-up-drafts')
+      if (options.manualActor) lead = await authorizeManualEmail(orgId, userId, leadId)
+      if (options.reviewedFollowUp) await verifyFollowUpRecipient(orgId, userId, leadId, threadId, options.accountId, recipientEmail, options.reviewedFollowUp)
+      if (options.followUpTemplateId) await verifyFollowUpTemplate(orgId, userId, options.followUpTemplateId, leadId, options.accountId, recipientEmail, threadId)
+      if (mailboxBinding) {
+        const current = await db.emailAccount.findFirst({ where: { id: mailboxBinding.id, userId }, select: { id: true, userId: true, email: true, provider: true } })
+        if (!current || current.id !== mailboxBinding.id || current.userId !== userId || current.provider !== mailboxBinding.provider || normalizeEmail(current.email) !== normalizeEmail(mailboxBinding.email)) throw new AppError('INVALID_SOURCE', 'The sending mailbox changed. Reconnect and review before sending.', 409)
+      }
+    }
+    if (![lead.email, lead.altEmail].some(email => email && normalizeEmail(email) === normalizeEmail(recipientEmail)) && !options.reviewedFollowUp) throw new AppError('INVALID_RECIPIENT', 'The recipient no longer belongs to this lead.', 409)
   }
   await verifyRecipient()
   if (options.accountId && (subject.length > 200 || /[\r\n]/.test(subject) || !/^[^\s<>@]+@[^\s<>@]+$/.test(recipientEmail))) throw new AppError('INVALID_EMAIL', 'The reviewed subject or recipient is invalid.', 400)
@@ -487,13 +499,17 @@ export async function sendEmail(
 
   // Re-fetch account to get potentially updated access token
   const updatedAccount = await db.emailAccount.findFirst({
-    where: { id: emailAccount.id, ...(options.accountId ? { userId } : {}) },
+    where: { id: emailAccount.id, ...(options.accountId || protectedSend ? { userId } : {}) },
   })
 
   if (!updatedAccount) {
     throw new AppError('EMAIL_ACCOUNT_NOT_FOUND', 'Email account not found after refresh', 500)
   }
 
+  if (protectedSend) {
+    if (updatedAccount.id !== emailAccount.id || updatedAccount.userId !== userId || updatedAccount.provider !== emailAccount.provider || normalizeEmail(updatedAccount.email) !== normalizeEmail(emailAccount.email)) throw new AppError('INVALID_SOURCE', 'The sending mailbox changed during refresh. Review before sending.', 409)
+    mailboxBinding = { id: updatedAccount.id, userId: updatedAccount.userId, provider: updatedAccount.provider, email: updatedAccount.email }
+  }
   await verifyRecipient()
 
   // Decrypt the access token
@@ -515,7 +531,8 @@ export async function sendEmail(
     const delivered = await deliverMicrosoftEmail({
       accessToken,
       to: recipientEmail,
-      ...(options.accountId ? { strictReply: true } : {}),
+      ...(options.accountId && threadId ? { strictReply: true } : {}),
+      ...(protectedSend ? { authorize: verifyRecipient } : {}),
       subject: personalizedSubject,
       htmlBody,
       attachments,
@@ -559,6 +576,7 @@ export async function sendEmail(
             options.replyReferences,
           )
 
+    await verifyRecipient()
     const sendResponse = await fetch(`${GMAIL_API_BASE}/users/me/messages/send`, {
       method: 'POST',
       headers: {
@@ -572,7 +590,7 @@ export async function sendEmail(
     })
 
     if (!sendResponse.ok) {
-      if (options.accountId) throw new AppError('EMAIL_SEND_FAILED', 'The reviewed reply could not be sent. Check the connected mailbox and try again.', 503)
+      if (options.accountId || protectedSend) throw new AppError('EMAIL_SEND_FAILED', 'The reviewed reply could not be sent. Check the connected mailbox and try again.', 503)
       const errorText = await sendResponse.text()
       throw new AppError('EMAIL_SEND_FAILED', `Failed to send email: ${errorText}`, 500)
     }

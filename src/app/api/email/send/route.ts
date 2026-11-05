@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireSession } from '@/server/auth/session'
 import { requirePermission } from '@/server/auth/permissions'
-import { prepareFollowUpSend } from '@/server/services/follow-up-drafts'
+import { prepareFollowUpSend, prepareFollowUpTemplateSend } from '@/server/services/follow-up-drafts'
 import { sendEmail, type EmailAttachment } from '@/server/services/email'
+import { assertFollowUpContext, assertFollowUpOrigin } from '@/server/services/follow-up-http'
+import { requireFollowUpWrites } from '@/server/services/follow-up-access'
 import {
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
@@ -24,7 +26,7 @@ const sendEmailBodySchema = z.object({
   threadId: z.string().min(1).optional(),
   followUpId: z.string().uuid().optional(),
   draftVersion: z.string().uuid().optional(),
-}).refine((value) => Boolean(value.followUpId) === Boolean(value.draftVersion), { message: 'A generated draft requires both its follow-up ID and version.' })
+}).refine((value) => !value.draftVersion || Boolean(value.followUpId), { message: 'A generated draft requires its follow-up ID.' })
 
 /**
  * POST /api/email/send — Send an email to a lead with personalization tag replacement.
@@ -47,7 +49,11 @@ const sendEmailBodySchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const session = await requireSession()
+    requirePermission(session.dbUser, 'leads:read')
     requirePermission(session.dbUser, 'leads:write')
+    assertFollowUpContext(request, session)
+    assertFollowUpOrigin(request)
+    requireFollowUpWrites()
 
     const contentType = request.headers.get('content-type') ?? ''
     const isMultipart = contentType.toLowerCase().includes('multipart/form-data')
@@ -140,18 +146,16 @@ export async function POST(request: NextRequest) {
       if (parsedPayload.subject !== prepared.subject) throw new AppError('DRAFT_CONFLICT', 'The reply must keep its verified conversation subject.', 409)
       if (parsedPayload.threadId && parsedPayload.threadId !== prepared.threadId) throw new AppError('DRAFT_CONFLICT', 'The reply must use its source conversation.', 409)
     }
-    const result = prepared ? await sendEmail(parsedPayload.leadId, parsedPayload.subject, parsedPayload.body, session.dbUser.id, session.organizationId, prepared.threadId, attachments, prepared.options) : await sendEmail(
-      parsedPayload.leadId,
-      parsedPayload.subject,
-      parsedPayload.body,
-      session.dbUser.id,
-      session.organizationId,
-      parsedPayload.threadId,
-      attachments,
-    )
+    let template: Awaited<ReturnType<typeof prepareFollowUpTemplateSend>> | undefined
+    if (parsedPayload.followUpId && !parsedPayload.draftVersion) {
+      if (parsedPayload.threadId) throw new AppError('INVALID_SOURCE', 'A template starts a new email. Refresh before changing its source.', 409)
+      template = await prepareFollowUpTemplateSend(session.organizationId, session.dbUser.id, parsedPayload.followUpId, parsedPayload.leadId)
+    }
+    const result = await sendEmail(parsedPayload.leadId, parsedPayload.subject, parsedPayload.body, session.dbUser.id, session.organizationId, prepared?.threadId ?? parsedPayload.threadId, attachments, { ...(prepared?.options ?? template?.options ?? {}), manualActor: true })
 
-    return NextResponse.json({ data: result })
+    return NextResponse.json({ data: result, scope: { organizationId: session.organizationId, userId: session.dbUser.id }, capabilities: { canWrite: true } }, { headers: { 'Cache-Control': 'private, no-store' } })
   } catch (error) {
-    return errorResponse(error)
+    const safe = error instanceof z.ZodError ? error : error instanceof AppError && error.statusCode < 500 ? error : new AppError('EMAIL_SEND_UNAVAILABLE', 'The send result could not be confirmed. Check the mailbox before retrying.', 503)
+    const response = errorResponse(safe); response.headers.set('Cache-Control', 'private, no-store'); return response
   }
 }

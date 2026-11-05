@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { WorkspaceIdentityProvider } from './workspace-identity'
 import { WorkspaceBoundary } from './workspace-boundary'
 
 import { ChatbotSidebar } from '@/components/ai/chatbot-sidebar'
@@ -14,6 +15,7 @@ export interface ShellProps {
   permissions: readonly Permission[]
   /** Organization display name shown in the sidebar brand area and header. */
   organizationName?: string
+  userId?: string
   workspaceId?: string
   notificationScope?: string
   children: ReactNode
@@ -36,10 +38,12 @@ export function Shell({
   permissions,
   organizationName,
   workspaceId,
+  userId,
   notificationScope,
   children,
 }: ShellProps): React.JSX.Element {
   return (
+    <WorkspaceIdentityProvider organizationId={workspaceId} userId={userId}>
     <WorkspaceBoundary organizationId={workspaceId}>
       <div className="flex h-screen overflow-hidden bg-background">
         <Sidebar
@@ -62,5 +66,6 @@ export function Shell({
         <ChatbotToggle />
       </div>
     </WorkspaceBoundary>
+    </WorkspaceIdentityProvider>
   )
 }

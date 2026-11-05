@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({ user: { findUnique: vi.fn() }, followUpSuggestion: { findFirst: vi.fn(), updateMany: vi.fn() }, lead: { findFirst: vi.fn() }, emailAccount: { findFirst: vi.fn() }, emailMessage: { findFirst: vi.fn() }, match: vi.fn(), conversation: vi.fn(), generate: vi.fn() }))
-vi.mock('@/server/db/client', () => ({ prisma: m }))
+vi.mock('@/server/db/client', () => ({ prisma: Object.assign(m, { $queryRaw: vi.fn(async () => [{ id: 'member' }]), $transaction: async (fn: (tx: typeof m) => unknown) => fn(m) }) }))
 vi.mock('../access', () => ({ getLeadAccessFilter: vi.fn(async () => ({ deletedAt: null })) }))
-vi.mock('@/server/auth/permissions', () => ({ requirePermission: vi.fn() }))
+vi.mock('@/server/auth/permissions', () => ({ requirePermission: vi.fn(), hasPermission: () => true }))
 vi.mock('@/server/auth/entitlements', () => ({ requireEntitlement: vi.fn() }))
 vi.mock('../email-lead-matcher', () => ({ matchEmailLead: m.match }))
 vi.mock('../email-conversation', () => ({ fetchEmailConversation: m.conversation }))

@@ -196,7 +196,10 @@ export async function deliverMicrosoftEmail(params: {
   replyToConversationId?: string
   /** Require an existing source conversation and bind the reviewed recipient. */
   strictReply?: boolean
+  /** Revalidate manual/contextual delivery immediately before provider writes. */
+  authorize?: () => Promise<void>
 }): Promise<{ externalId: string; threadId: string }> {
+  await params.authorize?.()
   const { accessToken, to, subject, htmlBody, attachments, replyToConversationId } = params
   const authHeaders = {
     Authorization: `Bearer ${accessToken}`,
@@ -213,16 +216,19 @@ export async function deliverMicrosoftEmail(params: {
       authHeaders,
       replyToConversationId,
       htmlBody,
+      params.authorize,
     )
   }
 
   if (params.strictReply) {
     if (!draft || !replyToConversationId || draft.conversationId !== replyToConversationId) throw new AppError('DRAFT_CONFLICT', 'The source conversation is unavailable. Generate a new draft.', 409)
+    await params.authorize?.()
     const bound = await fetch(`${MS_GRAPH}/me/messages/${encodeURIComponent(draft.id)}`, { method: 'PATCH', headers: authHeaders, body: JSON.stringify({ subject, toRecipients: [{ emailAddress: { address: to } }] }) })
     if (!bound.ok) throw new AppError('EMAIL_SEND_FAILED', 'The reviewed reply could not be prepared.', 503)
   }
 
   if (!draft) {
+    await params.authorize?.()
     const draftRes = await fetch(`${MS_GRAPH}/me/messages`, {
       method: 'POST',
       headers: authHeaders,
@@ -233,6 +239,7 @@ export async function deliverMicrosoftEmail(params: {
       }),
     })
     if (!draftRes.ok) {
+      if (params.authorize) throw new AppError('EMAIL_SEND_FAILED', 'The reviewed email could not be prepared. Check the mailbox and try again.', 503)
       const text = await draftRes.text()
       throw new AppError('EMAIL_SEND_FAILED', `Failed to create message: ${text}`, 500)
     }
@@ -241,6 +248,7 @@ export async function deliverMicrosoftEmail(params: {
 
   for (const att of attachments) {
     const bytes = Buffer.from(att.data as ArrayBuffer)
+    await params.authorize?.()
     const attRes = await fetch(`${MS_GRAPH}/me/messages/${draft.id}/attachments`, {
       method: 'POST',
       headers: authHeaders,
@@ -252,18 +260,19 @@ export async function deliverMicrosoftEmail(params: {
       }),
     })
     if (!attRes.ok) {
-      if (params.strictReply) throw new AppError('EMAIL_SEND_FAILED', 'A reviewed reply attachment could not be prepared.', 503)
+      if (params.strictReply || params.authorize) throw new AppError('EMAIL_SEND_FAILED', 'A reviewed reply attachment could not be prepared.', 503)
       const text = await attRes.text()
       throw new AppError('EMAIL_SEND_FAILED', `Failed to attach file: ${text}`, 500)
     }
   }
 
+  await params.authorize?.()
   const sendRes = await fetch(`${MS_GRAPH}/me/messages/${draft.id}/send`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
   })
   if (!sendRes.ok) {
-    if (params.strictReply) throw new AppError('EMAIL_SEND_FAILED', 'The reviewed reply could not be sent. Check the connected mailbox and try again.', 503)
+    if (params.strictReply || params.authorize) throw new AppError('EMAIL_SEND_FAILED', 'The reviewed reply could not be sent. Check the connected mailbox and try again.', 503)
     const text = await sendRes.text()
     throw new AppError('EMAIL_SEND_FAILED', `Failed to send email: ${text}`, 500)
   }
@@ -282,6 +291,7 @@ async function createMicrosoftReplyDraft(
   authHeaders: Record<string, string>,
   conversationId: string,
   htmlBody: string,
+  authorize?: () => Promise<void>,
 ): Promise<{ id: string; conversationId?: string } | null> {
   try {
     const filter = `conversationId eq '${conversationId.replace(/'/g, "''")}'`
@@ -299,6 +309,7 @@ async function createMicrosoftReplyDraft(
     const latestId = list.value?.[0]?.id
     if (!latestId) return null
 
+    await authorize?.()
     const replyRes = await fetch(`${MS_GRAPH}/me/messages/${latestId}/createReply`, {
       method: 'POST',
       headers: authHeaders,
@@ -307,6 +318,7 @@ async function createMicrosoftReplyDraft(
     const draft = (await replyRes.json()) as { id: string; conversationId?: string }
 
     // Replace the reply draft's body with our composed HTML.
+    await authorize?.()
     const patchRes = await fetch(`${MS_GRAPH}/me/messages/${draft.id}`, {
       method: 'PATCH',
       headers: authHeaders,
@@ -315,7 +327,8 @@ async function createMicrosoftReplyDraft(
     if (!patchRes.ok) return null
 
     return draft
-  } catch {
+  } catch (error) {
+    if (error instanceof AppError) throw error
     return null
   }
 }

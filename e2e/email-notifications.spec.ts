@@ -10,7 +10,7 @@ async function mock(page: Page, baseURL: string, state: ReturnType<typeof store>
   const origin = new URL(baseURL).origin, scope = { organizationId: coreIds.organization, userId: coreIds.user }
   await page.route('**/*', async route => {
     const req = route.request(), path = new URL(req.url()).pathname, method = req.method()
-    const json = (data: unknown) => route.fulfill({ json: { data, scope: state.stale ? { ...scope, userId: 'other' } : scope } }), error = (status: number, message: string) => route.fulfill({ status, json: { error: { code: status === 404 ? 'NOT_FOUND' : 'FORBIDDEN', message } } })
+    const json = (data: unknown) => route.fulfill({ json: { data, scope: state.stale ? { ...scope, userId: 'other' } : scope, capabilities: { canWrite: !new URL(page.url()).searchParams.has('readonly') } } }), error = (status: number, message: string) => route.fulfill({ status, json: { error: { code: status === 404 ? 'NOT_FOUND' : 'FORBIDDEN', message } } })
     if (new URL(req.url()).origin !== origin || /receptionist-widget/.test(path)) { state.unexpected.push(`${method} ${path}`); await route.abort(); return }
     const rows = state.gone ? [] : emailRows.filter(row => row.kind === 'email_match' ? !state.matched : !state.dismissed).map(row => ({ ...row, readAt: state.read.has(row.key) ? at : null }))
     if (path.startsWith('/api/email-notifications')) {
@@ -23,7 +23,7 @@ async function mock(page: Page, baseURL: string, state: ReturnType<typeof store>
     }
     if (method === 'GET' && path === '/api/callback-notifications/count') { await route.fulfill({ json: { data: { unread: 1 } } }); return }
     if (method === 'GET' && path === '/api/callback-notifications') { await route.fulfill({ json: { data: { rows: [], page: 1, hasMore: false } } }); return }
-    if (method === 'GET' && path === '/api/follow-ups') { await route.fulfill({ json: { data: [] } }); return }
+    if (method === 'GET' && path === '/api/follow-ups') { await json([]); return }
     if (method === 'GET' && path === '/api/email/sync') { await route.fulfill({ json: { data: [], capabilities: { canWrite: false } } }); return }
     if (method === 'GET' && path === '/api/email/matches') { await json(state.matched ? [] : [match]); return }
     if (method === 'POST' && path === `/api/email/matches/${messageId}/preview`) { expect(req.postDataJSON()).toEqual({}); await json({ message: match, version: 'a'.repeat(64), candidates: [{ id: coreIds.lead, label: 'Practice Clinic', email: 'lead@example.invalid', canLink: true, viaArchive: true }], restrictedMatches: false, blocked: false }); return }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const mocks = vi.hoisted(() => {
   const tx = {
     $queryRaw: vi.fn(),
+    user: { findUnique: vi.fn() },
     emailMessage: { findUnique: vi.fn(), update: vi.fn() },
     activity: { findUnique: vi.fn(), create: vi.fn() },
     organizationMember: { findUnique: vi.fn() },
@@ -26,6 +27,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   mocks.transaction.mockImplementation(async (fn: (tx: typeof mocks.tx) => unknown) => fn(mocks.tx))
   mocks.tx.$queryRaw.mockResolvedValue([{ id: 'member' }])
+  mocks.tx.user.findUnique.mockResolvedValue({ id: 'rep', organizationMemberships: [{ organizationId: 'org' }], teamMemberships: [{ role: { hierarchy: 3, permissions: [{ key: 'leads:read' }, { key: 'leads:write' }] } }] })
   mocks.tx.emailMessage.findUnique.mockResolvedValue({ ...incoming, id: 'saved', organizationId: 'org', accountId: 'account', sentAt: new Date(incoming.sentAt), replyMetadata: incoming, leadRouting: null })
   mocks.tx.organizationMember.findUnique.mockResolvedValue({ userId: 'rep' })
   mocks.tx.lead.findFirst.mockResolvedValue({ id: 'lead' })
@@ -76,20 +78,21 @@ describe('review follow-up', () => {
   })
   it('does not create a second task after losing the atomic claim', async () => {
     mocks.tx.followUpSuggestion.updateMany.mockResolvedValue({ count: 0 })
-    await expect(reviewFollowUp('org', 'rep', 'suggestion', { action: 'approve' })).rejects.toThrow('already reviewed')
+    await expect(reviewFollowUp('org', 'rep', 'suggestion', { action: 'approve' })).rejects.toMatchObject({ code: 'FOLLOW_UP_CHANGED', statusCode: 409 })
     expect(mocks.tx.task.create).not.toHaveBeenCalled()
   })
   it('rejects other users and tenants through the scoped lookup', async () => {
     mocks.tx.followUpSuggestion.findFirst.mockResolvedValue(null)
-    await expect(reviewFollowUp('org', 'rep', 'other', { action: 'approve' })).rejects.toThrow('not found')
+    await expect(reviewFollowUp('org', 'rep', 'other', { action: 'approve' })).rejects.toMatchObject({ code: 'NOT_FOUND', statusCode: 404 })
     expect(mocks.tx.followUpSuggestion.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'other', organizationId: 'org', assigneeId: 'rep' } }))
     expect(mocks.tx.task.create).not.toHaveBeenCalled()
   })
   it('rejects deleted leads and departed members', async () => {
     mocks.tx.lead.findFirst.mockResolvedValue(null)
-    await expect(reviewFollowUp('org', 'rep', 'suggestion', { action: 'approve' })).rejects.toThrow('lead')
+    await expect(reviewFollowUp('org', 'rep', 'suggestion', { action: 'approve' })).rejects.toMatchObject({ code: 'NOT_FOUND', statusCode: 404 })
     mocks.tx.lead.findFirst.mockResolvedValue({ id: 'lead' })
     mocks.tx.organizationMember.findUnique.mockResolvedValue(null)
+    mocks.tx.$queryRaw.mockResolvedValue([])
     await expect(reviewFollowUp('org', 'rep', 'suggestion', { action: 'approve' })).rejects.toThrow('member')
     expect(mocks.tx.task.create).not.toHaveBeenCalled()
   })

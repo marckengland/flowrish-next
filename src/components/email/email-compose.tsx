@@ -13,6 +13,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/email/rich-text-editor'
 import { EmailGenerator } from '@/components/ai/email-generator'
+import { useWorkspaceIdentity } from '@/components/layout/workspace-identity'
+import { followUpHeaders, type FollowUpContext } from '@/lib/follow-up-access'
+import { followUpData, followUpAccessLost } from '@/lib/follow-up-client'
 import { cn } from '@/lib/utils'
 
 /**
@@ -42,6 +45,8 @@ export interface EmailComposeProps {
   /** Binds an explicitly reviewed conversation draft to its server-side context. */
   followUpId?: string
   draftVersion?: string
+  followUpContext?: FollowUpContext
+  onAccessLost?: () => void
   /**
    * When provided, the email is sent as a reply on this Gmail thread.
    * The subject is locked and prefixed with "Re:" automatically. Used
@@ -111,6 +116,8 @@ export function EmailCompose({
   defaultBody = '',
   followUpId,
   draftVersion,
+  followUpContext,
+  onAccessLost,
   replyToThreadId,
   replySubject,
   latestThread,
@@ -123,6 +130,11 @@ export function EmailCompose({
   // thread. Otherwise we default to the lead's most recent thread —
   // user can flip "Start new thread" to override. This mirrors how
   // mail clients usually keep conversations together by default.
+  const providerIdentity = useWorkspaceIdentity()
+  const identity = followUpContext ?? providerIdentity
+  const capturedIdentity = useRef(identity)
+  const [revoked, setRevoked] = useState(false)
+  const valid = useRef(true)
   const subjectId = useId()
   const initialThreadMode: 'reply' | 'new' = replyToThreadId
     ? 'reply'
@@ -162,6 +174,24 @@ export function EmailCompose({
     | { kind: 'sent'; recipient: string }
     | { kind: 'error'; message: string }
   >({ kind: 'idle' })
+
+  function revokeAccess(): void {
+    valid.current = false
+    setRevoked(true)
+    setSubject('')
+    setBody('')
+    setAttachments([])
+    setError(null)
+    setSuccess(null)
+    onAccessLost?.()
+  }
+  const identityChanged = identity?.organizationId !== capturedIdentity.current?.organizationId || identity?.userId !== capturedIdentity.current?.userId
+  useEffect(() => {
+    if (identityChanged) revokeAccess()
+    // Scalar identity changes invalidate the captured compose session permanently.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identityChanged])
+  useEffect(() => { valid.current = true; return () => { valid.current = false } }, [])
 
   /**
    * Sends a preview of the current subject + body to the connected
@@ -255,6 +285,7 @@ export function EmailCompose({
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault()
+    if (!valid.current || revoked || identityChanged) return
     setError(null)
     setSuccess(null)
 
@@ -292,7 +323,7 @@ export function EmailCompose({
               subject: subject.trim(),
               body: body.trim(),
               ...(activeThreadId ? { threadId: activeThreadId } : {}),
-              ...(followUpId && draftVersion ? { followUpId, draftVersion } : {}),
+              ...(followUpId ? { followUpId, ...(draftVersion ? { draftVersion } : {}) } : {}),
             }),
           )
           for (const att of attachments) {
@@ -301,6 +332,7 @@ export function EmailCompose({
           res = await fetch('/api/email/send', {
             method: 'POST',
             credentials: 'same-origin',
+            headers: capturedIdentity.current ? followUpHeaders(capturedIdentity.current) : {},
             body: formData,
           })
         } else {
@@ -309,6 +341,7 @@ export function EmailCompose({
             headers: {
               'Content-Type': 'application/json',
               Accept: 'application/json',
+              ...(capturedIdentity.current ? followUpHeaders(capturedIdentity.current) : {}),
             },
             credentials: 'same-origin',
             body: JSON.stringify({
@@ -316,31 +349,14 @@ export function EmailCompose({
               subject: subject.trim(),
               body: body.trim(),
               ...(activeThreadId ? { threadId: activeThreadId } : {}),
-              ...(followUpId && draftVersion ? { followUpId, draftVersion } : {}),
+              ...(followUpId ? { followUpId, ...(draftVersion ? { draftVersion } : {}) } : {}),
             }),
           })
         }
 
-        if (!res.ok) {
-          let message = `Failed to send email (${res.status})`
-          try {
-            const responseBody = (await res.json()) as { error?: { message?: string } }
-            if (responseBody.error?.message) message = responseBody.error.message
-          } catch {
-            // ignore parse failure
-          }
-          if (hasAttachments) {
-            setAttachments((prev) =>
-              prev.map((a) => ({ ...a, status: 'failed', error: message })),
-            )
-          }
-          setError(message)
-          return
-        }
-
-        const responseBody = (await res.json()) as {
-          data: { messageId: string; threadId: string; attachmentCount: number }
-        }
+        if (!valid.current) return
+        const responseBody = await followUpData<{ messageId: string; threadId: string; attachmentCount: number }>(res, capturedIdentity.current)
+        if (!valid.current) return
 
         if (hasAttachments) {
           setAttachments((prev) =>
@@ -355,10 +371,15 @@ export function EmailCompose({
         )
         onSent?.(responseBody.data)
       } catch (err) {
+        if (!valid.current) return
+        if (followUpAccessLost(err)) { revokeAccess(); return }
+        setAttachments(previous => previous.map(attachment => ({ ...attachment, status: 'failed' })))
         setError(err instanceof Error ? err.message : 'Failed to send email.')
       }
     })
   }
+
+  if (revoked || identityChanged) return <p role="alert">Access changed. Reload before continuing.</p>
 
   if (!open) {
     return (

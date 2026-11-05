@@ -11,15 +11,15 @@ const followUpId = '22222222-2222-4222-8222-222222222222'
 const draftVersion = '33333333-3333-4333-8333-333333333333'
 const payload = { leadId, subject: 'Reviewed subject', body: '<p>Reviewed reply</p>', followUpId, draftVersion }
 beforeEach(() => { vi.resetAllMocks(); mocks.session.mockResolvedValue({ organizationId: 'org', dbUser: { id: 'user' } }); mocks.prepare.mockResolvedValue({ threadId: 'source-thread', subject: 'Reviewed subject', options: { accountId: 'exact-account', recipientEmail: 'alternate@example.invalid' } }); mocks.send.mockResolvedValue({ messageId: 'sent' }) })
-const request = (data: unknown) => new NextRequest('https://example.com/api/email/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+const request = (data: unknown) => new NextRequest('https://example.com/api/email/send', { method: 'POST', headers: { 'Content-Type': 'application/json', origin: 'https://example.com', 'x-flowrish-workspace': 'org', 'x-flowrish-follow-up-scope': JSON.stringify(['org', 'user']) }, body: JSON.stringify(data) })
 describe('reviewed conversation draft sending', () => {
   it('binds the explicit send to the validated source context', async () => {
     expect((await POST(request(payload))).status).toBe(200)
     expect(mocks.prepare).toHaveBeenCalledWith('org','user',followUpId,draftVersion,leadId)
-    expect(mocks.send).toHaveBeenCalledWith(leadId,payload.subject,payload.body,'user','org','source-thread',[],{ accountId: 'exact-account', recipientEmail: 'alternate@example.invalid' })
+    expect(mocks.send).toHaveBeenCalledWith(leadId,payload.subject,payload.body,'user','org','source-thread',[],{ accountId: 'exact-account', recipientEmail: 'alternate@example.invalid', manualActor: true })
   })
   it('rejects missing version pairs and an arbitrary thread override before sending', async () => {
-    expect((await POST(request({ ...payload, draftVersion: undefined }))).status).toBe(400)
+    expect((await POST(request({ ...payload, followUpId: undefined }))).status).toBe(400)
     expect((await POST(request({ ...payload, threadId: 'other-thread' }))).status).toBe(409)
     expect(mocks.send).not.toHaveBeenCalled()
   })
@@ -30,6 +30,6 @@ describe('reviewed conversation draft sending', () => {
   it('preserves legacy explicit send behavior without a generated draft', async () => {
     expect((await POST(request({ leadId, subject: 'Manual subject', body: 'Manual body' }))).status).toBe(200)
     expect(mocks.prepare).not.toHaveBeenCalled()
-    expect(mocks.send).toHaveBeenCalledWith(leadId,'Manual subject','Manual body','user','org',undefined,[])
+    expect(mocks.send).toHaveBeenCalledWith(leadId,'Manual subject','Manual body','user','org',undefined,[],{ manualActor: true })
   })
 })

@@ -8,7 +8,7 @@ async function mock(page: Page, baseURL: string, state: ReturnType<typeof store>
   const origin = new URL(baseURL).origin
   await page.route('**/*', async route => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname, method = req.method()
-    const reply = (data: unknown) => route.fulfill({ json: { data, scope: { organizationId: coreIds.organization, userId: coreIds.user } } })
+    const reply = (data: unknown) => route.fulfill({ json: { data, scope: { organizationId: coreIds.organization, userId: coreIds.user }, capabilities: { canWrite: new URL(page.url()).searchParams.get('readonly') !== 'true' } } })
     const error = (status: number, code: string, message: string) => route.fulfill({ status, json: { error: { code, message } } })
     if (url.origin !== origin || /receptionist-widget/.test(path)) { state.unexpected.push(`${method} ${path}`); await route.abort(); return }
     if (path.startsWith('/api/email/matches')) {

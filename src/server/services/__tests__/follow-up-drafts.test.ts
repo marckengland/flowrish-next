@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ user: { findUnique: vi.fn() }, suggestion: { findFirst: vi.fn(), updateMany: vi.fn() }, lead: { findFirst: vi.fn() }, account: { findFirst: vi.fn() }, message: { findFirst: vi.fn() }, access: vi.fn(), permission: vi.fn(), entitlement: vi.fn(), fetchConversation: vi.fn(), generate: vi.fn() }))
-vi.mock('@/server/db/client', () => ({ prisma: { user: mocks.user, followUpSuggestion: mocks.suggestion, lead: mocks.lead, emailAccount: mocks.account, emailMessage: mocks.message } }))
+vi.mock('@/server/db/client', () => { const db = { user: mocks.user, followUpSuggestion: mocks.suggestion, lead: mocks.lead, emailAccount: mocks.account, emailMessage: mocks.message, $queryRaw: vi.fn(async () => [{ id: 'member' }]) }; return { prisma: { ...db, $transaction: async (fn: (tx: typeof db) => unknown) => fn(db) } } })
 vi.mock('@/server/services/access', () => ({ getLeadAccessFilter: mocks.access }))
-vi.mock('@/server/auth/permissions', () => ({ requirePermission: mocks.permission }))
+vi.mock('@/server/auth/permissions', () => ({ requirePermission: mocks.permission, hasPermission: () => true }))
 vi.mock('@/server/auth/entitlements', () => ({ requireEntitlement: mocks.entitlement }))
 vi.mock('@/server/services/email-conversation', () => ({ fetchEmailConversation: mocks.fetchConversation }))
 vi.mock('@/server/services/ai', () => ({ generateConversationFollowUp: mocks.generate }))
@@ -17,8 +17,8 @@ beforeEach(() => {
   mocks.suggestion.findFirst.mockResolvedValue(suggestion)
   mocks.suggestion.updateMany.mockResolvedValue({ count: 1 })
   mocks.lead.findFirst.mockResolvedValue({ id: 'lead', email: 'primary@example.invalid', altEmail: 'alternate@example.invalid' })
-  mocks.account.findFirst.mockResolvedValue({ id: 'account', provider: 'gmail' })
-  mocks.message.findFirst.mockResolvedValue({ id: 'saved' })
+  mocks.account.findFirst.mockResolvedValue({ id: 'account', provider: 'gmail', userId: 'user', email: 'owner@example.invalid' })
+  mocks.message.findFirst.mockResolvedValue({ id: 'saved', fromEmail: 'alternate@example.invalid', activity: { leadId: 'lead', organizationId: 'org' } })
   mocks.fetchConversation.mockResolvedValue(conversation)
   mocks.generate.mockResolvedValue({ subject: 'Re: Proposal', body: 'Hello,\nLet us discuss the scope.' })
 })
@@ -60,7 +60,7 @@ describe('conversation follow-up drafts', () => {
   })
   it('binds send preparation to the exact source mailbox, alternate recipient, thread, and RFC reply header', async () => {
     const result = await prepareFollowUpSend('org','user','suggestion','version','lead')
-    expect(result).toEqual({ threadId: 'thread', subject: 'Re: Proposal', options: { accountId: 'account', recipientEmail: 'alternate@example.invalid', replyMessageId: '<latest@example.invalid>', replyReferences: '<source@example.invalid> <latest@example.invalid>' } })
+    expect(result).toEqual({ threadId: 'thread', subject: 'Re: Proposal', options: { accountId: 'account', recipientEmail: 'alternate@example.invalid', reviewedFollowUp: { id: 'suggestion', version: 'version' }, replyMessageId: '<latest@example.invalid>', replyReferences: '<source@example.invalid> <latest@example.invalid>' } })
     expect(mocks.generate).not.toHaveBeenCalled()
   })
   it('rejects stale versions, changed conversation fingerprints, and other lead IDs before sending', async () => {
