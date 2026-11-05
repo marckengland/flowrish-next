@@ -222,8 +222,12 @@ export async function deliverMicrosoftEmail(params: {
 
   if (params.strictReply) {
     if (!draft || !replyToConversationId || draft.conversationId !== replyToConversationId) throw new AppError('DRAFT_CONFLICT', 'The source conversation is unavailable. Generate a new draft.', 409)
+  }
+  // Lead-bound callers validate `to`; never retain provider-selected Reply-To,
+  // CC or BCC recipients that have not passed that validation.
+  if (draft && (params.strictReply || params.authorize)) {
     await params.authorize?.()
-    const bound = await fetch(`${MS_GRAPH}/me/messages/${encodeURIComponent(draft.id)}`, { method: 'PATCH', headers: authHeaders, body: JSON.stringify({ subject, toRecipients: [{ emailAddress: { address: to } }] }) })
+    const bound = await fetch(`${MS_GRAPH}/me/messages/${encodeURIComponent(draft.id)}`, { method: 'PATCH', headers: authHeaders, body: JSON.stringify({ subject, toRecipients: [{ emailAddress: { address: to } }], ccRecipients: [], bccRecipients: [] }) })
     if (!bound.ok) throw new AppError('EMAIL_SEND_FAILED', 'The reviewed reply could not be prepared.', 503)
   }
 

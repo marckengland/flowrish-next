@@ -18,6 +18,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
 const mockDb = {
+    lead: { findFirst: vi.fn(), findMany: vi.fn() },
+    contactSuppression: { findMany: vi.fn() },
+    $queryRaw: vi.fn(),
   cadence: {
     findFirst: vi.fn(),
     update: vi.fn(),
@@ -42,7 +45,7 @@ vi.mock('@/server/db/middleware', () => ({
 
 vi.mock('@/server/db/client', () => ({
   prisma: {
-    $transaction: vi.fn(),
+    $transaction: vi.fn(async (fn: (tx: typeof mockDb) => unknown) => fn(mockDb)),
   },
 }))
 
@@ -76,6 +79,10 @@ describe('Cadence Enrollment Service', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockDb.lead.findFirst.mockResolvedValue({ id: 'synthetic-lead', email: 'lead@example.invalid' })
+    mockDb.lead.findMany.mockResolvedValue([])
+    mockDb.contactSuppression.findMany.mockResolvedValue([])
+    mockDb.$queryRaw.mockResolvedValue([])
   })
 
   // ─── enrollLead ──────────────────────────────────────────────────────────
@@ -286,6 +293,7 @@ describe('Cadence Enrollment Service', () => {
       })
       mockDb.cadenceEnrollment.update.mockResolvedValue({
         id: enrollmentId,
+        leadId,
         status: 'PAUSED',
       })
 
@@ -293,7 +301,7 @@ describe('Cadence Enrollment Service', () => {
 
       expect(result.status).toBe('PAUSED')
       expect(mockDb.cadenceEnrollment.update).toHaveBeenCalledWith({
-        where: { id: enrollmentId },
+        where: { id: enrollmentId, organizationId: orgId, status: 'ACTIVE' },
         data: { status: 'PAUSED' },
       })
     })
@@ -312,6 +320,7 @@ describe('Cadence Enrollment Service', () => {
     it('throws INVALID_STATE when enrollment is PAUSED', async () => {
       mockDb.cadenceEnrollment.findFirst.mockResolvedValue({
         id: enrollmentId,
+        leadId,
         status: 'PAUSED',
       })
 
@@ -358,6 +367,7 @@ describe('Cadence Enrollment Service', () => {
     it('resumes a PAUSED enrollment', async () => {
       mockDb.cadenceEnrollment.findFirst.mockResolvedValue({
         id: enrollmentId,
+        leadId,
         status: 'PAUSED',
       })
       mockDb.cadenceEnrollment.update.mockResolvedValue({
@@ -369,7 +379,7 @@ describe('Cadence Enrollment Service', () => {
 
       expect(result.status).toBe('ACTIVE')
       expect(mockDb.cadenceEnrollment.update).toHaveBeenCalledWith({
-        where: { id: enrollmentId },
+        where: { id: enrollmentId, organizationId: orgId },
         data: { status: 'ACTIVE' },
       })
     })
@@ -451,6 +461,7 @@ describe('Cadence Enrollment Service', () => {
     it('exits a PAUSED enrollment with meeting_booked reason', async () => {
       mockDb.cadenceEnrollment.findFirst.mockResolvedValue({
         id: enrollmentId,
+        leadId,
         status: 'PAUSED',
       })
       mockDb.cadenceEnrollment.update.mockResolvedValue({
@@ -572,6 +583,7 @@ describe('Cadence Enrollment Service', () => {
     it('throws INVALID_STATE when enrollment is PAUSED', async () => {
       mockDb.cadenceEnrollment.findFirst.mockResolvedValue({
         id: enrollmentId,
+        leadId,
         status: 'PAUSED',
       })
 

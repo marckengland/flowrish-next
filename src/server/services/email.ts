@@ -4,6 +4,7 @@ import { encrypt, decrypt } from '@/lib/encryption'
 import { env } from '@/lib/env'
 import { AppError } from '@/lib/errors'
 import { normalizeEmail } from '@/lib/email-routing'
+import { assertContactAllowed } from './contact-suppression'
 import {
   replacePersonalizationTags as replaceTags,
   type PersonalizationLead,
@@ -472,6 +473,7 @@ export async function sendEmail(
       }
     }
     if (![lead.email, lead.altEmail].some(email => email && normalizeEmail(email) === normalizeEmail(recipientEmail)) && !options.reviewedFollowUp) throw new AppError('INVALID_RECIPIENT', 'The recipient no longer belongs to this lead.', 409)
+    await assertContactAllowed(orgId, leadId, recipientEmail)
   }
   await verifyRecipient()
   if (options.accountId && (subject.length > 200 || /[\r\n]/.test(subject) || !/^[^\s<>@]+@[^\s<>@]+$/.test(recipientEmail))) throw new AppError('INVALID_EMAIL', 'The reviewed subject or recipient is invalid.', 400)
@@ -532,7 +534,7 @@ export async function sendEmail(
       accessToken,
       to: recipientEmail,
       ...(options.accountId && threadId ? { strictReply: true } : {}),
-      ...(protectedSend ? { authorize: verifyRecipient } : {}),
+      authorize: verifyRecipient,
       subject: personalizedSubject,
       htmlBody,
       attachments,

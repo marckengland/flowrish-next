@@ -39,6 +39,7 @@ export const TENANT_SCOPED_MODELS = [
   'ReceptionistConfig',
   'ReceptionistCall',
   'FollowUpSuggestion',
+  'ContactSuppression',
   'KnowledgeDocument',
   'KnowledgeChunk',
 ] as const

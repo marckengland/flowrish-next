@@ -23,6 +23,9 @@ let transactionUpdates: Array<{ id: string; stepOrder: number }> = []
 const { mockDb, mockTransaction } = vi.hoisted(() => {
   const mockTransaction = vi.fn()
   const mockDb = {
+    lead: { findFirst: vi.fn(), findMany: vi.fn() },
+    contactSuppression: { findMany: vi.fn() },
+    $queryRaw: vi.fn(),
     cadence: {
       create: vi.fn(),
       findFirst: vi.fn(),
@@ -140,7 +143,12 @@ const activeEnrollmentCountArb = fc.integer({ min: 1, max: 20 })
 describe('Cadence State Machine - Property Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockDb.lead.findFirst.mockResolvedValue({ id: 'synthetic-lead', email: 'lead@example.invalid' })
+    mockDb.lead.findMany.mockResolvedValue([])
+    mockDb.contactSuppression.findMany.mockResolvedValue([])
+    mockDb.$queryRaw.mockResolvedValue([])
     transactionUpdates = []
+    mockTransaction.mockImplementation(async (fn: (tx: typeof mockDb) => unknown) => fn(mockDb))
   })
 
   describe('Property: A cadence always starts in DRAFT status', () => {

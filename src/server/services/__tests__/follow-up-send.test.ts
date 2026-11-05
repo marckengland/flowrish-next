@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const mocks = vi.hoisted(() => ({ db: { lead: { findFirst: vi.fn(), update: vi.fn() }, emailAccount: { findFirst: vi.fn() }, emailMessage: { findFirst: vi.fn(), create: vi.fn() }, activity: { create: vi.fn() } }, fetch: vi.fn(), microsoft: vi.fn() }))
+const mocks = vi.hoisted(() => ({ db: { contactSuppression: { findMany: vi.fn() }, lead: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() }, emailAccount: { findFirst: vi.fn() }, emailMessage: { findFirst: vi.fn(), create: vi.fn() }, activity: { create: vi.fn() } }, fetch: vi.fn(), microsoft: vi.fn() }))
+vi.mock('@/server/db/client', () => ({ prisma: mocks.db }))
 vi.mock('@/server/db/middleware', () => ({ createTenantPrisma: () => mocks.db }))
 vi.mock('@/lib/encryption', () => ({ decrypt: (v: string) => v, encrypt: (v: string) => v }))
 vi.mock('@/lib/env', () => ({ env: {} }))
@@ -8,6 +9,8 @@ import { sendEmail } from '../email'
 const account = { id: 'exact-account', userId: 'user', provider: 'gmail', email: 'owner@example.invalid', accessToken: 'synthetic', tokenExpiry: new Date('2099-01-01') }
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.db.lead.findMany.mockResolvedValue([])
+  mocks.db.contactSuppression.findMany.mockResolvedValue([])
   vi.stubGlobal('fetch', mocks.fetch)
   mocks.db.lead.findFirst.mockResolvedValue({ id: 'lead', email: 'primary@example.invalid', altEmail: 'alternate@example.invalid', firstName: 'Jane' })
   mocks.db.emailAccount.findFirst.mockResolvedValue(account)

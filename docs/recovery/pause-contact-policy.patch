@@ -1,0 +1,8 @@
+diff --git a/src/server/services/contact-policy.ts b/src/server/services/contact-policy.ts
+--- a/src/server/services/contact-policy.ts
++++ b/src/server/services/contact-policy.ts
+@@ -1,3 +1,3 @@
+ import 'server-only'
+ // Recovery fails closed for preference writes, enrollment and outbound lead email.
+-export function contactPolicyAvailable() { return true }
++export function contactPolicyAvailable() { return false }

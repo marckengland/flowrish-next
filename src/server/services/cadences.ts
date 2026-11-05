@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
 import { prisma } from '@/server/db/client'
@@ -7,6 +8,7 @@ import {
   stepUpdateSchema,
 } from '@/lib/validators/cadences'
 import { AppError } from '@/lib/errors'
+import { assertContactAllowed, withContactEnrollment } from './contact-suppression'
 
 /**
  * Valid exit reasons for cadence enrollments.
@@ -612,11 +614,11 @@ export async function enrollLead(
     throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
   }
 
-  const db = createTenantPrisma(orgId)
+  return withContactEnrollment(orgId, async db => {
 
   // Verify cadence exists and is ACTIVE
   const cadence = await db.cadence.findFirst({
-    where: { id: cadenceId },
+    where: { id: cadenceId, organizationId: orgId },
   })
 
   if (!cadence) {
@@ -634,6 +636,7 @@ export async function enrollLead(
   // Check for existing ACTIVE enrollment for this lead+cadence
   const existingEnrollment = await db.cadenceEnrollment.findFirst({
     where: {
+      organizationId: orgId,
       cadenceId,
       leadId,
       status: 'ACTIVE',
@@ -649,17 +652,21 @@ export async function enrollLead(
   }
 
   // Create enrollment with status ACTIVE and currentStepOrder 1
+  await assertContactAllowed(orgId, leadId, undefined, db)
   const enrollment = await db.cadenceEnrollment.create({
-    data: tenantData({
+    data: {
+      organizationId: orgId,
       cadenceId,
       leadId,
       enrolledById: userId,
       status: 'ACTIVE',
       currentStepOrder: 1,
-    }),
+    },
   })
 
+  await assertContactAllowed(orgId, leadId, undefined, db)
   return enrollment
+  })
 }
 
 /**
@@ -696,11 +703,11 @@ export async function bulkEnroll(
     throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
   }
 
-  const db = createTenantPrisma(orgId)
+  return withContactEnrollment(orgId, async db => {
 
   // Verify cadence exists and is ACTIVE
   const cadence = await db.cadence.findFirst({
-    where: { id: cadenceId },
+    where: { id: cadenceId, organizationId: orgId },
   })
 
   if (!cadence) {
@@ -718,6 +725,7 @@ export async function bulkEnroll(
   // Find existing ACTIVE enrollments for these leads in this cadence
   const existingEnrollments = await db.cadenceEnrollment.findMany({
     where: {
+      organizationId: orgId,
       cadenceId,
       leadId: { in: leadIds },
       status: 'ACTIVE',
@@ -735,15 +743,22 @@ export async function bulkEnroll(
   const enrolled: Array<Record<string, unknown>> = []
 
   for (const leadId of leadsToEnroll) {
+    try { await assertContactAllowed(orgId, leadId, undefined, db) } catch (error) {
+      if (!(error instanceof AppError) || error.code !== 'CONTACT_BLOCKED') throw error
+      skippedLeadIds.push(leadId)
+      continue
+    }
     const enrollment = await db.cadenceEnrollment.create({
-      data: tenantData({
+      data: {
+        organizationId: orgId,
         cadenceId,
         leadId,
         enrolledById: userId,
         status: 'ACTIVE',
         currentStepOrder: 1,
-      }),
+      },
     })
+    await assertContactAllowed(orgId, leadId, undefined, db)
     enrolled.push(enrollment)
   }
 
@@ -753,6 +768,7 @@ export async function bulkEnroll(
     enrolledCount: enrolled.length,
     skippedCount: skippedLeadIds.length,
   }
+  })
 }
 
 /**
@@ -804,12 +820,15 @@ export async function pauseEnrollment(
 
   // Set status to PAUSED
   // Note: Cancelling pending Inngest jobs will be handled in task 8.4
-  const paused = await db.cadenceEnrollment.update({
-    where: { id: enrollmentId },
-    data: { status: 'PAUSED' },
-  })
-
-  return paused
+  try {
+    return await db.cadenceEnrollment.update({
+      where: { id: enrollmentId, organizationId: orgId, status: 'ACTIVE' },
+      data: { status: 'PAUSED' },
+    })
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') throw new AppError('INVALID_STATE', 'The enrollment changed before it could be paused. Refresh its status.', 409)
+    throw error
+  }
 }
 
 /**
@@ -841,10 +860,10 @@ export async function resumeEnrollment(
     throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
   }
 
-  const db = createTenantPrisma(orgId)
+  return withContactEnrollment(orgId, async db => {
 
   const enrollment = await db.cadenceEnrollment.findFirst({
-    where: { id: enrollmentId },
+    where: { id: enrollmentId, organizationId: orgId },
   })
 
   if (!enrollment) {
@@ -861,12 +880,15 @@ export async function resumeEnrollment(
 
   // Set status back to ACTIVE
   // Note: Scheduling next step via Inngest will be handled in task 8.4
+  await assertContactAllowed(orgId, enrollment.leadId, undefined, db)
   const resumed = await db.cadenceEnrollment.update({
-    where: { id: enrollmentId },
+    where: { id: enrollmentId, organizationId: orgId },
     data: { status: 'ACTIVE' },
   })
 
+  await assertContactAllowed(orgId, enrollment.leadId, undefined, db)
   return resumed
+  })
 }
 
 /**
@@ -957,6 +979,7 @@ export async function exitEnrollment(
 export async function completeEnrollment(
   enrollmentId: string,
   orgId: string,
+  database?: Prisma.TransactionClient,
 ) {
   if (!enrollmentId) {
     throw new AppError('VALIDATION_ERROR', 'Enrollment ID is required', 400)
@@ -965,10 +988,10 @@ export async function completeEnrollment(
     throw new AppError('VALIDATION_ERROR', 'Organization ID is required', 400)
   }
 
-  const db = createTenantPrisma(orgId)
+  const db = database ?? createTenantPrisma(orgId)
 
   const enrollment = await db.cadenceEnrollment.findFirst({
-    where: { id: enrollmentId },
+    where: { id: enrollmentId, ...(database ? { organizationId: orgId } : {}) },
   })
 
   if (!enrollment) {
@@ -985,7 +1008,7 @@ export async function completeEnrollment(
 
   const completed = await db.cadenceEnrollment.update({
     // A reply may have exited the enrollment after the status read.
-    where: { id: enrollmentId, status: 'ACTIVE' },
+    where: { id: enrollmentId, status: 'ACTIVE', ...(database ? { organizationId: orgId } : {}) },
     data: {
       status: 'COMPLETED',
       completedAt: new Date(),

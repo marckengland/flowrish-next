@@ -1,0 +1,37 @@
+import { beforeEach, expect, it, vi } from 'vitest'
+const m = vi.hoisted(() => {
+  const db = { user: { findUnique: vi.fn() }, lead: { findFirst: vi.fn(), findMany: vi.fn() }, contactSuppression: { findMany: vi.fn(), upsert: vi.fn() }, cadenceEnrollment: { updateMany: vi.fn() }, auditEntry: { create: vi.fn() }, $queryRaw: vi.fn() }
+  return { db, transaction: vi.fn() }
+})
+vi.mock('@/server/db/client', () => ({ prisma: { ...m.db, $transaction: m.transaction } }))
+vi.mock('../access', () => ({ getLeadAccessFilter: vi.fn(async () => ({ deletedAt: null, assignedUserId: 'actor' })) }))
+import { assertContactAllowed, readContactPreferences, changeContactPreference } from '../contact-suppression'
+const at = new Date('2026-11-05T00:00:00Z'), email = 'lead@example.invalid'
+const user = (remove = true, write = true) => ({ id: 'actor', organizationMemberships: [{ organizationId: 'org' }], teamMemberships: [{ role: { hierarchy: 3, permissions: [{ key: 'leads:read' }, ...(write ? [{ key: 'leads:write' }] : []), ...(remove ? [{ key: 'leads:delete' }] : [])] } }] })
+const lead = { id: 'lead', organizationId: 'org', assignedUserId: 'actor', email, altEmail: 'alternate@example.invalid', updatedAt: at, mergedIntoId: null }
+const row = { id: 'block', organizationId: 'org', email, blocked: true, revision: 1, reason: 'Asked us to stop', updatedById: 'actor', updatedAt: at }
+beforeEach(() => { vi.resetAllMocks(); m.transaction.mockImplementation(async fn => fn(m.db)); m.db.user.findUnique.mockResolvedValue(user()); m.db.lead.findFirst.mockResolvedValue(lead); m.db.lead.findMany.mockResolvedValue([]); m.db.contactSuppression.findMany.mockResolvedValue([]); m.db.$queryRaw.mockResolvedValue([{ id: 'member' }]); m.db.contactSuppression.upsert.mockResolvedValue(row); m.db.cadenceEnrollment.updateMany.mockResolvedValue({ count: 2 }) })
+it('normalizes addresses, scopes the lookup to the workspace, and denies a primary block', async () => {
+  m.db.lead.findFirst.mockResolvedValue({ ...lead, email: ' LEAD@EXAMPLE.INVALID ' }); m.db.contactSuppression.findMany.mockResolvedValue([row]); await expect(assertContactAllowed('org', 'lead')).rejects.toMatchObject({ code: 'CONTACT_BLOCKED', statusCode: 403 }); expect(m.db.contactSuppression.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ organizationId: 'org', email: { in: expect.arrayContaining([email]) } }) }))
+})
+it('checks alternate, archived and explicit merged recipients without moving registry rows', async () => {
+  m.db.lead.findMany.mockResolvedValue([{ email: 'archived@example.invalid', altEmail: null }]); m.db.contactSuppression.findMany.mockResolvedValue([{ ...row, email: 'archived@example.invalid' }]); await expect(assertContactAllowed('org', 'lead', 'reply@example.invalid')).rejects.toMatchObject({ code: 'CONTACT_BLOCKED' }); expect(m.db.contactSuppression.findMany.mock.calls[0][0].where.email.in).toEqual(expect.arrayContaining(['archived@example.invalid', 'reply@example.invalid', lead.altEmail])); expect(m.db.contactSuppression.upsert).not.toHaveBeenCalled()
+})
+it('fails closed on unavailable suppression reads and archive overflow', async () => {
+  m.db.contactSuppression.findMany.mockRejectedValue(new Error('private database diagnostic')); await expect(assertContactAllowed('org', 'lead')).rejects.toMatchObject({ code: 'CONTACT_POLICY_UNAVAILABLE', statusCode: 503 }); m.db.contactSuppression.findMany.mockResolvedValue([]); m.db.lead.findMany.mockResolvedValue(Array.from({ length: 201 }, () => ({ email: 'old@example.invalid' }))); await expect(assertContactAllowed('org', 'lead')).rejects.toMatchObject({ statusCode: 409 })
+})
+it('returns current permissions and a version without claiming that unblocked addresses are consented', async () => {
+  m.db.user.findUnique.mockResolvedValue(user(false, false)); const result = await readContactPreferences('org', 'actor', 'lead'); expect(result.canBlock).toBe(false); expect(result.canUnblock).toBe(false); expect(result.version).toMatch(/^[a-f0-9]{64}$/); expect(result.addresses.map(row => row.email)).toContain(email); expect(result.addresses.every(row => !row.blocked)).toBe(true)
+})
+it('blocks an address and stops active or paused matching cadences with an audit in the same transaction', async () => {
+  const before = await readContactPreferences('org', 'actor', 'lead'); await changeContactPreference('org', 'actor', 'lead', { action: 'block', email, reason: 'Asked us to stop', expectedVersion: before.version, confirmed: true }); expect(m.db.contactSuppression.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId_email: { organizationId: 'org', email } }, create: expect.objectContaining({ blocked: true, organizationId: 'org' }) })); expect(m.db.cadenceEnrollment.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ organizationId: 'org', status: { in: ['ACTIVE', 'PAUSED'] } }), data: expect.objectContaining({ status: 'EXITED', exitReason: 'do_not_contact' }) })); expect(m.db.auditEntry.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ userId: 'actor', organizationId: 'org', entityType: 'ContactSuppression' }) }))
+})
+it('rejects stale snapshots and inaccessible leads before changing preferences', async () => {
+  await expect(changeContactPreference('org', 'actor', 'lead', { action: 'block', email, reason: 'Asked us to stop', expectedVersion: 'a'.repeat(64), confirmed: true })).rejects.toMatchObject({ statusCode: 409 }); expect(m.db.contactSuppression.upsert).not.toHaveBeenCalled(); m.db.lead.findFirst.mockResolvedValue(null); await expect(readContactPreferences('org', 'actor', 'lead')).rejects.toMatchObject({ statusCode: 404 })
+})
+it('requires review permission to clear and never automatically resumes stopped cadences', async () => {
+  m.db.contactSuppression.findMany.mockResolvedValue([row]); m.db.user.findUnique.mockResolvedValue(user(false)); const before = await readContactPreferences('org', 'actor', 'lead'); await expect(changeContactPreference('org', 'actor', 'lead', { action: 'unblock', email, reason: 'Confirmed renewed contact request', expectedVersion: before.version, confirmed: true })).rejects.toMatchObject({ statusCode: 403 }); expect(m.db.contactSuppression.upsert).not.toHaveBeenCalled(); m.db.user.findUnique.mockResolvedValue(user()); await changeContactPreference('org', 'actor', 'lead', { action: 'unblock', email, reason: 'Confirmed renewed contact request', expectedVersion: before.version, confirmed: true }); expect(m.db.contactSuppression.upsert.mock.calls[0][0].update).toMatchObject({ blocked: false }); expect(m.db.cadenceEnrollment.updateMany).not.toHaveBeenCalled()
+})
+it('rejects permission loss during an audit wait and validates reason and explicit confirmation', async () => {
+  const before = await readContactPreferences('org', 'actor', 'lead'); const input = { action: 'block' as const, email, reason: 'Asked us to stop', expectedVersion: before.version, confirmed: true as const }; await expect(changeContactPreference('org', 'actor', 'lead', { ...input, reason: '' })).rejects.toThrow(); await expect(changeContactPreference('org', 'actor', 'lead', { ...input, confirmed: false })).rejects.toThrow(); m.db.auditEntry.create.mockImplementation(async () => { m.db.user.findUnique.mockResolvedValue(user(false, false)); return { id: 'audit' } }); await expect(changeContactPreference('org', 'actor', 'lead', input)).rejects.toMatchObject({ statusCode: 403 })
+})

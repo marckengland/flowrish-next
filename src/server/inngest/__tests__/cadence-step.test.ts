@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
 const mockDb = {
+  $queryRaw: vi.fn(),
   cadenceEnrollment: {
     findFirst: vi.fn(),
     update: vi.fn(),
@@ -32,7 +33,9 @@ const mockDb = {
   activity: {
     create: vi.fn(),
   },
+  contactSuppression: { findMany: vi.fn() },
   lead: {
+    findMany: vi.fn(),
     findFirst: vi.fn(),
     update: vi.fn(),
   },
@@ -48,7 +51,9 @@ vi.mock('@/server/db/middleware', () => ({
 
 vi.mock('@/server/db/client', () => ({
   prisma: {
-    $transaction: vi.fn(),
+    $transaction: vi.fn(async (fn: (tx: typeof mockDb) => unknown) => fn(mockDb)),
+    get lead() { return mockDb.lead },
+    get contactSuppression() { return mockDb.contactSuppression },
   },
 }))
 
@@ -140,6 +145,10 @@ const handler = (cadenceStepFunction as any).handler
 describe('Cadence Step Execution Function', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockDb.$queryRaw.mockResolvedValue([])
+    mockDb.cadenceEnrollment.findFirst.mockResolvedValue({ id: enrollmentId, status: 'ACTIVE', currentStepOrder: 1, enrolledById: 'user-1', leadId })
+    mockDb.lead.findMany.mockResolvedValue([])
+    mockDb.contactSuppression.findMany.mockResolvedValue([])
     // Default: no schedule configured. Tests that need to exercise the
     // schedule gating override this in their own arrange step.
     mockDb.cadenceSchedule.findUnique.mockResolvedValue(null)
@@ -263,6 +272,7 @@ describe('Cadence Step Execution Function', () => {
 
       expect(mockDb.stepExecutionLog.create).toHaveBeenCalledWith({
         data: {
+          organizationId: orgId,
           enrollmentId,
           stepId,
           actionType: 'EMAIL',
@@ -300,6 +310,7 @@ describe('Cadence Step Execution Function', () => {
 
       expect(mockDb.stepExecutionLog.create).toHaveBeenCalledWith({
         data: {
+          organizationId: orgId,
           enrollmentId,
           stepId,
           actionType: 'CALL',
@@ -353,7 +364,7 @@ describe('Cadence Step Execution Function', () => {
       await handler({ event: createMockEvent(), step: mockStep })
 
       expect(mockDb.cadenceEnrollment.update).toHaveBeenCalledWith({
-        where: { id: enrollmentId },
+        where: { id: enrollmentId, organizationId: orgId, leadId, status: 'ACTIVE' },
         data: { currentStepOrder: 3 },
       })
     })
@@ -469,7 +480,7 @@ describe('Cadence Step Execution Function', () => {
 
       const result = await handler({ event: createMockEvent(), step: mockStep })
 
-      expect(mockCompleteEnrollment).toHaveBeenCalledWith(enrollmentId, orgId)
+      expect(mockCompleteEnrollment).toHaveBeenCalledWith(enrollmentId, orgId, mockDb)
       expect(result).toEqual({ executed: true, completed: true })
     })
   })

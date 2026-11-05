@@ -14,6 +14,7 @@ import { AppError } from '@/lib/errors'
 
 import { ClickToCall } from '@/components/leads/click-to-call'
 import { LeadConvert } from '@/components/leads/lead-convert'
+import { ContactPreferencesPanel } from '@/components/leads/contact-preferences'
 import { LeadDetail } from '@/components/leads/lead-detail'
 import { LeadDealCard } from '@/components/leads/lead-deal-card'
 import { LeadStageTransition } from '@/components/leads/lead-stage-transition'
@@ -211,6 +212,8 @@ export default async function LeadDetailPage({
             stages={stages}
             canEdit={canWrite}
           />
+
+          <ContactPreferencesPanel leadId={lead.id} context={{ organizationId: session.organizationId, userId: session.dbUser.id }} />
 
           <LeadStageTransition
             leadId={lead.id}

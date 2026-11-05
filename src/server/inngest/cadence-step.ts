@@ -1,6 +1,8 @@
 import { inngest } from './client'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
+import { AppError } from '@/lib/errors'
+import { stopBlockedCadence, exitContactEnrollment, runContactCadenceEffect } from '@/server/services/contact-suppression'
 import {
   completeEnrollment,
   computeNextAllowedRunTime,
@@ -88,6 +90,7 @@ export const cadenceStepFunction = inngest.createFunction(
       // immediately before effects so replies can cancel queued outreach.
       const current = await db.cadenceEnrollment.findFirst({ where: { id: enrollmentId }, select: { status: true } })
       if (!current || current.status !== 'ACTIVE') return null
+      if (await stopBlockedCadence(organizationId, leadId, enrollmentId)) return null
       const cadenceStep = await db.cadenceStep.findFirst({
         where: { id: stepId },
         select: {
@@ -167,7 +170,8 @@ export const cadenceStepFunction = inngest.createFunction(
             : undefined
 
           const { sendEmail } = await import('@/server/services/email')
-          const result = await sendEmail(
+          let result: Awaited<ReturnType<typeof sendEmail>>
+          try { result = await sendEmail(
             leadId,
             cadenceStep.emailSubject ?? '',
             cadenceStep.emailBody ?? '',
@@ -175,7 +179,11 @@ export const cadenceStepFunction = inngest.createFunction(
             organizationId,
             replyThreadId,
             attachments,
-          )
+          ) } catch (error) {
+            if (!(error instanceof AppError) || error.code !== 'CONTACT_BLOCKED') throw error
+            await exitContactEnrollment(organizationId, leadId, enrollmentId)
+            return null
+          }
 
           // Persist the Gmail thread id whenever:
           //   - this is the first send (no thread yet), or
@@ -198,16 +206,20 @@ export const cadenceStepFunction = inngest.createFunction(
             where: { id: enrollmentId },
             select: { enrolledById: true },
           })
-          await db.task.create({
-            data: tenantData({
+          const performed = await runContactCadenceEffect(organizationId, leadId, enrollmentId, async transaction => {
+          await transaction.task.create({
+            data: {
+              organizationId,
               title: cadenceStep.taskTitle ?? 'Make a call (cadence step)',
               description: cadenceStep.taskDescription ?? null,
               priority: 'HIGH',
               dueDate: new Date(), // Due immediately
               leadId,
               assigneeId: enrollment!.enrolledById,
-            }),
+            },
           })
+          })
+          if (!performed) return null
           break
         }
         case 'LINKEDIN': {
@@ -216,16 +228,20 @@ export const cadenceStepFunction = inngest.createFunction(
             where: { id: enrollmentId },
             select: { enrolledById: true },
           })
-          await db.task.create({
-            data: tenantData({
+          const performed = await runContactCadenceEffect(organizationId, leadId, enrollmentId, async transaction => {
+          await transaction.task.create({
+            data: {
+              organizationId,
               title: cadenceStep.taskTitle ?? 'LinkedIn outreach (cadence step)',
               description: cadenceStep.taskDescription ?? null,
               priority: 'MEDIUM',
               dueDate: new Date(),
               leadId,
               assigneeId: enrollment!.enrolledById,
-            }),
+            },
           })
+          })
+          if (!performed) return null
           break
         }
         case 'MANUAL_TASK': {
@@ -234,16 +250,20 @@ export const cadenceStepFunction = inngest.createFunction(
             where: { id: enrollmentId },
             select: { enrolledById: true },
           })
-          await db.task.create({
-            data: tenantData({
+          const performed = await runContactCadenceEffect(organizationId, leadId, enrollmentId, async transaction => {
+          await transaction.task.create({
+            data: {
+              organizationId,
               title: cadenceStep.taskTitle ?? 'Manual task (cadence step)',
               description: cadenceStep.taskDescription ?? null,
               priority: 'MEDIUM',
               dueDate: new Date(),
               leadId,
               assigneeId: enrollment!.enrolledById,
-            }),
+            },
           })
+          })
+          if (!performed) return null
           break
         }
       }
@@ -254,27 +274,30 @@ export const cadenceStepFunction = inngest.createFunction(
     if (!stepRecord) return { skipped: true, reason: 'enrollment_not_active' }
 
     // Step 3: Create StepExecutionLog entry with outcome SUCCESS
-    await step.run('create-execution-log', async () => {
-      await db.stepExecutionLog.create({
-        data: tenantData({
+    const logged = await step.run('create-execution-log', async () => runContactCadenceEffect(organizationId, leadId, enrollmentId, async transaction => {
+      await transaction.stepExecutionLog.create({
+        data: {
+          organizationId,
           enrollmentId,
           stepId,
           actionType: stepRecord.actionType,
           outcome: 'SUCCESS',
           attemptCount: 1,
-        }),
+        },
       })
-    })
+    }))
+    if (!logged) return { skipped: true, reason: 'enrollment_not_active' }
 
     // Step 4: Advance enrollment (increment currentStepOrder)
     const nextStepOrder = enrollment.currentStepOrder + 1
 
-    await step.run('advance-enrollment', async () => {
-      await db.cadenceEnrollment.update({
-        where: { id: enrollmentId },
+    const advanced = await step.run('advance-enrollment', async () => runContactCadenceEffect(organizationId, leadId, enrollmentId, async transaction => {
+      await transaction.cadenceEnrollment.update({
+        where: { id: enrollmentId, organizationId, leadId, status: 'ACTIVE' },
         data: { currentStepOrder: nextStepOrder },
       })
-    })
+    }))
+    if (!advanced) return { skipped: true, reason: 'enrollment_not_active' }
 
     // Step 5: Check if there's a next step
     const nextStep = await step.run('check-next-step', async () => {
@@ -292,7 +315,8 @@ export const cadenceStepFunction = inngest.createFunction(
       }
 
       // Send event to trigger next step execution
-      await step.run('schedule-next-step', async () => {
+      const scheduled = await step.run('schedule-next-step', async () => {
+        if (!await runContactCadenceEffect(organizationId, leadId, enrollmentId, async () => undefined)) return false
         await inngest.send({
           name: 'cadence/step.execute',
           data: {
@@ -303,14 +327,17 @@ export const cadenceStepFunction = inngest.createFunction(
             organizationId,
           },
         })
+        return true
       })
+      if (!scheduled) return { skipped: true, reason: 'enrollment_not_active' }
 
       return { executed: true, nextStepScheduled: true, nextStepId: nextStep.id }
     } else {
       // Final step — complete enrollment
-      await step.run('complete-enrollment', async () => {
-        await completeEnrollment(enrollmentId, organizationId)
-      })
+      const completed = await step.run('complete-enrollment', async () => runContactCadenceEffect(organizationId, leadId, enrollmentId, async transaction => {
+        await completeEnrollment(enrollmentId, organizationId, transaction)
+      }))
+      if (!completed) return { skipped: true, reason: 'enrollment_not_active' }
 
       return { executed: true, completed: true }
     }
