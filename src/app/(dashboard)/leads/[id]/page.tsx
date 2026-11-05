@@ -303,7 +303,7 @@ export default async function LeadDetailPage({
             )}
           </section>
 
-          {canWrite && (
+          {hasPermission(session.dbUser, 'leads:read') && (
             <section
               aria-label="Duplicate detection"
               className="flex flex-col gap-3 rounded-lg border bg-card p-[18px]"
@@ -311,8 +311,9 @@ export default async function LeadDetailPage({
               <h2 className="text-sm font-semibold">Duplicates</h2>
               <DuplicateCheck
                 leadId={lead.id}
-                leadEmail={lead.email}
-                companyName={lead.companyName}
+                organizationId={session.organizationId}
+                userId={session.dbUser.id}
+                canMerge={canWrite && canDelete}
               />
             </section>
           )}

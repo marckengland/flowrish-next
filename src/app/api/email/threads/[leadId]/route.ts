@@ -54,31 +54,32 @@ export async function GET(
       throw new AppError('LEAD_NOT_FOUND', 'Lead not found', 404)
     }
 
-    // Pull every message that touched this lead's email address. Both
-    // directions are included so the thread view can show inbound
-    // replies without a separate fetch.
+    // Explicitly linked activities preserve reviewed merge history even when
+    // the retained address is absent or differs from the archived record.
     const leadEmail = lead.email?.toLowerCase()
-    const messages = leadEmail
-      ? await db.emailMessage.findMany({
-          where: {
-            OR: [
-              { fromEmail: { equals: leadEmail, mode: 'insensitive' } },
-              { toEmail: { equals: leadEmail, mode: 'insensitive' } },
-            ],
-          },
-          orderBy: { sentAt: 'asc' },
-          select: {
-            id: true,
-            externalId: true,
-            threadId: true,
-            fromEmail: true,
-            toEmail: true,
-            subject: true,
-            bodyPreview: true,
-            sentAt: true,
-          },
-        })
-      : []
+    const messages = await db.emailMessage.findMany({
+      where: {
+        organizationId: session.organizationId,
+        OR: [
+          { activity: { leadId, organizationId: session.organizationId } },
+          ...(leadEmail ? [
+            { fromEmail: { equals: leadEmail, mode: 'insensitive' as const } },
+            { toEmail: { equals: leadEmail, mode: 'insensitive' as const } },
+          ] : []),
+        ],
+      },
+      orderBy: { sentAt: 'asc' },
+      select: {
+        id: true,
+        externalId: true,
+        threadId: true,
+        fromEmail: true,
+        toEmail: true,
+        subject: true,
+        bodyPreview: true,
+        sentAt: true,
+      },
+    })
 
     // Group by threadId — Gmail conversations live on `threadId`. When
     // a message has no thread (e.g. an older row that pre-dates the

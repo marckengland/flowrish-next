@@ -20,10 +20,7 @@ import { ActivityTimeline } from '@/components/activities/activity-timeline'
 import { ActivityForm } from '@/components/activities/activity-form'
 import { AuditLogTable } from '@/components/admin/audit-log-table'
 import { EmailCompose, type LatestEmailThread } from '@/components/email/email-compose'
-import {
-  EmailThread,
-  type EmailThreadMessage,
-} from '@/components/email/email-thread'
+import { EmailsTab } from './lead-emails'
 import { FileUpload } from '@/components/activities/file-upload'
 import type { ActivityItem } from '@/hooks/use-activities'
 
@@ -543,112 +540,6 @@ function TasksTab({
           )
         })}
       </div>
-    </div>
-  )
-}
-
-
-// ─── Emails tab ──────────────────────────────────────────────────────────────
-
-interface ThreadGroup {
-  threadId: string
-  messages: EmailThreadMessage[]
-}
-
-function EmailsTab({
-  leadId,
-  leadName,
-  leadEmail,
-  latestThread,
-  canWrite,
-}: {
-  leadId: string
-  leadName: string
-  leadEmail: string | null
-  latestThread?: LatestEmailThread
-  canWrite: boolean
-}): React.JSX.Element {
-  const [replyContext, setReplyContext] = useState<
-    { threadId: string; subject: string } | null
-  >(null)
-
-  const { data: threads = [], isLoading, isError, error } = useQuery<
-    ThreadGroup[]
-  >({
-    queryKey: ['email-threads', leadId],
-    queryFn: async () => {
-      const res = await fetch(`/api/email/threads/${leadId}`, {
-        credentials: 'same-origin',
-      })
-      if (!res.ok) throw new Error('Failed to load email threads')
-      const body = (await res.json()) as { data: ThreadGroup[] }
-      return body.data
-    },
-  })
-
-  if (!leadEmail) {
-    return (
-      <p className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-        This lead doesn&apos;t have an email address yet.
-      </p>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      {canWrite ? (
-        replyContext ? (
-          <EmailCompose
-            leadId={leadId}
-            leadEmail={leadEmail}
-            leadName={leadName}
-            replyToThreadId={replyContext.threadId}
-            replySubject={replyContext.subject}
-            onSent={() => setReplyContext(null)}
-          />
-        ) : (
-          <EmailCompose
-            leadId={leadId}
-            leadEmail={leadEmail}
-            leadName={leadName}
-            latestThread={latestThread}
-            alwaysOpen={false}
-          />
-        )
-      ) : null}
-
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading email threads…</p>
-      ) : isError ? (
-        <p role="alert" className="text-sm text-danger-foreground">
-          {error instanceof Error
-            ? error.message
-            : 'Failed to load email threads.'}
-        </p>
-      ) : threads.length === 0 ? (
-        <p className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-          No email threads with this lead yet.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {threads.map((thread) => (
-            <EmailThread
-              key={thread.threadId}
-              threadId={thread.threadId}
-              messages={thread.messages}
-              onReply={
-                canWrite
-                  ? (threadId, last) =>
-                      setReplyContext({
-                        threadId,
-                        subject: last.subject,
-                      })
-                  : undefined
-              }
-            />
-          ))}
-        </div>
-      )}
     </div>
   )
 }

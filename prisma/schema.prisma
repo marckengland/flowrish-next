@@ -78,6 +78,7 @@ model Organization {
   teams             Team[]
   users             OrganizationMember[]
   invites           OrganizationInvite[]
+  leadMergeReviews LeadMergeReview[]
   leads             Lead[]
   contacts          Contact[]
   companies         Company[]
@@ -333,6 +334,22 @@ model SavedLeadView {
   @@unique([organizationId, userId, name])
 }
 
+model LeadMergeReview {
+  id String @id @default(uuid())
+  organizationId String
+  userId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "LeadMergeReview_organizationId_fkey")
+  primaryId String
+  secondaryId String
+  fingerprint String
+  manifest Json @default("{}")
+  result Json?
+  expiresAt DateTime
+  appliedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([organizationId, userId, appliedAt, expiresAt])
+}
+
 model BulkLeadUpdate {
   id             String @id @default(uuid())
   organizationId String
@@ -485,6 +502,10 @@ model Lead {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
 
+  mergedIntoId String?
+  mergedInto Lead? @relation("MergedLeads", fields: [mergedIntoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  mergedLeads Lead[] @relation("MergedLeads")
+
   contacts           LeadContact[]
   activities         Activity[]
   tasks              Task[]
@@ -502,6 +523,7 @@ model Lead {
   @@index([stageId])
   @@index([assignedUserId])
   @@index([companyId])
+  @@index([mergedIntoId])
   @@index([score])
   @@index([leadStatus])
   @@index([tier])
