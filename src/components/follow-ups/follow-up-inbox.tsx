@@ -13,8 +13,9 @@ import { Button } from '@/components/ui/button'
 import { EmailCompose } from '@/components/email/email-compose'
 import { followUpHeaders, type FollowUpContext } from '@/lib/follow-up-access'
 import { followUpAccessLost, followUpData, FollowUpClientError } from '@/lib/follow-up-client'
+import { readFollowUpPages } from './follow-up-pages'
 import { cn } from '@/lib/utils'
-import { followUpFilterSchema, followUpListQuery, hasFollowUpFilters, type FollowUpFilters } from '@/lib/follow-up-filters'
+import { followUpFilterSchema, hasFollowUpFilters, type FollowUpFilters } from '@/lib/follow-up-filters'
 
 type FollowUpStatus = 'PENDING' | 'APPROVED' | 'DISMISSED'
 type FollowUpView = FollowUpStatus | 'SNOOZED'
@@ -89,6 +90,13 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   const [filterError, setFilterError] = useState('')
   const [items, setItems] = useState<FollowUpItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [pageSupported, setPageSupported] = useState(false)
+  const [pageTask, setPageTask] = useState<'more' | 'refresh' | null>(null)
+  const [pageError, setPageError] = useState('')
+  const pagesLoaded = useRef(1), retryDepth = useRef(1), pageFailed = useRef(false), loadingRef = useRef(true)
+  const pageController = useRef<AbortController | null>(null)
+  const abortPages = useCallback(() => { pageController.current?.abort(); pageController.current = null }, [])
   const [error, setError] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   const [navigation, setNavigation] = useState<Navigation | null>(null)
@@ -105,6 +113,8 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
 
   const invalidate = useCallback((cause?: unknown, id?: string) => {
     readEpoch.current++
+    abortPages(); setPageTask(null); setPageError(''); pageFailed.current = false
+    setLoading(false); loadingRef.current = false
     if (cause instanceof FollowUpClientError && cause.status === 404 && id) {
       setItems(previous => previous.filter(item => item.id !== id))
       openDrafts.current.delete(id)
@@ -114,6 +124,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     revokedRef.current = true
     setRevoked(true)
     setWriteAllowed(false)
+    setNextCursor(null); setPageSupported(false); pagesLoaded.current = 1
     setFilters(emptyFilters)
     setFilterDraft(emptyFilters)
     setFilterError('')
@@ -122,13 +133,14 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     setNavigation(null)
     setFocusedError('')
     setError('Access changed. Reload before continuing.')
-  }, [])
+  }, [abortPages])
 
   function navigate(target: Navigation, discard = false): boolean {
     if (target === status) return true
     if (typeof target === 'object' && 'filters' in target && JSON.stringify(target.filters) === JSON.stringify(filters) && (!target.filters.dueOnly || status === 'PENDING')) { setNavigation(null); setFilterDraft(target.filters); return true }
     if (!discard && openDrafts.current.size > 0) { setNavigation(target); return false }
     setNavigation(null)
+    abortPages(); setPageTask(null); setPageError(''); pageFailed.current = false; pagesLoaded.current = 1; setNextCursor(null)
     readEpoch.current++
     if (typeof target === 'object' && 'filters' in target) { setFilters(target.filters); setFilterDraft(target.filters); if (target.filters.dueOnly) setStatus('PENDING'); setRevision(value => value + 1) }
     else if (typeof target === 'object') { setFocusedReplyId(target.replyId); setStatus('PENDING'); setRevision(value => value + 1) }
@@ -151,47 +163,52 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   useEffect(() => {
     let current = true
     if (revokedRef.current) return
-    const epoch = ++readEpoch.current
+    const epoch = ++readEpoch.current, request = new AbortController()
+    abortPages(); setPageTask(null); setPageError(''); pageFailed.current = false; pagesLoaded.current = 1; setNextCursor(null); setPageSupported(false)
+    loadingRef.current = true
     const emailContext = emailOrganizationId && emailUserId ? { organizationId: emailOrganizationId, userId: emailUserId } : undefined
     setLoading(true)
     setError(null)
     setItems([])
     setFocusedError('')
-    const focused = focusedReplyId && emailContext && status === 'PENDING' ? fetch(`/api/email-notifications/follow-up/${focusedReplyId}`, { cache: 'no-store', headers: emailNotificationHeaders(emailContext) })
+    const focused = focusedReplyId && emailContext && status === 'PENDING' ? fetch(`/api/email-notifications/follow-up/${focusedReplyId}`, { cache: 'no-store', headers: emailNotificationHeaders(emailContext), signal: request.signal })
       .then(response => emailNotificationData(response, emailContext))
       .then(value => { const item = focusedEmailReply.parse(value); if (item.id !== focusedReplyId) throw new Error('The requested email reply changed. Refresh to try again.'); return item })
       .catch(cause => { if (cause instanceof EmailNotificationError && ([401, 403].includes(cause.status) || /CONTEXT|WORKSPACE/.test(cause.code))) throw cause; if (current) setFocusedError(cause instanceof Error ? cause.message : 'Requested reply is no longer available.'); return null }) : Promise.resolve(null)
-    Promise.all([fetch(`/api/follow-ups?${followUpListQuery(status, filters)}`, { cache: 'no-store', headers: emailContext ? followUpHeaders(emailContext) : {} }).then(response => followUpData<FollowUpItem[]>(response, emailContext)), focused])
-      .then(([result, item]) => { if (current && epoch === readEpoch.current && !revokedRef.current) { const rows = result.data; setWriteAllowed(result.canWrite ?? canWrite); setItems(item ? [item, ...rows.filter(row => row.id !== item.id)] : focusedReplyId && emailContext && status === 'PENDING' ? rows.filter(row => row.id !== focusedReplyId) : rows) } })
+    Promise.all([readFollowUpPages<FollowUpItem>({ status, filters, context: emailContext, depth: 1, retained: [], signal: request.signal }), focused])
+      .then(([result, item]) => { if (current && epoch === readEpoch.current && !revokedRef.current) { const rows = result.items; setNextCursor(result.nextCursor); setPageSupported(result.paged); pagesLoaded.current = result.pages; setWriteAllowed(result.canWrite ?? canWrite); setItems(item ? [item, ...rows.filter(row => row.id !== item.id)] : focusedReplyId && emailContext && status === 'PENDING' ? rows.filter(row => row.id !== focusedReplyId) : rows) } })
       .catch((cause) => { if (current) { if (followUpAccessLost(cause) || cause instanceof EmailNotificationError && ([401, 403].includes(cause.status) || /CONTEXT|WORKSPACE/.test(cause.code))) invalidate(cause); else setError(cause instanceof Error ? cause.message : 'Unable to load follow-ups.') } })
-      .finally(() => { if (current) setLoading(false) })
-    return () => { current = false }
-  }, [status, filters, revision, focusedReplyId, emailOrganizationId, emailUserId, canWrite, invalidate])
+      .finally(() => { if (current) { loadingRef.current = false; setLoading(false) } })
+    return () => { current = false; request.abort() }
+  }, [status, filters, revision, focusedReplyId, emailOrganizationId, emailUserId, canWrite, invalidate, abortPages])
 
+  const readLoadedPages = useCallback(async (depth: number, explicit: boolean) => {
+    if (loadingRef.current || revokedRef.current || pageController.current || (!explicit && pageFailed.current)) return
+    const request = new AbortController(), epoch = readEpoch.current
+    pageController.current = request; retryDepth.current = depth; pageFailed.current = false
+    setPageTask(depth > pagesLoaded.current ? 'more' : 'refresh'); setPageError('')
+    const active = () => pageController.current === request && !request.signal.aborted
+    const retained = new Set([...openDrafts.current, ...(focusedReplyId && focusedReplyId !== hiddenFocused.current ? [focusedReplyId] : [])])
+    try {
+      const result = await readFollowUpPages<FollowUpItem>({ status, filters, context: emailOrganizationId && emailUserId ? { organizationId: emailOrganizationId, userId: emailUserId } : undefined, depth, retained: [...retained], signal: request.signal })
+      if (!active() || revokedRef.current) return
+      if (epoch !== readEpoch.current) { if (explicit) { pageFailed.current = true; setPageError('The list changed while loading. Retry to continue with your current drafts.') }; return }
+      setItems(result.items); setWriteAllowed(result.canWrite ?? canWrite); pagesLoaded.current = result.pages
+      setNextCursor(result.nextCursor); setPageSupported(result.paged)
+    } catch (cause) {
+      if (!active()) return
+      if (followUpAccessLost(cause)) { invalidate(cause); return }
+      if (epoch === readEpoch.current) { pageFailed.current = true; setPageError(cause instanceof Error ? cause.message : 'Unable to load follow-ups. Retry to continue.') }
+    } finally { if (active()) { pageController.current = null; setPageTask(null) } }
+  }, [status, filters, emailOrganizationId, emailUserId, focusedReplyId, canWrite, invalidate])
+  useEffect(() => () => abortPages(), [abortPages])
   useEffect(() => {
     if (!emailOrganizationId || !emailUserId || revoked) return
-    let current = true, checking = false
-    const context = { organizationId: emailOrganizationId, userId: emailUserId }
-    async function revalidate(): Promise<void> {
-      if (!current || checking || revokedRef.current || document.visibilityState !== 'visible') return
-      checking = true
-      const epoch = readEpoch.current
-      const query = followUpListQuery(status, filters)
-      const retained = new Set([...openDrafts.current, ...(focusedReplyId && focusedReplyId !== hiddenFocused.current ? [focusedReplyId] : [])])
-      for (const id of retained) query.append('retain', id)
-      try {
-        const result = await followUpData<FollowUpItem[]>(await fetch(`/api/follow-ups?${query}`, { cache: 'no-store', headers: followUpHeaders(context) }), context)
-        if (current && epoch === readEpoch.current && !revokedRef.current) { setItems(result.data); setWriteAllowed(result.canWrite ?? false) }
-      } catch (cause) {
-        if (current && epoch === readEpoch.current && followUpAccessLost(cause)) invalidate(cause)
-      } finally { checking = false }
-    }
-    const timer = window.setInterval(() => void revalidate(), 60000)
-    const focus = () => { void revalidate() }
-    window.addEventListener('focus', focus)
-    document.addEventListener('visibilitychange', focus)
-    return () => { current = false; window.clearInterval(timer); window.removeEventListener('focus', focus); document.removeEventListener('visibilitychange', focus) }
-  }, [emailOrganizationId, emailUserId, status, filters, focusedReplyId, revoked, invalidate])
+    const revalidate = () => { if (document.visibilityState === 'visible') void readLoadedPages(pagesLoaded.current, false) }
+    const timer = window.setInterval(revalidate, 60000)
+    window.addEventListener('focus', revalidate); document.addEventListener('visibilitychange', revalidate)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', revalidate); document.removeEventListener('visibilitychange', revalidate) }
+  }, [emailOrganizationId, emailUserId, revoked, readLoadedPages])
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -239,7 +256,13 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
           window.dispatchEvent(new Event(EMAIL_NOTIFICATION_EVENT))
         }} />)}</div>}
       </section>
-      <p className="text-xs text-muted-foreground">Showing up to 100 recent items assigned to you, plus open drafts and a focused reply. Email sources are previews, and draft text is a starting template. Approving a task does not send an email.</p>
+      {!loading && !revoked && (pageSupported || pageError) && <section aria-label="Follow-up pagination" className="space-y-3">
+        {pageTask && <p role="status" className="text-sm text-muted-foreground">{pageTask === 'more' ? 'Loading more follow-ups…' : 'Checking follow-ups…'}</p>}
+        {pageError && <p role="alert" className="text-sm text-destructive">{pageError}</p>}
+        <div className="flex flex-wrap gap-2">{nextCursor && <Button type="button" variant="outline" disabled={pageTask !== null} onClick={() => void readLoadedPages(pagesLoaded.current + 1, true)}>Load more</Button>}{pageError && <Button type="button" variant="outline" disabled={pageTask !== null} onClick={() => void readLoadedPages(retryDepth.current, true)}>Retry loading</Button>}</div>
+        {pageSupported && !nextCursor && !pageTask && !pageError && <p className="text-xs text-muted-foreground">All matching follow-ups are loaded.</p>}
+      </section>}
+      <p className="text-xs text-muted-foreground">{pageSupported ? `${items.length} loaded items assigned to you, including retained drafts and focused replies. Load more keeps your filters and unsent drafts.` : 'Showing up to 100 recent items assigned to you, plus open drafts and a focused reply.'} Email sources are previews, and draft text is a starting template. Approving a task does not send an email.</p>
     </div>
   )
 }

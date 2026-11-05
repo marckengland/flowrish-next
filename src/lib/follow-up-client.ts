@@ -2,10 +2,10 @@
 import type { FollowUpContext } from './follow-up-access'
 export class FollowUpClientError extends Error { constructor(message: string, public status: number, public code: string) { super(message) } }
 export const followUpAccessLost = (error: unknown) => error instanceof FollowUpClientError && ([401, 403, 404].includes(error.status) || /CONTEXT|WORKSPACE/.test(error.code))
-export async function followUpData<T>(response: Response, context?: FollowUpContext): Promise<{ data: T; canWrite: boolean | undefined }> {
+export async function followUpData<T>(response: Response, context?: FollowUpContext): Promise<{ data: T; canWrite: boolean | undefined; page?: unknown }> {
   const value = await response.json()
   if (!response.ok) throw new FollowUpClientError(value.error?.message ?? 'Follow-ups are unavailable. Try again.', response.status, value.error?.code ?? '')
   if (context && (value.scope?.organizationId !== context.organizationId || value.scope?.userId !== context.userId)) throw new FollowUpClientError('The account or business changed. Reload before continuing.', 409, 'FOLLOW_UP_CONTEXT_CHANGED')
   if (context && typeof value.capabilities?.canWrite !== 'boolean') throw new FollowUpClientError('Current permissions could not be verified. Reload before continuing.', 409, 'FOLLOW_UP_CONTEXT_CHANGED')
-  return { data: value.data as T, canWrite: value.capabilities?.canWrite }
+  return { data: value.data as T, ...(value.page === undefined ? {} : { page: value.page }), canWrite: value.capabilities?.canWrite }
 }

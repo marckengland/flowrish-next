@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { followUpFilterSchema } from '@/lib/follow-up-filters'
 import { followUpFilterSql } from './follow-up-filter-sql'
+import { followUpPageRequest } from '@/lib/follow-up-page'
+import { encodeFollowUpCursor, decodeFollowUpCursor, followUpPageAccessVersion } from './follow-up-page-cursor'
 import { snoozeView } from './follow-up-snooze'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db/client'
@@ -55,10 +57,13 @@ export async function reviewFollowUp(organizationId: string, userId: string, id:
 }
 
 /** Materializes authorized callback work; pending reviews follow their task owner. */
-export async function listFollowUps(organizationId: string, userId: string, status = 'PENDING', retainedIds: readonly string[] = [], rawFilters: unknown = {}) {
+export async function listFollowUps(organizationId: string, userId: string, status = 'PENDING', retainedIds: readonly string[] = [], rawFilters: unknown = {}, rawPage?: unknown) {
+  const paging = rawPage === undefined ? undefined : followUpPageRequest.parse(rawPage)
   const filters = followUpFilterSchema.parse(rawFilters)
   const retained = z.array(z.string().min(1).max(128)).max(100).parse(retainedIds)
   if (!['PENDING', 'APPROVED', 'DISMISSED', 'SNOOZED'].includes(status)) throw new AppError('VALIDATION_ERROR', 'Invalid follow-up status', 400)
+  const cursorScope = { organizationId, userId, status, filters }
+  const after = paging?.after ? decodeFollowUpCursor(cursorScope, paging.after) : null
   return safeFollowUp(() => prisma.$transaction(async tx => {
     await lockFollowUpMember(tx, organizationId, userId)
     const access = await currentFollowUpAccess(tx, organizationId, userId)
@@ -107,7 +112,8 @@ export async function listFollowUps(organizationId: string, userId: string, stat
     // Apply lead and callback ownership eligibility before the page limit. Open
     // drafts/focused rows are revalidated independently of status and pagination.
     const view = status === 'SNOOZED' ? Prisma.sql`status='PENDING' AND until>timezone('UTC',statement_timestamp())` : status === 'PENDING' ? Prisma.sql`status='PENDING' AND (until IS NULL OR until<=timezone('UTC',statement_timestamp()))` : Prisma.sql`status=${status}`
-    const eligible = await tx.$queryRaw<Array<{ id: string }>>`WITH eligible AS (
+    const position = after ? Prisma.sql`("createdAt"<${after.createdAt} OR ("createdAt"=${after.createdAt} AND id>${after.id}))` : Prisma.sql`TRUE`
+    const eligible = await tx.$queryRaw<Array<{ id: string; createdAt: Date; isPage: boolean; hasMore: boolean }>>`WITH eligible AS (
       SELECT f.id,f."createdAt",f.status,s.until,f."sourceType",concat_ws(' ',l."firstName",l."lastName",l.email,f.title) AS "searchText" FROM "FollowUpSuggestion" f
       LEFT JOIN "FollowUpSnooze" s ON s."organizationId"=f."organizationId" AND s."userId"=${userId} AND s."followUpId"=f.id
       JOIN "Lead" l ON l.id=f."leadId" AND l."organizationId"=${organizationId}
@@ -116,11 +122,13 @@ export async function listFollowUps(organizationId: string, userId: string, stat
         AND (f.status<>'PENDING' OR (f."taskId" IS NULL AND f."sourceType"<>'CALL') OR EXISTS (
           SELECT 1 FROM "Task" t WHERE t.id=f."taskId" AND t."organizationId"=${organizationId}
             AND t."assigneeId"=${userId} AND t."leadId"=f."leadId" AND t."isComplete"=false))
+    ), page_candidates AS (
+      SELECT id,"createdAt" FROM eligible WHERE ${view} AND (${followUpFilterSql(filters)}) AND (${position}) ORDER BY "createdAt" DESC,id LIMIT ${paging ? 101 : 100}
     ), selected AS (
-      (SELECT id,"createdAt" FROM eligible WHERE ${view} AND (${followUpFilterSql(filters)}) ORDER BY "createdAt" DESC,id LIMIT 100)
-      UNION (SELECT id,"createdAt" FROM eligible WHERE ${retainScope})
-    ) SELECT id FROM selected ORDER BY "createdAt" DESC,id`
-    const rows = await tx.followUpSuggestion.findMany({ where: { organizationId, assigneeId: userId, id: { in: eligible.map(row => row.id) } }, orderBy: { createdAt: 'desc' } })
+      (SELECT id,"createdAt",true AS "isPage" FROM page_candidates ORDER BY "createdAt" DESC,id LIMIT 100)
+      UNION ALL (SELECT id,"createdAt",false AS "isPage" FROM eligible WHERE ${retainScope})
+    ) SELECT id,"createdAt",bool_or("isPage") AS "isPage",(SELECT count(*)>100 FROM page_candidates) AS "hasMore" FROM selected GROUP BY id,"createdAt" ORDER BY "createdAt" DESC,id`
+    const rows = await tx.followUpSuggestion.findMany({ where: { organizationId, assigneeId: userId, id: { in: eligible.map(row => row.id) } }, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] })
     const leads = await tx.lead.findMany({ where: { organizationId, mergedIntoId: null, id: { in: rows.map(row => row.leadId) }, AND: [final.filter] }, select: { id: true, firstName: true, lastName: true, email: true } })
     const tasks = await tx.task.findMany({ where: { organizationId, assigneeId: userId, isComplete: false, lead: { organizationId, mergedIntoId: null, AND: [final.filter] } }, select: { id: true, leadId: true } })
     const byId = new Map(leads.map(lead => [lead.id, lead])), taskById = new Map(tasks.map(task => [task.id, task.leadId]))
@@ -133,6 +141,13 @@ export async function listFollowUps(organizationId: string, userId: string, stat
     })
     const current = await currentFollowUpAccess(tx, organizationId, userId)
     if (JSON.stringify(current.filter) !== JSON.stringify(final.filter)) throw followUpUnavailable()
-    return { items, canWrite: current.canWrite }
+    let nextCursor: string | null = null
+    if (paging && eligible.some(row => row.hasMore)) {
+      const visible = new Set(items.map(row => row.id))
+      const anchor = eligible.filter(row => row.isPage && visible.has(row.id)).at(-1)
+      if (!anchor) throw followUpChanged()
+      nextCursor = encodeFollowUpCursor(cursorScope, anchor)
+    }
+    return { items, canWrite: current.canWrite, ...(paging ? { page: { nextCursor, accessVersion: followUpPageAccessVersion(current.filter) } } : {}) }
   }, { timeout: 20000 }))
 }
