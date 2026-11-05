@@ -135,7 +135,7 @@ export const emailSyncFunction = inngest.createFunction(
                 return { fresh: false, reply: message }
               }
             }
-            const emailMessage = await tx.emailMessage.create({
+            await tx.emailMessage.create({
               data: tenantData({
                 accountId, externalId, threadId: message.threadId, fromEmail: message.fromEmail,
                 toEmail: message.toEmail, subject: message.subject,
@@ -143,18 +143,6 @@ export const emailSyncFunction = inngest.createFunction(
                 replyMetadata: message as unknown as Prisma.InputJsonValue,
               }),
             })
-            const matchEmail = message.fromEmail.toLowerCase() === account.email.toLowerCase() ? message.toEmail : message.fromEmail
-            if (matchEmail) {
-              const leads = await tx.lead.findMany({
-                where: { deletedAt: null, OR: [{ email: { equals: matchEmail, mode: 'insensitive' } }, { altEmail: { equals: matchEmail, mode: 'insensitive' } }] },
-                select: { id: true }, take: 2,
-              })
-              if (leads.length === 1) {
-                const lead = leads[0]
-                await tx.activity.create({ data: tenantData({ type: 'EMAIL', leadId: lead.id, createdById: account.userId, notes: message.subject ? `Email: ${message.subject}` : 'Email', emailMessageId: emailMessage.id }) })
-                await tx.lead.updateMany({ where: { id: lead.id, OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: sentAt } }] }, data: { lastActivityAt: sentAt } })
-              }
-            }
             return { fresh: true, reply: message }
           }, { timeout: 15000 })
           if (saved.fresh) pageSynced++
@@ -198,7 +186,7 @@ export const emailSyncFunction = inngest.createFunction(
           }
           nextCursor = data.nextPageToken
         }
-        await reconcileEmailReplies(organizationId, accountId, replies)
+        await reconcileEmailReplies(organizationId, accountId, replies, { userId: account.userId, email: account.email, provider: account.provider })
         await heartbeatMailboxSync(organizationId, accountId, runId)
         return { synced: pageSynced, skipped: pageSkipped, nextCursor }
       })

@@ -1,0 +1,22 @@
+import { beforeEach, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react'
+import { EmailMatchInbox } from './email-match-inbox'
+const context = { organizationId: 'org', userId: 'owner' }, id = '550e8400-e29b-41d4-a716-446655440001', leadId = '550e8400-e29b-41d4-a716-446655440002'
+const item = { id, fromEmail: 'old@example.invalid', subject: 'Please call', bodyPreview: 'Tomorrow', sentAt: '2026-11-05T00:00:00.000Z', mailboxEmail: 'owner@example.invalid', reason: 'AMBIGUOUS' }
+const preview = { message: item, version: 'a'.repeat(64), candidates: [{ id: leadId, label: 'Practice Clinic', email: 'new@example.invalid', canLink: true, viaArchive: true }], restrictedMatches: false, blocked: false }
+const fetchMock = vi.fn(), resolved = vi.fn()
+function response(data: unknown) { return new Response(JSON.stringify({ data, scope: context })) }
+beforeEach(() => { cleanup(); vi.resetAllMocks(); vi.stubGlobal('fetch', fetchMock); fetchMock.mockImplementation(async (url: string) => response(url.endsWith('/preview') ? preview : [item])) })
+async function review() { render(<EmailMatchInbox context={context} canWrite onResolved={resolved} />); fireEvent.click(await screen.findByRole('button', { name: 'Review match' })); await screen.findByText('Practice Clinic') }
+it('requires an explicit candidate and acknowledgment before linking; never drafts or sends automatically', async () => {
+  await review(); const confirm = screen.getByRole('button', { name: 'Confirm email match' }); expect(confirm).toBeDisabled(); fireEvent.click(screen.getByLabelText(/Practice Clinic/)); expect(confirm).toBeDisabled(); fireEvent.click(screen.getByLabelText(/I reviewed/)); fetchMock.mockImplementationOnce(async (_url, init) => response({ messageId: id, requestId: JSON.parse(init.body).requestId, action: 'link', leadId, stopped: 1, suggestionCreated: true })); fireEvent.click(confirm); await screen.findByText(/Email linked/); expect(resolved).toHaveBeenCalledOnce(); expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/email/matches', `/api/email/matches/${id}/preview`, `/api/email/matches/${id}/resolve`]); expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({ action: 'link', expectedVersion: preview.version, leadId, confirmed: true })
+})
+it('retries an uncertain result with the identical request and blocks another action', async () => {
+  await review(); fireEvent.click(screen.getByLabelText(/Practice Clinic/)); fireEvent.click(screen.getByLabelText(/I reviewed/)); fetchMock.mockRejectedValueOnce(new Error('Synthetic network loss')); fireEvent.click(screen.getByRole('button', { name: 'Confirm email match' })); const retry = await screen.findByRole('button', { name: 'Retry confirmed update' }); expect(screen.getByRole('button', { name: 'Confirm email match' })).toBeDisabled(); fetchMock.mockImplementationOnce(async (_url, init) => response({ messageId: id, requestId: JSON.parse(init.body).requestId, action: 'link', leadId, stopped: 0, suggestionCreated: false })); fireEvent.click(retry); await screen.findByText(/Email linked/); expect(fetchMock.mock.calls[2][1].body).toBe(fetchMock.mock.calls[3][1].body)
+})
+it('clears private data on revoked access and rejects stale scope responses', async () => {
+  await review(); fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Access changed' } }), { status: 403 })); fireEvent.click(screen.getByLabelText(/I reviewed/)); fireEvent.click(screen.getByRole('button', { name: 'Dismiss match review' })); await screen.findByText(/Reload to check/); expect(screen.queryByText('Practice Clinic')).not.toBeInTheDocument(); expect(screen.queryByText('Please call')).not.toBeInTheDocument(); expect(resolved).not.toHaveBeenCalled()
+})
+it('allows read-only inspection without mutation controls', async () => {
+  render(<EmailMatchInbox context={context} canWrite={false} onResolved={resolved} />); fireEvent.click(await screen.findByRole('button', { name: 'Review match' })); await screen.findByText('Practice Clinic'); expect(screen.queryByRole('button', { name: 'Confirm email match' })).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Dismiss match review' })).not.toBeInTheDocument(); await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+})

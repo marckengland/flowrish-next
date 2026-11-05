@@ -20,11 +20,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockDb = {
   $transaction: vi.fn(),
+  $queryRaw: vi.fn(),
+  organizationMember: { findUnique: vi.fn() },
+  cadenceEnrollment: { findMany: vi.fn(), updateMany: vi.fn() },
+  followUpSuggestion: { createMany: vi.fn() },
+  auditEntry: { create: vi.fn() },
   emailAccount: {
     findFirst: vi.fn(),
     update: vi.fn(),
   },
   emailMessage: {
+    findUnique: vi.fn(),
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
@@ -35,6 +41,7 @@ const mockDb = {
     updateMany: vi.fn(),
   },
   activity: {
+    findUnique: vi.fn(),
     create: vi.fn(),
   },
 }
@@ -44,15 +51,15 @@ vi.mock('@/server/db/middleware', () => ({
   TENANT_SCOPED_MODELS: ['EmailAccount', 'EmailMessage', 'Lead', 'Activity'],
 }))
 
+vi.mock('@/server/services/email-routing-policy', () => ({ emailRoutingEnabled: () => true }))
+
 vi.mock('@/server/db/client', () => ({
   prisma: {
     $transaction: vi.fn(),
   },
 }))
 
-vi.mock('@prisma/client', () => ({
-  PrismaClient: vi.fn(),
-}))
+vi.mock('@prisma/client', async () => ({ ...await vi.importActual('@prisma/client'), PrismaClient: vi.fn() }))
 
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServer: vi.fn(),
@@ -84,6 +91,7 @@ const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
 // Import after mocks
+import { prisma } from '@/server/db/client'
 import { emailSyncFunction } from '../email-sync'
 import { reconcileEmailReplies } from '@/server/services/follow-ups'
 import { listMicrosoftMessagesPage as listMicrosoftMessages } from '@/server/services/microsoft-email'
@@ -153,6 +161,23 @@ const handler = (emailSyncFunction as any).handler
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
+beforeEach(() => {
+    vi.resetAllMocks()
+
+    mockDb.$queryRaw.mockResolvedValue([{ id: 'member' }])
+    mockDb.organizationMember.findUnique.mockResolvedValue({ userId })
+    mockDb.cadenceEnrollment.findMany.mockResolvedValue([])
+    mockDb.lead.findMany.mockResolvedValue([])
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn: any) => fn(mockDb))
+    vi.mocked(reconcileEmailReplies).mockImplementation(async (org, account, replies, expected) => {
+      const actual = await vi.importActual<typeof import('@/server/services/email-routing')>('@/server/services/email-routing')
+      const records = new Map(replies.map(reply => [reply.externalId, { ...reply, id: mockDb.emailMessage.create.mock.results.at(-1)?.value ? 'new-msg-id' : 'saved', organizationId: org, accountId: account, sentAt: new Date(reply.sentAt), replyMetadata: reply, leadRouting: null }]))
+      mockDb.emailMessage.findUnique.mockImplementation(async ({ where }: any) => records.get(where.organizationId_accountId_externalId.externalId))
+      mockDb.activity.findUnique.mockImplementation(async () => mockDb.emailMessage.create.mock.calls.length ? null : { id: 'existing-activity', leadId: 'lead' })
+      return actual.reconcileStoredEmailReplies(org, account, replies, expected)
+    })
+})
+
 describe('Email Sync Function', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -181,6 +206,7 @@ describe('Email Sync Function', () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({
         id: accountId,
         email: 'user@example.com',
+        provider: 'gmail', organizationId: orgId,
         accessToken: 'encrypted_token',
         userId,
       })
@@ -214,6 +240,7 @@ describe('Email Sync Function', () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({
         id: accountId,
         email: 'user@example.com',
+        provider: 'gmail', organizationId: orgId,
         accessToken: 'encrypted_token',
         userId,
       })
@@ -240,6 +267,7 @@ describe('Email Sync Function', () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({
         id: accountId,
         email: 'user@example.com',
+        provider: 'gmail', organizationId: orgId,
         accessToken: 'encrypted_token',
         userId,
       })
@@ -261,6 +289,7 @@ describe('Email Sync Function', () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({
         id: accountId,
         email: 'user@example.com',
+        provider: 'gmail', organizationId: orgId,
         accessToken: 'encrypted_token',
         userId,
       })
@@ -284,6 +313,7 @@ describe('Email Sync Function', () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({
         id: accountId,
         email: 'user@example.com',
+        provider: 'gmail', organizationId: orgId,
         accessToken: 'encrypted_token',
         userId,
       })
@@ -307,6 +337,7 @@ describe('Email Sync Function', () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({
         id: accountId,
         email: 'user@example.com',
+        provider: 'gmail', organizationId: orgId,
         accessToken: 'encrypted_token',
         userId,
       })
@@ -352,6 +383,7 @@ describe('Email Sync Function', () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({
         id: accountId,
         email: 'user@example.com',
+        provider: 'gmail', organizationId: orgId,
         accessToken: 'encrypted_token',
         userId,
       })
@@ -382,13 +414,13 @@ describe('Email Sync Function', () => {
       expect(result).toEqual({ synced: 1, skipped: 0 })
       expect(mockDb.lead.findMany).toHaveBeenCalledWith({
         where: expect.objectContaining({
-          deletedAt: null,
-          OR: [
+          organizationId: orgId,
+          AND: expect.arrayContaining([{ OR: [
             { email: { equals: 'lead@company.com', mode: 'insensitive' } },
             { altEmail: { equals: 'lead@company.com', mode: 'insensitive' } },
-          ],
+          ] }]),
         }),
-        select: { id: true }, take: 2,
+        select: expect.objectContaining({ id: true, mergedIntoId: true, deletedAt: true }), orderBy: { id: 'asc' }, take: 201,
       })
       expect(mockDb.activity.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -398,7 +430,7 @@ describe('Email Sync Function', () => {
         }),
       })
       expect(mockDb.lead.updateMany).toHaveBeenCalledWith({
-        where: { id: leadId, OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: expect.any(Date) } }] },
+        where: { id: leadId, organizationId: orgId, deletedAt: null, mergedIntoId: null, OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: expect.any(Date) } }] },
         data: { lastActivityAt: expect.any(Date) },
       })
     })
@@ -410,6 +442,7 @@ describe('Email Sync Function', () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({
         id: accountId,
         email: 'user@example.com',
+        provider: 'gmail', organizationId: orgId,
         accessToken: 'encrypted_token',
         userId,
       })
@@ -440,12 +473,12 @@ describe('Email Sync Function', () => {
       // For outgoing emails (from = account email), should match by toEmail
       expect(mockDb.lead.findMany).toHaveBeenCalledWith({
         where: expect.objectContaining({
-          OR: [
+          AND: expect.arrayContaining([{ OR: [
             { email: { equals: 'lead@company.com', mode: 'insensitive' } },
             { altEmail: { equals: 'lead@company.com', mode: 'insensitive' } },
-          ],
+          ] }]),
         }),
-        select: { id: true }, take: 2,
+        select: expect.objectContaining({ id: true, mergedIntoId: true, deletedAt: true }), orderBy: { id: 'asc' }, take: 201,
       })
     })
 
@@ -455,6 +488,7 @@ describe('Email Sync Function', () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({
         id: accountId,
         email: 'user@example.com',
+        provider: 'gmail', organizationId: orgId,
         accessToken: 'encrypted_token',
         userId,
       })
@@ -499,7 +533,7 @@ describe('Email Sync Function', () => {
       const result = await handler({ event: createMockEvent(), step: createMockStep() })
       expect(result).toEqual({ synced: 0, skipped: 1 })
       expect(mockDb.emailMessage.findFirst).toHaveBeenCalledWith({ where: { accountId, externalId: 'message' } })
-      expect(reconcileEmailReplies).toHaveBeenCalledWith(orgId, accountId, [reply])
+      expect(reconcileEmailReplies).toHaveBeenCalledWith(orgId, accountId, [reply], expect.objectContaining({ userId, email: 'rep@example.com' }))
       expect(mockDb.activity.create).not.toHaveBeenCalled()
     })
     it('adopts exact legacy inbound history without duplicating the email or activity', async () => {
@@ -511,7 +545,7 @@ describe('Email Sync Function', () => {
       expect(mockDb.emailMessage.update).toHaveBeenCalledWith({ where: { id: 'legacy' }, data: { accountId, replyMetadata: reply } })
       expect(mockDb.emailMessage.create).not.toHaveBeenCalled()
       expect(mockDb.activity.create).not.toHaveBeenCalled()
-      expect(reconcileEmailReplies).toHaveBeenCalledWith(orgId, accountId, [reply])
+      expect(reconcileEmailReplies).toHaveBeenCalledWith(orgId, accountId, [reply], expect.objectContaining({ userId, email: 'rep@example.com' }))
     })
     it('feeds Microsoft headers and recipients through the same normalized reply processor', async () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({ id: accountId, email: 'rep@example.com', userId, provider: 'microsoft', accessToken: 'encrypted' })
@@ -520,7 +554,7 @@ describe('Email Sync Function', () => {
       mockDb.emailMessage.create.mockResolvedValue({ id: 'saved' })
       mockDb.lead.findMany.mockResolvedValue([])
       await handler({ event: createMockEvent(), step: createMockStep() })
-      expect(reconcileEmailReplies).toHaveBeenCalledWith(orgId, accountId, [{ ...reply, recipientEmails: ['rep@example.com'] }])
+      expect(reconcileEmailReplies).toHaveBeenCalledWith(orgId, accountId, [{ ...reply, recipientEmails: ['rep@example.com'] }], expect.objectContaining({ userId, provider: 'microsoft' }))
       expect(mockDb.emailMessage.create).toHaveBeenCalledWith({ data: expect.objectContaining({ accountId, replyMetadata: expect.objectContaining({ headers: reply.headers }) }) })
     })
     it('does not attach an ambiguous lead or create duplicate activities', async () => {
@@ -541,6 +575,7 @@ describe('Email Sync Function', () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({
         id: accountId,
         email: 'user@example.com',
+        provider: 'gmail', organizationId: orgId,
         accessToken: 'encrypted_token',
         userId,
       })
@@ -571,6 +606,7 @@ describe('Email Sync Function', () => {
       mockDb.emailAccount.findFirst.mockResolvedValue({
         id: accountId,
         email: 'user@example.com',
+        provider: 'gmail', organizationId: orgId,
         accessToken: 'encrypted_token',
         userId,
       })

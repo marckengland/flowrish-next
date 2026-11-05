@@ -916,6 +916,7 @@ model EmailMessage {
   externalId  String    // provider message ID, scoped to the connected mailbox
   accountId   String?
   replyMetadata Json?
+  leadRouting Json?
   threadId    String?   // provider thread ID for reply-in-thread
   fromEmail   String
   toEmail     String

@@ -8,7 +8,7 @@ Open a lead and select **Check for duplicates**. Matches use permitted records i
 
 The retained lead keeps its fields, including its owner, stage, score, status, and email address. Its update timestamp advances. The secondary lead is archived with its original fields; it is not permanently deleted. Activities, tasks, stage history, and score history move to the retained lead. Missing contact links are added without duplicating existing links, and the original archive contact links remain. Email-message and attachment identities stay attached to the transferred activities.
 
-Linked conversations remain visible in the retained lead’s Emails tab even when its address differs or is missing. A transferred thread that does not involve the retained address has no Reply control. Merging sends no emails, executes no cadence steps, and creates no callbacks. Existing linked conversations are transferred as history; this release does not register the archived address as an inbox alias or change future email-matching rules. Choose the retained email accordingly.
+Linked conversations remain visible in the retained lead’s Emails tab even when its address differs or is missing. A transferred thread that does not involve the retained address has no Reply control. Merging sends no emails, executes no cadence steps, and creates no callbacks. Existing linked conversations are transferred as history. Future synced messages can resolve archived addresses through the retained lead; conflicting matches require owner review in Follow-ups. See [merge-aware replies](merge-aware-replies.md). This does not register an email-provider alias or change the retained email fields.
 
 ## Blocked merges
 

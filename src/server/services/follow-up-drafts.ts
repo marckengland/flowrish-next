@@ -7,6 +7,8 @@ import { getLeadAccessFilter } from '@/server/services/access'
 import { fetchEmailConversation, type EmailConversation } from '@/server/services/email-conversation'
 import { generateConversationFollowUp } from '@/server/services/ai'
 import { AppError } from '@/lib/errors'
+import { normalizeEmail, routingState } from '@/lib/email-routing'
+import { matchEmailLead } from './email-lead-matcher'
 
 const contextSchema = z.object({ accountId: z.string().min(1), provider: z.enum(['gmail', 'microsoft']), threadId: z.string().min(1), recipientEmail: z.string().email(), mailboxEmail: z.string().email(), fingerprint: z.string().min(1), messageCount: z.number().int().positive(), lastMessageAt: z.string().datetime({ offset: true }) })
 const instructionsSchema = z.string().max(2000).optional()
@@ -28,11 +30,21 @@ async function authorizedSource(organizationId: string, userId: string, id: stri
   const parsedKey = z.tuple([z.enum(['gmail', 'microsoft']), z.string().min(1), z.string().min(1)]).safeParse(key)
   if (!parsedKey.success || parsedKey.data[2] !== suggestion.sourceId) throw new AppError('INVALID_SOURCE', 'The source mailbox could not be verified.', 409)
   const [provider, accountId] = parsedKey.data
-  const account = await prisma.emailAccount.findFirst({ where: { id: accountId, organizationId, userId, provider }, select: { id: true } })
-  const message = await prisma.emailMessage.findFirst({ where: { organizationId, accountId, externalId: suggestion.sourceId, threadId: suggestion.sourceThreadId }, select: { id: true } })
+  const account = await prisma.emailAccount.findFirst({ where: { id: accountId, organizationId, userId, provider }, select: { id: true, userId: true, email: true, provider: true } })
+  const message = await prisma.emailMessage.findFirst({ where: { organizationId, accountId, externalId: suggestion.sourceId, threadId: suggestion.sourceThreadId }, select: { id: true, fromEmail: true, leadRouting: true, activity: { select: { leadId: true, organizationId: true } } } })
   if (!account || !message) throw new AppError('INVALID_SOURCE', 'The source mailbox or message is no longer available.', 409)
   const leadEmails = [lead.email, lead.altEmail].filter((email): email is string => Boolean(email)).map((email) => email.trim().toLowerCase())
-  return { suggestion, accountId, provider, leadEmails }
+  let verifiedAlias = false
+  if (message.fromEmail && normalizeEmail(message.fromEmail) !== normalizeEmail(account.email) && !leadEmails.includes(normalizeEmail(message.fromEmail))) {
+    const invalid = () => new AppError('INVALID_SOURCE', 'The source address is no longer linked to this lead. Review the email match before drafting.', 409)
+    const proof = routingState.safeParse(message.leadRouting), address = normalizeEmail(message.fromEmail)
+    if (!proof.success || proof.data.state !== 'ROUTED' || proof.data.ownerId !== userId || proof.data.mailboxEmail !== normalizeEmail(account.email) || proof.data.provider !== provider || proof.data.address !== address || proof.data.leadId !== lead.id || message.activity?.leadId !== lead.id || message.activity.organizationId !== organizationId) throw invalid()
+    const match = await matchEmailLead(prisma, organizationId, address)
+    if (['LIMIT', 'UNAVAILABLE'].includes(match.reason ?? '') || !match.targets.some(row => row.id === lead.id)) throw invalid()
+    leadEmails.push(address)
+    verifiedAlias = true
+  }
+  return { suggestion, accountId, provider, leadEmails, verifiedAlias }
 }
 
 function canonicalReplySubject(conversation: EmailConversation): string {
@@ -85,5 +97,13 @@ export async function prepareFollowUpSend(organizationId: string, userId: string
   const replyMessageId = lastMessage?.messageId
   if (saved.provider === 'gmail' && (!replyMessageId || replyMessageId.length > 998 || !/^<[^<>\s@]+@[^<>\s@]+>$/.test(replyMessageId))) throw new AppError('DRAFT_CONFLICT', 'The source email does not have a valid reply header. A contextual reply cannot be sent.', 409)
   const replyReferences = replyMessageId ? [lastMessage?.references, replyMessageId].filter(Boolean).join(' ') : undefined
-  return { threadId: saved.threadId, subject: canonicalReplySubject(conversation), options: { accountId: saved.accountId, recipientEmail: saved.recipientEmail, ...(replyMessageId ? { replyMessageId, replyReferences } : {}) } }
+  return { threadId: saved.threadId, subject: canonicalReplySubject(conversation), options: { accountId: saved.accountId, recipientEmail: saved.recipientEmail, ...(source.verifiedAlias ? { reviewedFollowUp: { id, version } } : {}), ...(replyMessageId ? { replyMessageId, replyReferences } : {}) } }
+}
+
+// Revalidate source proof at the transport boundary, including after token refresh.
+// This performs only database reads; provider conversation checks remain in prepare.
+export async function verifyFollowUpRecipient(organizationId: string, userId: string, leadId: string, threadId: string | undefined, accountId: string | undefined, recipientEmail: string, reviewed: { id: string; version: string }) {
+  const source = await authorizedSource(organizationId, userId, reviewed.id)
+  const parsed = contextSchema.safeParse(source.suggestion.draftContext)
+  if (!source.verifiedAlias || source.suggestion.leadId !== leadId || source.suggestion.draftVersion !== reviewed.version || !source.suggestion.draftGeneratedAt || !parsed.success || parsed.data.accountId !== accountId || parsed.data.accountId !== source.accountId || parsed.data.provider !== source.provider || parsed.data.threadId !== threadId || parsed.data.threadId !== source.suggestion.sourceThreadId || normalizeEmail(parsed.data.recipientEmail) !== normalizeEmail(recipientEmail) || !source.leadEmails.includes(normalizeEmail(recipientEmail))) throw new AppError('INVALID_RECIPIENT', 'The reviewed recipient or draft changed. Review the conversation again before sending.', 409)
 }

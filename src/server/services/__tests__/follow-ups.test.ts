@@ -1,9 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 const mocks = vi.hoisted(() => {
   const tx = {
+    $queryRaw: vi.fn(),
+    emailMessage: { findUnique: vi.fn(), update: vi.fn() },
+    activity: { findUnique: vi.fn(), create: vi.fn() },
     organizationMember: { findUnique: vi.fn() },
     followUpSuggestion: { findFirst: vi.fn(), updateMany: vi.fn(), update: vi.fn(), createMany: vi.fn() },
-    lead: { findFirst: vi.fn(), findMany: vi.fn() },
+    lead: { findFirst: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
     task: { create: vi.fn(), findFirst: vi.fn() },
     auditEntry: { create: vi.fn() },
     emailAccount: { findFirst: vi.fn() },
@@ -11,15 +14,19 @@ const mocks = vi.hoisted(() => {
   }
   return { tx, transaction: vi.fn() }
 })
+vi.mock('@/server/services/email-routing-policy', () => ({ emailRoutingEnabled: () => true }))
+
 vi.mock('@/server/db/client', () => ({ prisma: { $transaction: mocks.transaction } }))
 import { isHumanReply, reviewFollowUp, reconcileEmailReplies } from '../follow-ups'
 
 const incoming = { externalId: 'message-1', threadId: 'thread-1', fromEmail: 'LEAD@example.com', toEmail: 'rep@example.com', subject: 'Re: Hello', bodyPreview: 'Please call tomorrow', sentAt: '2026-11-02T03:00:00.000Z' }
 const enrollment = { emailThreadId: 'thread-1', enrolledAt: new Date('2026-11-01T03:00:00Z') }
-const account = { email: 'rep@example.com', userId: 'rep', provider: 'gmail' }
+const account = { id: 'account', organizationId: 'org', email: 'rep@example.com', userId: 'rep', provider: 'gmail' }
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.transaction.mockImplementation(async (fn: (tx: typeof mocks.tx) => unknown) => fn(mocks.tx))
+  mocks.tx.$queryRaw.mockResolvedValue([{ id: 'member' }])
+  mocks.tx.emailMessage.findUnique.mockResolvedValue({ ...incoming, id: 'saved', organizationId: 'org', accountId: 'account', sentAt: new Date(incoming.sentAt), replyMetadata: incoming, leadRouting: null })
   mocks.tx.organizationMember.findUnique.mockResolvedValue({ userId: 'rep' })
   mocks.tx.lead.findFirst.mockResolvedValue({ id: 'lead' })
   mocks.tx.lead.findMany.mockResolvedValue([{ id: 'lead', firstName: 'Jane' }])
@@ -29,7 +36,7 @@ beforeEach(() => {
   mocks.tx.followUpSuggestion.findFirst.mockResolvedValue({ id: 'suggestion', status: 'PENDING', leadId: 'lead', assigneeId: 'rep', title: 'Follow up', description: 'Call tomorrow', taskId: null })
   mocks.tx.followUpSuggestion.updateMany.mockResolvedValue({ count: 1 })
   mocks.tx.followUpSuggestion.update.mockResolvedValue({ id: 'suggestion', status: 'APPROVED', taskId: 'task' })
-  mocks.tx.followUpSuggestion.createMany.mockResolvedValue({ id: 'suggestion' })
+  mocks.tx.followUpSuggestion.createMany.mockResolvedValue({ count: 1 })
   mocks.tx.task.create.mockResolvedValue({ id: 'task' })
 })
 

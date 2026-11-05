@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { EmailMatchInbox, type EmailMatchContext } from './email-match-inbox'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, Inbox, Mail, Phone, RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -61,7 +62,7 @@ async function responseData<T>(response: Response): Promise<T> {
   return body.data as T
 }
 
-export function FollowUpInbox({ canWrite, children }: { canWrite: boolean; children?: ReactNode }): React.JSX.Element {
+export function FollowUpInbox({ canWrite, children, emailMatchContext }: { canWrite: boolean; children?: ReactNode; emailMatchContext?: EmailMatchContext }): React.JSX.Element {
   const [status, setStatus] = useState<FollowUpStatus>('PENDING')
   const [items, setItems] = useState<FollowUpItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -109,6 +110,7 @@ export function FollowUpInbox({ canWrite, children }: { canWrite: boolean; child
         </Button>
       </div>
       {children}
+      {emailMatchContext && <EmailMatchInbox context={emailMatchContext} canWrite={canWrite} onResolved={() => navigate('refresh')} />}
       {navigation && <section role="group" aria-label="Open draft confirmation" className="rounded-lg border bg-card p-4"><p className="text-sm">You have an open email draft. Continuing will discard its unsent edits.</p><div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => setNavigation(null)}>Keep editing</Button><Button type="button" onClick={() => navigate(navigation, true)}>{navigation === 'refresh' ? 'Discard and refresh' : 'Discard and change tab'}</Button></div></section>}
       <div role="tablist" aria-label="Follow-up status" className="flex w-fit max-w-full gap-1 rounded-lg border bg-muted/40 p-1">
         {tabs.map((tab) => <button key={tab.value} id={`follow-ups-${tab.value}`} type="button" role="tab" aria-selected={status === tab.value} aria-controls="follow-up-panel" tabIndex={status === tab.value ? 0 : -1} onKeyDown={(event) => {

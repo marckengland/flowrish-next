@@ -2,56 +2,8 @@ import { z } from 'zod'
 import { prisma } from '@/server/db/client'
 import { AppError } from '@/lib/errors'
 
-export interface ReplyMessage {
-  externalId: string
-  threadId: string | null
-  fromEmail: string
-  toEmail: string
-  recipientEmails?: string[]
-  subject: string
-  bodyPreview: string | null
-  sentAt: string
-  headers?: Array<{ name: string; value: string }>
-}
-
-export function isHumanReply(message: ReplyMessage, mailbox: string, enrollment: { emailThreadId: string | null; enrolledAt: Date }): boolean {
-  const from = message.fromEmail.trim().toLowerCase()
-  const address = mailbox.trim().toLowerCase()
-  const recipients = (message.recipientEmails ?? [message.toEmail]).map((s) => s.trim().toLowerCase())
-  const time = new Date(message.sentAt).getTime()
-  if (!from || from === address || !recipients.includes(address) || !message.threadId || message.threadId !== enrollment.emailThreadId || !Number.isFinite(time) || time <= enrollment.enrolledAt.getTime()) return false
-  if (/^(mailer-daemon|postmaster|no-?reply|do-?not-?reply)([+@._-]|$)/i.test(from)) return false
-  const header = (name: string) => message.headers?.find((h) => h.name.toLowerCase() === name)?.value.trim().toLowerCase() ?? ''
-  if (header('auto-submitted') && header('auto-submitted') !== 'no') return false
-  if (header('x-autoreply') || header('x-autorespond') || /bulk|list|junk/.test(header('precedence'))) return false
-  if (/multipart\/report|delivery-status|disposition-notification/.test(header('content-type'))) return false
-  if (/^(automatic reply|auto.?reply|out of office|undeliverable|delivery status notification|returned mail)\b/i.test(message.subject)) return false
-  return true
-}
-
-/** Replays safely after sync failure: source-key upsert and cadence exits commit together. */
-export async function reconcileEmailReplies(organizationId: string, accountId: string, messages: ReplyMessage[]): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    const account = await tx.emailAccount.findFirst({ where: { id: accountId, organizationId } })
-    if (!account) throw new AppError('NOT_FOUND', 'Mailbox not found', 404)
-    const member = await tx.organizationMember.findUnique({ where: { userId_organizationId: { userId: account.userId, organizationId } } })
-    if (!member) return
-    for (const message of messages) {
-      const fromEmail = message.fromEmail.trim().toLowerCase()
-      if (fromEmail === account.email.trim().toLowerCase()) continue
-      const leads = await tx.lead.findMany({ where: { organizationId, deletedAt: null, OR: [{ email: { equals: fromEmail, mode: 'insensitive' } }, { altEmail: { equals: fromEmail, mode: 'insensitive' } }] }, take: 2, select: { id: true, firstName: true } })
-      if (leads.length !== 1) continue
-      const lead = leads[0]
-      const enrollments = await tx.cadenceEnrollment.findMany({ where: { organizationId, leadId: lead.id, enrolledById: account.userId, status: { in: ['ACTIVE', 'PAUSED'] }, emailThreadId: message.threadId } })
-      const matches = enrollments.filter((enrollment) => isHumanReply(message, account.email, enrollment))
-      if (!matches.length) continue
-      const sourceKey = JSON.stringify([account.provider, accountId, message.externalId])
-      await tx.followUpSuggestion.createMany({ data: { organizationId, assigneeId: account.userId, leadId: lead.id, sourceKey, sourceType: 'EMAIL', sourceId: message.externalId, sourceThreadId: message.threadId, sourceText: message.bodyPreview ?? '', title: `Follow up with ${lead.firstName}`, description: `Reply received: ${message.subject}\n\n${message.bodyPreview ?? ''}`, draftSubject: /^re:/i.test(message.subject) ? message.subject : `Re: ${message.subject}`, draftBody: `Hi ${lead.firstName},\n\nThank you for your reply. ` }, skipDuplicates: true })
-      const result = await tx.cadenceEnrollment.updateMany({ where: { organizationId, id: { in: matches.map((e) => e.id) }, status: { in: ['ACTIVE', 'PAUSED'] } }, data: { status: 'EXITED', exitReason: 'reply_received', completedAt: new Date() } })
-      if (result.count) await tx.auditEntry.create({ data: { organizationId, userId: account.userId, action: 'UPDATE', entityType: 'CadenceEnrollment', entityId: lead.id, changes: { reason: 'reply_received', count: result.count } } })
-    }
-  }, { timeout: 15000 })
-}
+export { isHumanReply, type ReplyMessage } from './email-reply-types'
+export { reconcileStoredEmailReplies as reconcileEmailReplies } from './email-routing'
 
 export const followUpReviewSchema = z.object({
   action: z.enum(['approve', 'dismiss']),

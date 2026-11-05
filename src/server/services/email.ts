@@ -428,6 +428,7 @@ export interface SendEmailOptions {
   recipientEmail?: string
   replyMessageId?: string
   replyReferences?: string
+  reviewedFollowUp?: { id: string; version: string }
 }
 
 export async function sendEmail(
@@ -453,7 +454,14 @@ export async function sendEmail(
 
   const recipientEmail = options.recipientEmail ?? lead.email
   if (!recipientEmail) throw new AppError('LEAD_NO_EMAIL', 'Lead does not have an email address', 400)
-  if (options.recipientEmail && ![lead.email, lead.altEmail].some((email) => email?.trim().toLowerCase() === recipientEmail.trim().toLowerCase())) throw new AppError('INVALID_RECIPIENT', 'The recipient no longer belongs to this lead.', 409)
+  const aliasRecipient = options.recipientEmail && ![lead.email, lead.altEmail].some((email) => email?.trim().toLowerCase() === recipientEmail.trim().toLowerCase())
+  const verifyRecipient = async () => {
+    if (!aliasRecipient) return
+    if (!options.reviewedFollowUp) throw new AppError('INVALID_RECIPIENT', 'The recipient no longer belongs to this lead.', 409)
+    const { verifyFollowUpRecipient } = await import('./follow-up-drafts')
+    await verifyFollowUpRecipient(orgId, userId, leadId, threadId, options.accountId, recipientEmail, options.reviewedFollowUp)
+  }
+  await verifyRecipient()
   if (options.accountId && (subject.length > 200 || /[\r\n]/.test(subject) || !/^[^\s<>@]+@[^\s<>@]+$/.test(recipientEmail))) throw new AppError('INVALID_EMAIL', 'The reviewed subject or recipient is invalid.', 400)
   const validMessageId = (value: string) => /^<[^<>\s@]+@[^<>\s@]+>$/.test(value)
   if (options.replyMessageId && (options.replyMessageId.length > 998 || !validMessageId(options.replyMessageId))) throw new AppError('INVALID_REPLY_HEADER', 'The source message cannot be used for a reply.', 409)
@@ -485,6 +493,8 @@ export async function sendEmail(
   if (!updatedAccount) {
     throw new AppError('EMAIL_ACCOUNT_NOT_FOUND', 'Email account not found after refresh', 500)
   }
+
+  await verifyRecipient()
 
   // Decrypt the access token
   const accessToken = decrypt(updatedAccount.accessToken)
