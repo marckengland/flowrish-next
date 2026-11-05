@@ -74,7 +74,22 @@ export async function listFollowUps(organizationId: string, userId: string, stat
       const task = await tx.task.findFirst({ where: { id: taskId, organizationId, assigneeId: userId, isComplete: false, leadId: lead.id } })
       return task
     }
-    const callbacks = await tx.receptionistCall.findMany({ where: { organizationId, status: 'completed', taskId: { in: owned.map(task => task.id) }, leadId: { not: null } }, orderBy: { createdAt: 'desc' }, take: 100 })
+    const callbackAssigned = access.filter.assignedUserId
+    const callbackLeadScope = callbackAssigned === undefined ? Prisma.sql`TRUE` : typeof callbackAssigned === 'string' ? Prisma.sql`l."assignedUserId"=${callbackAssigned}` : callbackAssigned.in.length ? Prisma.sql`l."assignedUserId" IN (${Prisma.join(callbackAssigned.in)})` : Prisma.sql`FALSE`
+    // Committed source keys are the checkpoint. Exclude represented calls before
+    // LIMIT so repeated first-page reads advance without resetting reviewed work.
+    const candidates = !after && owned.length ? await tx.$queryRaw<Array<{ id: string }>>`WITH callback_candidates AS (
+      SELECT c.id FROM "ReceptionistCall" c
+      JOIN "Task" t ON t.id=c."taskId" AND t."organizationId"=c."organizationId" AND t."leadId"=c."leadId"
+      JOIN "Lead" l ON l.id=c."leadId" AND l."organizationId"=c."organizationId"
+      WHERE c."organizationId"=${organizationId} AND c.status='completed'
+        AND t."assigneeId"=${userId} AND t."isComplete"=false
+        AND l."deletedAt" IS NULL AND l."mergedIntoId" IS NULL AND (${callbackLeadScope})
+        AND NOT EXISTS (SELECT 1 FROM "FollowUpSuggestion" f WHERE f."organizationId"=c."organizationId"
+          AND f."sourceKey"=('[' || '"call",' || to_json(c.id)::text || ']'))
+      ORDER BY c."createdAt" ASC,c.id ASC LIMIT ${100}
+    ) SELECT id FROM callback_candidates` : []
+    const callbacks = candidates.length ? await tx.receptionistCall.findMany({ where: { organizationId, id: { in: candidates.map(row => row.id) }, status: 'completed', taskId: { in: owned.map(task => task.id) }, leadId: { not: null } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 100 }) : []
     const pending = owned.length ? await tx.followUpSuggestion.findMany({ where: { organizationId, sourceType: 'CALL', status: 'PENDING', taskId: { in: owned.map(task => task.id) }, assigneeId: { not: userId } }, orderBy: { id: 'asc' }, take: 100 }) : []
     const leadIds = [...new Set([...callbacks.map(row => row.leadId!), ...pending.map(row => row.leadId)])].sort()
     const taskIds = [...new Set([...callbacks.map(row => row.taskId!), ...pending.flatMap(row => row.taskId ? [row.taskId] : [])])].sort()
