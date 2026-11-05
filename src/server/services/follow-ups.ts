@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { snoozeView } from './follow-up-snooze'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db/client'
 import { AppError } from '@/lib/errors'
@@ -54,15 +55,15 @@ export async function reviewFollowUp(organizationId: string, userId: string, id:
 /** Materializes authorized callback work; pending reviews follow their task owner. */
 export async function listFollowUps(organizationId: string, userId: string, status = 'PENDING', retainedIds: readonly string[] = []) {
   const retained = z.array(z.string().min(1).max(128)).max(100).parse(retainedIds)
-  if (!['PENDING', 'APPROVED', 'DISMISSED'].includes(status)) throw new AppError('VALIDATION_ERROR', 'Invalid follow-up status', 400)
+  if (!['PENDING', 'APPROVED', 'DISMISSED', 'SNOOZED'].includes(status)) throw new AppError('VALIDATION_ERROR', 'Invalid follow-up status', 400)
   return safeFollowUp(() => prisma.$transaction(async tx => {
     await lockFollowUpMember(tx, organizationId, userId)
     const access = await currentFollowUpAccess(tx, organizationId, userId)
-    const owned = await tx.task.findMany({ where: { organizationId, assigneeId: userId, lead: { organizationId, mergedIntoId: null, AND: [access.filter] } }, select: { id: true, leadId: true } })
+    const owned = await tx.task.findMany({ where: { organizationId, assigneeId: userId, isComplete: false, lead: { organizationId, mergedIntoId: null, AND: [access.filter] } }, select: { id: true, leadId: true } })
     const touched = new Set<string>()
     const lockSource = async (leadId: string, taskId: string) => {
       const { lead } = await followUpLead(tx, organizationId, userId, leadId)
-      const task = await tx.task.findFirst({ where: { id: taskId, organizationId, assigneeId: userId, leadId: lead.id } })
+      const task = await tx.task.findFirst({ where: { id: taskId, organizationId, assigneeId: userId, isComplete: false, leadId: lead.id } })
       return task
     }
     const callbacks = await tx.receptionistCall.findMany({ where: { organizationId, status: 'completed', taskId: { in: owned.map(task => task.id) }, leadId: { not: null } }, orderBy: { createdAt: 'desc' }, take: 100 })
@@ -102,26 +103,30 @@ export async function listFollowUps(organizationId: string, userId: string, stat
     const retainScope = retained.length ? Prisma.sql`id IN (${Prisma.join(retained)})` : Prisma.sql`FALSE`
     // Apply lead and callback ownership eligibility before the page limit. Open
     // drafts/focused rows are revalidated independently of status and pagination.
+    const view = status === 'SNOOZED' ? Prisma.sql`status='PENDING' AND until>timezone('UTC',statement_timestamp())` : status === 'PENDING' ? Prisma.sql`status='PENDING' AND (until IS NULL OR until<=timezone('UTC',statement_timestamp()))` : Prisma.sql`status=${status}`
     const eligible = await tx.$queryRaw<Array<{ id: string }>>`WITH eligible AS (
-      SELECT f.id,f."createdAt",f.status FROM "FollowUpSuggestion" f
+      SELECT f.id,f."createdAt",f.status,s.until FROM "FollowUpSuggestion" f
+      LEFT JOIN "FollowUpSnooze" s ON s."organizationId"=f."organizationId" AND s."userId"=${userId} AND s."followUpId"=f.id
       JOIN "Lead" l ON l.id=f."leadId" AND l."organizationId"=${organizationId}
       WHERE f."organizationId"=${organizationId} AND f."assigneeId"=${userId}
         AND l."deletedAt" IS NULL AND l."mergedIntoId" IS NULL AND (${leadScope})
-        AND (f."sourceType"<>'CALL' OR f.status<>'PENDING' OR EXISTS (
+        AND (f.status<>'PENDING' OR (f."taskId" IS NULL AND f."sourceType"<>'CALL') OR EXISTS (
           SELECT 1 FROM "Task" t WHERE t.id=f."taskId" AND t."organizationId"=${organizationId}
-            AND t."assigneeId"=${userId} AND t."leadId"=f."leadId"))
+            AND t."assigneeId"=${userId} AND t."leadId"=f."leadId" AND t."isComplete"=false))
     ), selected AS (
-      (SELECT id,"createdAt" FROM eligible WHERE status=${status} ORDER BY "createdAt" DESC,id LIMIT 100)
+      (SELECT id,"createdAt" FROM eligible WHERE ${view} ORDER BY "createdAt" DESC,id LIMIT 100)
       UNION (SELECT id,"createdAt" FROM eligible WHERE ${retainScope})
     ) SELECT id FROM selected ORDER BY "createdAt" DESC,id`
     const rows = await tx.followUpSuggestion.findMany({ where: { organizationId, assigneeId: userId, id: { in: eligible.map(row => row.id) } }, orderBy: { createdAt: 'desc' } })
     const leads = await tx.lead.findMany({ where: { organizationId, mergedIntoId: null, id: { in: rows.map(row => row.leadId) }, AND: [final.filter] }, select: { id: true, firstName: true, lastName: true, email: true } })
-    const tasks = await tx.task.findMany({ where: { organizationId, assigneeId: userId, lead: { organizationId, mergedIntoId: null, AND: [final.filter] } }, select: { id: true, leadId: true } })
+    const tasks = await tx.task.findMany({ where: { organizationId, assigneeId: userId, isComplete: false, lead: { organizationId, mergedIntoId: null, AND: [final.filter] } }, select: { id: true, leadId: true } })
     const byId = new Map(leads.map(lead => [lead.id, lead])), taskById = new Map(tasks.map(task => [task.id, task.leadId]))
+    const snoozes = await tx.followUpSnooze.findMany({ where: { organizationId, userId, followUpId: { in: rows.map(row => row.id) } } })
+    const snoozeById = new Map(snoozes.map(row => [row.followUpId, row]))
     const items = rows.flatMap(row => {
-      if (row.sourceType === 'CALL' && row.status === 'PENDING' && (!row.taskId || taskById.get(row.taskId) !== row.leadId)) return []
+      if (row.status === 'PENDING' && (row.taskId ? taskById.get(row.taskId) !== row.leadId : row.sourceType === 'CALL')) return []
       const lead = byId.get(row.leadId)
-      return lead ? [followUpView(row, lead)] : []
+      return lead ? [snoozeView(followUpView(row, lead), snoozeById.get(row.id) ?? null)] : []
     })
     const current = await currentFollowUpAccess(tx, organizationId, userId)
     if (JSON.stringify(current.filter) !== JSON.stringify(final.filter)) throw followUpUnavailable()

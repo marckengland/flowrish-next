@@ -1,4 +1,5 @@
 import 'server-only'
+import { snoozeView } from './follow-up-snooze'
 import { Prisma, type FollowUpSuggestion } from '@prisma/client'
 import { z, ZodError } from 'zod'
 import { prisma } from '@/server/db/client'
@@ -25,7 +26,7 @@ export async function listEmailNotifications(organizationId: string, userId: str
   const input = emailNotificationQuery.parse(raw)
   return safe(() => prisma.$transaction(async db => {
     const filter = await access(db, organizationId, userId); if (!filter) return { rows: [], page: input.page, hasMore: false }
-    const rows = await db.$queryRaw<Array<{ key: string; kind: string; messageId: string; followUpId: string | null; createdAt: Date; readAt: Date | null }>>(Prisma.sql`${emailNotificationSources(organizationId, userId, filter)}
+    const rows = await db.$queryRaw<Array<{ key: string; kind: string; messageId: string | null; followUpId: string | null; createdAt: Date; readAt: Date | null }>>(Prisma.sql`${emailNotificationSources(organizationId, userId, filter)}
       SELECT c.key,c.kind,c."messageId",c."followUpId",c."createdAt",r."readAt" FROM candidates c LEFT JOIN "EmailNotificationRead" r ON r."organizationId"=${organizationId} AND r."userId"=${userId} AND r.key=c.key
       ${input.filter === 'unread' ? Prisma.sql`WHERE r."readAt" IS NULL` : Prisma.empty} ORDER BY c."createdAt" DESC,c.key DESC LIMIT 21 OFFSET ${(input.page - 1) * 20}`)
     return emailNotificationList.parse({ rows: rows.slice(0, 20).map(row => ({ ...row, createdAt: row.createdAt.toISOString(), readAt: row.readAt?.toISOString() ?? null })), page: input.page, hasMore: rows.length > 20 })
@@ -56,9 +57,10 @@ export async function focusedEmailFollowUp(organizationId: string, userId: strin
   z.string().uuid().parse(id)
   return safe(() => prisma.$transaction(async db => {
     const filter = await access(db, organizationId, userId); if (!filter) throw missing()
-    const [row] = await db.$queryRaw<Array<FollowUpSuggestion & { lead: { id: string; firstName: string; lastName: string; email: string | null } }>>(Prisma.sql`${emailNotificationSources(organizationId, userId, filter)} SELECT f.*,jsonb_build_object('id',l.id,'firstName',l."firstName",'lastName',l."lastName",'email',l.email) AS lead FROM candidates c JOIN "FollowUpSuggestion" f ON f.id=c."followUpId" JOIN "Lead" l ON l.id=f."leadId" WHERE c.kind='email_reply' AND c."followUpId"=${id}`)
+    const [row] = await db.$queryRaw<Array<FollowUpSuggestion & { lead: { id: string; firstName: string; lastName: string; email: string | null } }>>(Prisma.sql`${emailNotificationSources(organizationId, userId, filter)} SELECT f.*,jsonb_build_object('id',l.id,'firstName',l."firstName",'lastName',l."lastName",'email',l.email) AS lead FROM candidates c JOIN "FollowUpSuggestion" f ON f.id=c."followUpId" JOIN "Lead" l ON l.id=f."leadId" WHERE c.kind IN ('email_reply','follow_up_reminder') AND c."followUpId"=${id}`)
     if (!row) throw missing()
     const draft = publicDraft.safeParse(row.draftContext)
-    return { ...row, draftContext: draft.success ? draft.data : null }
+    const snooze = await db.followUpSnooze.findUnique({ where: { organizationId_userId_followUpId: { organizationId, userId, followUpId: id } } })
+    return snoozeView({ ...row, draftContext: draft.success ? draft.data : null }, snooze)
   }))
 }

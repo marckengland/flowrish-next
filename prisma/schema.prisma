@@ -197,6 +197,21 @@ model ContactSuppression {
   @@unique([organizationId, email])
 }
 
+model FollowUpSnooze {
+  organizationId String
+  userId String
+  followUpId String
+  member OrganizationMember @relation(fields: [userId, organizationId], references: [userId, organizationId], onDelete: Cascade, onUpdate: Cascade, map: "FollowUpSnooze_member_fkey")
+  followUp FollowUpSuggestion @relation(fields: [organizationId, followUpId], references: [organizationId, id], onDelete: Cascade, onUpdate: Cascade, map: "FollowUpSnooze_followup_fkey")
+  until DateTime?
+  timeZone String
+  revision Int @default(1)
+  updatedAt DateTime @updatedAt
+
+  @@id([organizationId, userId, followUpId])
+  @@index([organizationId, userId, until])
+}
+
 model FollowUpSuggestion {
   id             String       @id @default(uuid())
   organizationId String
@@ -220,6 +235,9 @@ model FollowUpSuggestion {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
+  snoozes FollowUpSnooze[]
+
+  @@unique([organizationId, id])
   @@unique([organizationId, sourceKey])
   @@index([organizationId, assigneeId, status, createdAt])
 }
@@ -328,6 +346,7 @@ model OrganizationMember {
   organization          Organization           @relation(fields: [organizationId], references: [id])
   isDefault             Boolean                @default(false) // User's default org
   emailNotificationReads EmailNotificationRead[]
+  followUpSnoozes FollowUpSnooze[]
   savedLeadViews        SavedLeadView[]
   bulkLeadUpdates       BulkLeadUpdate[]
   callbackNotifications CallbackNotification[]

@@ -26,17 +26,23 @@ function localClock(timeZone: string) {
     return { localTime, nominal }
   }
 }
+export function resolveLocalMinute(localTime: string, timeZone: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(localTime)) throw new RangeError('Choose a valid calendar date and time.')
+  const [year, month, day, hour, minute] = localTime.split(/[-T:]/).map(Number)
+  const nominal = Date.UTC(year, month - 1, day, hour, minute)
+  if (year < 2000 || new Date(nominal).toISOString().slice(0, 16) !== localTime) throw new RangeError('Choose a valid calendar date and time.')
+  const clock = localClock(timeZone), offsets = new Set<number>()
+  for (let at = nominal - 36 * 3600000; at <= nominal + 36 * 3600000; at += 6 * 3600000) offsets.add(clock(at).nominal - at)
+  const candidates = [...offsets].map(offset => nominal - offset).filter(at => clock(at).localTime === localTime)
+  if (candidates.length !== 1) throw new RangeError('That time is unavailable or ambiguous during a clock change. Choose another time.')
+  return candidates[0]
+}
 export function resolveCallbackTime(raw: z.input<typeof preferredTimeInputSchema>, rawCalendar: CallbackCalendar, now = new Date()): PreferredTime {
   const input = preferredTimeInputSchema.parse(raw), calendar = callbackCalendarSchema.parse(rawCalendar)
   if (input.timeZone !== calendar.timeZone || input.businessVersion !== calendar.version) throw new CallbackTimeError('Saved callback hours changed. Reload and review the requested time again.', 409)
-  const [year, month, day, hour, minute] = input.localTime.split(/[-T:]/).map(Number)
-  const nominal = Date.UTC(year, month - 1, day, hour, minute)
-  if (year < 2000 || new Date(nominal).toISOString().slice(0, 16) !== input.localTime) throw new CallbackTimeError('Choose a valid calendar date and time.')
-  const clock = localClock(calendar.timeZone), offsets = new Set<number>()
-  for (let at = nominal - 36 * 3600000; at <= nominal + 36 * 3600000; at += 6 * 3600000) offsets.add(clock(at).nominal - at)
-  const candidates = [...offsets].map(offset => nominal - offset).filter(at => clock(at).localTime === input.localTime)
-  if (candidates.length !== 1) throw new CallbackTimeError('That time is unavailable or ambiguous during a clock change. Choose another time.')
-  const at = candidates[0], current = now.getTime()
+  let at: number
+  try { at = resolveLocalMinute(input.localTime, calendar.timeZone) } catch (error) { throw new CallbackTimeError(error instanceof Error ? error.message : 'Choose a valid calendar date and time.') }
+  const current = now.getTime()
   if (!Number.isFinite(current) || at <= current || at > current + 90 * 86400000) throw new CallbackTimeError('Choose a future callback time within the next 90 days.')
   const window = openingHoursForDate(calendar, input.localTime.slice(0, 10)), clockTime = input.localTime.slice(11)
   if (!window || clockTime < window.opensAt || clockTime >= window.closesAt) throw new CallbackTimeError('Choose a time within the saved business hours.')

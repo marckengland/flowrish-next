@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-const m = vi.hoisted(() => ({ db: { user: { findUnique: vi.fn() }, emailNotificationRead: { createMany: vi.fn(), findUnique: vi.fn() }, $queryRaw: vi.fn() }, tx: vi.fn(), permission: vi.fn(), filter: vi.fn() }))
+const m = vi.hoisted(() => ({ db: { user: { findUnique: vi.fn() }, followUpSnooze: { findUnique: vi.fn() }, emailNotificationRead: { createMany: vi.fn(), findUnique: vi.fn() }, $queryRaw: vi.fn() }, tx: vi.fn(), permission: vi.fn(), filter: vi.fn() }))
 vi.mock('@/server/db/client', () => ({ prisma: { $transaction: m.tx } }))
 vi.mock('@/server/auth/permissions', () => ({ hasPermission: m.permission }))
 vi.mock('../access', () => ({ getLeadAccessFilter: m.filter }))
@@ -8,7 +8,7 @@ const key = 'a'.repeat(64), messageId = '11111111-1111-4111-8111-111111111111', 
 const row = { key, kind: 'email_match', messageId, followUpId: null, createdAt: date, readAt: null }
 let rows: unknown[] = []
 beforeEach(() => {
-  vi.resetAllMocks(); rows = [row]; m.tx.mockImplementation(async fn => fn(m.db)); m.permission.mockReturnValue(true); m.filter.mockResolvedValue({ deletedAt: null, assignedUserId: 'owner' }); m.db.user.findUnique.mockResolvedValue({ id: 'owner', organizationMemberships: [{ organizationId: 'org' }], teamMemberships: [] }); m.db.$queryRaw.mockImplementation(async q => { const text = q.sql ?? q.join(''); if (text.includes('FOR KEY SHARE')) return [{ id: 'member' }]; if (text.includes('pg_advisory_xact_lock')) return []; if (text.includes('count(*)')) return [{ unread: 2 }]; return rows }); m.db.emailNotificationRead.findUnique.mockResolvedValue({ key, readAt: date })
+  vi.resetAllMocks(); m.db.followUpSnooze.findUnique.mockResolvedValue(null); rows = [row]; m.tx.mockImplementation(async fn => fn(m.db)); m.permission.mockReturnValue(true); m.filter.mockResolvedValue({ deletedAt: null, assignedUserId: 'owner' }); m.db.user.findUnique.mockResolvedValue({ id: 'owner', organizationMemberships: [{ organizationId: 'org' }], teamMemberships: [] }); m.db.$queryRaw.mockImplementation(async q => { const text = q.sql ?? q.join(''); if (text.includes('FOR KEY SHARE')) return [{ id: 'member' }]; if (text.includes('pg_advisory_xact_lock')) return []; if (text.includes('count(*)')) return [{ unread: 2 }]; return rows }); m.db.emailNotificationRead.findUnique.mockResolvedValue({ key, readAt: date })
 })
 it('counts and lists current eligible sources without writing and scopes read receipts to the owner', async () => {
   expect(await countEmailNotifications('org', 'owner')).toEqual({ unread: 2 }); expect(await listEmailNotifications('org', 'owner', { filter: 'unread', page: 1 })).toEqual({ rows: [{ ...row, createdAt: date.toISOString() }], page: 1, hasMore: false }); expect(m.db.emailNotificationRead.createMany).not.toHaveBeenCalled()
@@ -29,3 +29,9 @@ it('rechecks current eligibility after receipt waits and rejects a resolved or i
 it('reads a focused pending reply through the same eligibility source and strips draft fingerprints', async () => {
   rows = [{ ...row, kind: 'email_reply', followUpId, id: followUpId, lead: { id: 'lead', firstName: 'Practice', lastName: 'Clinic', email: 'lead@example.invalid' }, draftContext: { accountId: 'account', provider: 'gmail', threadId: 'thread', recipientEmail: 'lead@example.invalid', mailboxEmail: 'owner@example.invalid', fingerprint: 'private', messageCount: 1, lastMessageAt: date.toISOString() } }]; const item = await focusedEmailFollowUp('org', 'owner', followUpId); expect(item.id).toBe(followUpId); expect(item.draftContext).not.toHaveProperty('fingerprint'); rows = []; await expect(focusedEmailFollowUp('org', 'owner', followUpId)).rejects.toMatchObject({ statusCode: 404 }); expect(m.db.emailNotificationRead.createMany).not.toHaveBeenCalled()
 })
+it('lists due callback reminders without a fabricated mailbox id and with versioned eligibility', async () => {
+  rows = [{ ...row, kind: 'follow_up_reminder', messageId: null, followUpId }];
+  expect((await listEmailNotifications('org', 'owner', {})).rows[0]).toMatchObject({ kind: 'follow_up_reminder', messageId: null, followUpId });
+  const sql = m.db.$queryRaw.mock.calls.map(([q]) => q.sql ?? q.join('')).join(' ');
+  expect(sql).toContain('"FollowUpSnooze"'); expect(sql).toContain('s.revision'); expect(sql).toContain('statement_timestamp()'); expect(sql).toContain('"isComplete"=false');
+});

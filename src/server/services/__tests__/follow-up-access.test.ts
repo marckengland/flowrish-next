@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => {
-  const db = { user: { findUnique: vi.fn() }, organizationMember: { findUnique: vi.fn() }, lead: { findFirst: vi.fn(), findMany: vi.fn() }, task: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() }, receptionistCall: { findMany: vi.fn() }, followUpSuggestion: { findFirst: vi.fn(), findMany: vi.fn(), createMany: vi.fn(), updateMany: vi.fn(), update: vi.fn() }, auditEntry: { create: vi.fn() }, $queryRaw: vi.fn() }
+  const db = { user: { findUnique: vi.fn() }, organizationMember: { findUnique: vi.fn() }, lead: { findFirst: vi.fn(), findMany: vi.fn() }, task: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() }, receptionistCall: { findMany: vi.fn() }, followUpSuggestion: { findFirst: vi.fn(), findMany: vi.fn(), createMany: vi.fn(), updateMany: vi.fn(), update: vi.fn() }, followUpSnooze: { findMany: vi.fn() }, auditEntry: { create: vi.fn() }, $queryRaw: vi.fn() }
   return { db, transaction: vi.fn(), filter: vi.fn() }
 })
 vi.mock('@/server/db/client', () => ({ prisma: { ...m.db, $transaction: m.transaction } }))
@@ -10,7 +10,7 @@ const user = (write = true) => ({ id: 'actor', organizationMemberships: [{ organ
 const row = { id: 'followup', organizationId: 'org', assigneeId: 'actor', leadId: 'lead', sourceType: 'EMAIL', sourceId: 'message', sourceKey: '["gmail","account","message"]', status: 'PENDING', title: 'Private follow-up', description: 'Private notes', taskId: null, updatedAt: new Date('2026-11-05') }
 const lead = { id: 'lead', firstName: 'Private', lastName: 'Practice', email: 'private@example.invalid' }
 beforeEach(() => {
-  vi.resetAllMocks(); m.transaction.mockImplementation(async fn => fn(m.db)); m.filter.mockResolvedValue({ deletedAt: null, assignedUserId: 'actor' }); m.db.user.findUnique.mockResolvedValue(user()); m.db.organizationMember.findUnique.mockResolvedValue({ id: 'member' }); m.db.$queryRaw.mockResolvedValue([{ id: 'locked' }]); m.db.lead.findFirst.mockResolvedValue(lead); m.db.lead.findMany.mockResolvedValue([lead]); m.db.task.findMany.mockResolvedValue([]); m.db.receptionistCall.findMany.mockResolvedValue([]); m.db.followUpSuggestion.findMany.mockResolvedValue([row]); m.db.followUpSuggestion.findFirst.mockResolvedValue(row); m.db.followUpSuggestion.updateMany.mockResolvedValue({ count: 1 }); m.db.followUpSuggestion.update.mockResolvedValue({ ...row, status: 'APPROVED', taskId: 'task' }); m.db.task.create.mockResolvedValue({ id: 'task' })
+  vi.resetAllMocks(); m.db.followUpSnooze.findMany.mockResolvedValue([]); m.transaction.mockImplementation(async fn => fn(m.db)); m.filter.mockResolvedValue({ deletedAt: null, assignedUserId: 'actor' }); m.db.user.findUnique.mockResolvedValue(user()); m.db.organizationMember.findUnique.mockResolvedValue({ id: 'member' }); m.db.$queryRaw.mockResolvedValue([{ id: 'locked' }]); m.db.lead.findFirst.mockResolvedValue(lead); m.db.lead.findMany.mockResolvedValue([lead]); m.db.task.findMany.mockResolvedValue([]); m.db.receptionistCall.findMany.mockResolvedValue([]); m.db.followUpSuggestion.findMany.mockResolvedValue([row]); m.db.followUpSuggestion.findFirst.mockResolvedValue(row); m.db.followUpSuggestion.updateMany.mockResolvedValue({ count: 1 }); m.db.followUpSuggestion.update.mockResolvedValue({ ...row, status: 'APPROVED', taskId: 'task' }); m.db.task.create.mockResolvedValue({ id: 'task' })
 })
 it('does not list an assignee’s follow-up after lead access is lost', async () => {
   m.db.lead.findMany.mockImplementation(async ({ where }) => where.assignedUserId || where.AND ? [] : [lead]); const result = await listFollowUps('org', 'actor'); const items = Array.isArray(result) ? result : result.items; expect(items).toEqual([]); expect(JSON.stringify(result)).not.toContain('Private notes')
@@ -34,3 +34,12 @@ it('locks every callback lead in canonical order before the first task lock', as
   const low = { id: 'low', leadId: 'a-lead', taskId: 'a-task', title: 'Earlier', description: '' }, high = { id: 'high', leadId: 'z-lead', taskId: 'z-task', title: 'Newer', description: '' }
   Object.assign(m.db.receptionistCall, { findFirst: vi.fn(async () => null) }); m.db.task.findMany.mockResolvedValue([{ id: low.taskId, leadId: low.leadId }, { id: high.taskId, leadId: high.leadId }]); m.db.receptionistCall.findMany.mockResolvedValue([high, low]); m.db.task.findFirst.mockImplementation(async ({ where }) => ({ id: where.id, leadId: where.leadId })); m.db.followUpSuggestion.findMany.mockResolvedValue([]); await listFollowUps('org', 'actor'); const locks = m.db.$queryRaw.mock.calls.map(args => ({ sql: args[0].join(''), values: args.slice(1) })); const firstLead = locks.findIndex(row => row.sql.includes('FROM "Lead"')), firstTask = locks.findIndex(row => row.sql.includes('FROM "Task"')); expect(locks[firstLead].sql).toContain('ORDER BY'); expect(JSON.stringify(locks[firstLead].values)).toContain('a-lead'); expect(JSON.stringify(locks[firstLead].values)).toContain('z-lead'); expect(firstLead).toBeLessThan(firstTask)
 })
+
+it('accepts the Snoozed view with scoped personal metadata and database-time filtering before pagination', async () => {
+  m.db.followUpSnooze.findMany.mockResolvedValue([{ followUpId: row.id, until: new Date('2026-11-06T01:00:00Z'), timeZone: 'Asia/Manila', revision: 2 }]);
+  const result = await listFollowUps('org', 'actor', 'SNOOZED');
+  expect(result.items[0]).toMatchObject({ snooze: { revision: 2, timeZone: 'Asia/Manila' }, snoozeVersion: expect.stringMatching(/^[a-f0-9]{64}$/) });
+  const sql = m.db.$queryRaw.mock.calls.flatMap(args => args.map(q => q.sql ?? (Array.isArray(q) ? q.join('') : ''))).join(' ');
+  expect(sql).toContain('"FollowUpSnooze"'); expect(sql).toContain('statement_timestamp()'); expect(sql).toContain('"isComplete"=false');
+  expect(m.db.followUpSnooze.findMany).toHaveBeenCalledWith({ where: { organizationId: 'org', userId: 'actor', followUpId: { in: [row.id] } } });
+});
