@@ -1,45 +1,16 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
-import type { Prisma, Task } from '@prisma/client'
+import type { Task } from '@prisma/client'
 import { prisma } from '@/server/db/client'
 import { taskCompletionInput, taskCompletionPreview, taskCompletionReceipt, type TaskCompletionInput } from '@/lib/follow-up-task-completion'
-import { currentFollowUpAccess, followUpChanged, followUpLead, followUpUnavailable, lockFollowUpMember, requireFollowUpWrites, safeFollowUp } from './follow-up-access'
+import { followUpChanged, requireFollowUpWrites, safeFollowUp } from './follow-up-access'
+import { lockApprovedTask as locked, approvedTaskVersion as version, recheckApprovedTask as finalTask, approvedTaskHash as taskHash } from './follow-up-task-review'
 
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
-const taskHash = (task: Task) => digest([task.id, task.organizationId, task.leadId, task.assigneeId, task.title, task.description, task.priority, task.dueDate, task.updatedAt, task.isComplete, task.completedAt])
 const auditWhere = (organizationId: string, userId: string, id: string, requestId: string) => ({ id: requestId, organizationId, userId, entityType: 'FollowUpSuggestion', entityId: id, action: 'UPDATE' as const })
 const proofSchema = z.object({ taskCompletion: z.object({ inputHash: z.string(), taskHash: z.string(), taskId: z.string() }).strict() })
 
-async function locked(db: Prisma.TransactionClient, organizationId: string, userId: string, id: string, write: boolean) {
- await lockFollowUpMember(db, organizationId, userId)
- await currentFollowUpAccess(db, organizationId, userId, true)
- const where = { id, organizationId, assigneeId: userId }
- const before = await db.followUpSuggestion.findFirst({ where })
- if (!before) throw followUpUnavailable()
- if (write) await db.$queryRaw`SELECT id FROM "Lead" WHERE id=${before.leadId} AND "organizationId"=${organizationId} FOR UPDATE`
- else await db.$queryRaw`SELECT id FROM "Lead" WHERE id=${before.leadId} AND "organizationId"=${organizationId} FOR SHARE`
- if (before.taskId) {
-  if (write) await db.$queryRaw`SELECT id FROM "Task" WHERE id=${before.taskId} AND "organizationId"=${organizationId} FOR UPDATE`
-  else await db.$queryRaw`SELECT id FROM "Task" WHERE id=${before.taskId} AND "organizationId"=${organizationId} FOR SHARE`
- }
- await db.$queryRaw`SELECT id FROM "FollowUpSuggestion" WHERE id=${id} AND "organizationId"=${organizationId} FOR SHARE`
- const row = await db.followUpSuggestion.findFirst({ where })
- if (!row || !row.taskId) throw followUpUnavailable()
- if (row.taskId !== before.taskId || row.leadId !== before.leadId || row.status !== 'APPROVED') throw followUpChanged()
- const { lead, access } = await followUpLead(db, organizationId, userId, row.leadId, true)
- const task = await db.task.findFirst({ where: { id: row.taskId, organizationId, leadId: row.leadId, ...access.taskScope }, include: { assignee: { select: { name: true } } } })
- if (!task) throw followUpUnavailable()
- return { row, task, lead }
-}
-type Snapshot = Awaited<ReturnType<typeof locked>>
-const version = ({ row, task, lead }: Snapshot) => digest([row.id, row.organizationId, row.assigneeId, row.leadId, row.taskId, row.status, row.updatedAt, taskHash(task), task.assignee.name, lead.firstName, lead.lastName])
-async function finalTask(db: Prisma.TransactionClient, organizationId: string, userId: string, snapshot: Snapshot) {
- const { access } = await followUpLead(db, organizationId, userId, snapshot.row.leadId, true)
- const task = await db.task.findFirst({ where: { id: snapshot.task.id, organizationId, leadId: snapshot.row.leadId, ...access.taskScope } })
- if (!task) throw followUpUnavailable()
- return task
-}
 function receipt(id: string, requestId: string, task: Task, changes?: unknown) {
  const proof = proofSchema.safeParse(changes)
  const state = changes === undefined ? 'not-recorded' : proof.success && proof.data.taskCompletion.taskId === task.id && proof.data.taskCompletion.taskHash === taskHash(task) && task.isComplete && task.completedAt ? 'confirmed' : 'changed'
