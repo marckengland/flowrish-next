@@ -9,12 +9,12 @@ export function FollowUpTaskHistory(props: Props) { return <TaskHistory key={JSO
 function TaskHistory({ id, taskId, context, revision, onAccessLost }: Props) {
  const { organizationId, userId } = context, regionId = useId()
  const [open, setOpen] = useState(false), [data, setData] = useState<TaskHistoryData | null>(null), [page, setPage] = useState(1), [busy, setBusy] = useState(false), [error, setError] = useState(''), [zone, setZone] = useState('UTC')
- const live = useRef(true), controller = useRef<AbortController | null>(null), blocked = useRef(false)
+ const live = useRef(true), controller = useRef<AbortController | null>(null), blocked = useRef(false), failed = useRef(false)
  useEffect(() => { try { const detected = Intl.DateTimeFormat().resolvedOptions().timeZone; new Intl.DateTimeFormat('en', { timeZone: detected }).format(); setZone(detected) } catch { setZone('UTC') } }, [])
  const cancel = useCallback(() => { controller.current?.abort(); controller.current = null }, [])
  const load = useCallback(async (nextPage: number) => {
   if (!live.current || blocked.current) return
-  cancel(); const request = new AbortController(); controller.current = request; setBusy(true); setData(null); setError('')
+  failed.current = false; cancel(); const request = new AbortController(); controller.current = request; setBusy(true); setData(null); setError('')
   const active = () => live.current && !request.signal.aborted && controller.current === request
   try {
    const captured = { organizationId, userId }, response = await fetch('/api/follow-ups/' + encodeURIComponent(id) + '/task-history?page=' + nextPage, { method: 'GET', cache: 'no-store', headers: followUpHeaders(captured), signal: request.signal })
@@ -24,6 +24,7 @@ function TaskHistory({ id, taskId, context, revision, onAccessLost }: Props) {
   } catch (cause) {
    if (!active()) return
    if (followUpAccessLost(cause)) { blocked.current = true; setData(null); onAccessLost(cause, id); return }
+   failed.current = true
    setError(cause instanceof Error ? cause.message : 'Task activity is unavailable. Refresh to try again.')
   } finally { if (active()) { controller.current = null; setBusy(false) } }
  }, [cancel, id, taskId, organizationId, userId, onAccessLost])
@@ -31,7 +32,7 @@ function TaskHistory({ id, taskId, context, revision, onAccessLost }: Props) {
  useEffect(() => { if (open) void load(1); return cancel }, [open, revision, load, cancel])
  useEffect(() => {
   if (!open || error) return
-  const refresh = () => { if (document.visibilityState === 'visible' && !controller.current) void load(page) }
+  const refresh = () => { if (document.visibilityState === 'visible' && !controller.current && !failed.current) void load(page) }
   const timer = window.setInterval(refresh, 60000); window.addEventListener('focus', refresh); document.addEventListener('visibilitychange', refresh)
   return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
  }, [open, page, error, load])

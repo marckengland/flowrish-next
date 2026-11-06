@@ -98,6 +98,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   const emailOrganizationId = emailMatchContext?.organizationId, emailUserId = emailMatchContext?.userId
   const [writeAllowed, setWriteAllowed] = useState(canWrite)
   const taskProgressDescription = useId()
+  const [taskOrderSupported, setTaskOrderSupported] = useState(false)
   const [taskProgressSupported, setTaskProgressSupported] = useState(false)
   const [revoked, setRevoked] = useState(false)
   const revokedRef = useRef(false)
@@ -105,6 +106,8 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   const [viewsOpen, setViewsOpen] = useState(false)
   const [filters, setFilters] = useState<FollowUpFilters>(emptyFilters)
   const [filterDraft, setFilterDraft] = useState<FollowUpFilters>(emptyFilters)
+  const filterDraftRef = useRef(filterDraft); filterDraftRef.current = filterDraft
+  const retainedOrderCommit = useRef<FollowUpFilters | null>(null), retryOrder = useRef<FollowUpFilters | undefined>(undefined)
   const [filterError, setFilterError] = useState('')
   const [items, setItems] = useState<FollowUpItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -125,7 +128,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   const pagesLoaded = useRef(1), retryDepth = useRef(1), pageFailed = useRef(false), loadingRef = useRef(true)
   const pageController = useRef<AbortController | null>(null)
   const pendingRevalidation = useRef(false)
-  const abortPages = useCallback(() => { pageController.current?.abort(); pageController.current = null; pendingRevalidation.current = false }, [])
+  const abortPages = useCallback(() => { pageController.current?.abort(); pageController.current = null; pendingRevalidation.current = false; retryOrder.current = undefined }, [])
   const [error, setError] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   const [navigation, setNavigation] = useState<Navigation | null>(null)
@@ -198,7 +201,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     }
     revokedRef.current = true
     setRevoked(true)
-    setWriteAllowed(false); setTaskProgressSupported(false)
+    setWriteAllowed(false); setTaskProgressSupported(false); setTaskOrderSupported(false)
     setNextCursor(null); setPageSupported(false); setCallbackCatchUp(undefined); pagesLoaded.current = 1
     setFilters(emptyFilters)
     setFilterDraft(emptyFilters)
@@ -218,6 +221,13 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     if (target === status) return true
     if (typeof target === 'object' && 'filters' in target && JSON.stringify(target.filters) === JSON.stringify(filters) && (!target.filters.dueOnly || status === 'PENDING') && (!target.filters.taskProgress || status === 'APPROVED')) { setNavigation(null); setFilterDraft(target.filters); return true }
     if (typeof target === 'object' && 'settings' in target && target.settings.status === status && JSON.stringify(target.settings.filters) === JSON.stringify(filters)) { setNavigation(null); setFilterDraft(target.settings.filters); return true }
+    const nextFilters = typeof target === 'object' ? 'settings' in target ? target.settings.status === status ? target.settings.filters : undefined : 'filters' in target ? target.filters : undefined : undefined
+    if (status === 'APPROVED' && nextFilters && nextFilters.taskOrder !== filters.taskOrder) {
+      const withoutOrder = ({ taskOrder: _order, ...rest }: FollowUpFilters) => rest
+      if (JSON.stringify(withoutOrder(nextFilters)) === JSON.stringify(withoutOrder(filters))) {
+        setNavigation(null); void readLoadedPages(1, true, false, nextFilters); return true
+      }
+    }
     if (!discard && (rescheduleHolds.current.size > 0 || pendingCompletions.current.size > 0 || approvalLockRef.current || openDrafts.current.size > 0 || typeof target === 'object' && 'settings' in target && dirtyEditors.current.size > 0)) { setNavigation(target); return false }
     setNavigation(null)
     pendingCompletions.current.clear(); setPendingCompletionCount(0)
@@ -226,7 +236,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     abortPages(); setPageTask(null); setPageError(''); pageFailed.current = false; pagesLoaded.current = 1; setNextCursor(null); setCallbackCatchUp(undefined)
     readEpoch.current++
     if (typeof target === 'object' && 'settings' in target) { setFilters(target.settings.filters); setFilterDraft(target.settings.filters); setStatus(target.settings.status); setRevision(value => value + 1) }
-    else if (typeof target === 'object' && 'filters' in target) { setFilters(target.filters); setFilterDraft(target.filters); if (target.filters.dueOnly) setStatus('PENDING'); else if (target.filters.taskProgress) setStatus('APPROVED'); setRevision(value => value + 1) }
+    else if (typeof target === 'object' && 'filters' in target) { setFilters(target.filters); setFilterDraft(target.filters); if (target.filters.dueOnly) setStatus('PENDING'); else if (target.filters.taskProgress || target.filters.taskOrder) setStatus('APPROVED'); setRevision(value => value + 1) }
     else if (typeof target === 'object') { setFilters(current => filtersForFollowUpTab(current, 'PENDING')); setFilterDraft(current => filtersForFollowUpTab(current, 'PENDING')); setFocusedReplyId(target.replyId); setStatus('PENDING'); setRevision(value => value + 1) }
     else if (target === 'refresh') setRevision(value => value + 1)
     else { setFilters(current => filtersForFollowUpTab(current, target)); setFilterDraft(current => filtersForFollowUpTab(current, target)); setStatus(target) }
@@ -247,6 +257,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   useEffect(() => {
     let current = true
     if (revokedRef.current) return
+    if (retainedOrderCommit.current === filters) { retainedOrderCommit.current = null; return }
     const epoch = ++readEpoch.current, request = new AbortController()
     abortPages(); setPageTask(null); setPageError(''); pageFailed.current = false; pagesLoaded.current = 1; setNextCursor(null); setPageSupported(false); setCallbackCatchUp(undefined)
     loadingRef.current = true
@@ -260,33 +271,36 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       .then(value => { const item = focusedEmailReply.parse(value); if (item.id !== focusedReplyId) throw new Error('The requested email reply changed. Refresh to try again.'); return item })
       .catch(cause => { if (cause instanceof EmailNotificationError && ([401, 403].includes(cause.status) || /CONTEXT|WORKSPACE/.test(cause.code))) throw cause; if (current) setFocusedError(cause instanceof Error ? cause.message : 'Requested reply is no longer available.'); return null }) : Promise.resolve(null)
     Promise.all([readFollowUpPages<FollowUpItem>({ status, filters, context: emailContext, depth: 1, retained: [], signal: request.signal }), focused])
-      .then(([result, item]) => { if (current && epoch === readEpoch.current && !revokedRef.current) { const rows = result.items; setNextCursor(result.nextCursor); setPageSupported(result.paged); setCallbackCatchUp(result.callbackCatchUp); pagesLoaded.current = result.pages; setWriteAllowed(result.canWrite ?? canWrite); setTaskProgressSupported(result.taskProgress === true); setItems(item ? [item, ...rows.filter(row => row.id !== item.id)] : focusedReplyId && emailContext && status === 'PENDING' ? rows.filter(row => row.id !== focusedReplyId) : rows) } })
+      .then(([result, item]) => { if (current && epoch === readEpoch.current && !revokedRef.current) { const rows = result.items; setNextCursor(result.nextCursor); setPageSupported(result.paged); setCallbackCatchUp(result.callbackCatchUp); pagesLoaded.current = result.pages; setWriteAllowed(result.canWrite ?? canWrite); setTaskProgressSupported(result.taskProgress === true); setTaskOrderSupported(result.taskOrder === true); setItems(item ? [item, ...rows.filter(row => row.id !== item.id)] : focusedReplyId && emailContext && status === 'PENDING' ? rows.filter(row => row.id !== focusedReplyId) : rows) } })
       .catch((cause) => { if (current) { if (followUpAccessLost(cause) || cause instanceof EmailNotificationError && ([401, 403].includes(cause.status) || /CONTEXT|WORKSPACE/.test(cause.code))) invalidate(cause); else setError(cause instanceof Error ? cause.message : 'Unable to load follow-ups.') } })
       .finally(() => { if (current) { loadingRef.current = false; setLoading(false) } })
     return () => { current = false; request.abort() }
   }, [status, filters, revision, focusedReplyId, emailOrganizationId, emailUserId, canWrite, invalidate, abortPages])
 
-  const readLoadedPages = useCallback(async function revalidatePages(depth: number, explicit: boolean, catchUp = false): Promise<void> {
+  const readLoadedPages = useCallback(async function revalidatePages(depth: number, explicit: boolean, catchUp = false, orderFilters?: FollowUpFilters): Promise<void> {
     if (loadingRef.current || revokedRef.current || bulkBusyRef.current || (!explicit && pageFailed.current)) return
     if (pageController.current) { if (!explicit) pendingRevalidation.current = true; return }
     const request = new AbortController(), epoch = readEpoch.current
     pageController.current = request; retryDepth.current = depth; pageFailed.current = false
+    const draftAtStart = filterDraftRef.current
+    retryOrder.current = orderFilters
     retryCatchUp.current = catchUp
     setPageTask(catchUp ? 'catch-up' : depth > pagesLoaded.current ? 'more' : 'refresh'); setPageError('')
     const active = () => pageController.current === request && !request.signal.aborted
     const retained = new Set([...openDrafts.current, ...dirtyEditors.current, ...bulkRetained.current, ...pendingCompletions.current, ...rescheduleHolds.current.keys(), ...(focusedReplyId && focusedReplyId !== hiddenFocused.current ? [focusedReplyId] : [])])
     try {
-      const result = await readFollowUpPages<FollowUpItem>({ status, filters, context: emailOrganizationId && emailUserId ? { organizationId: emailOrganizationId, userId: emailUserId } : undefined, depth, retained: [...retained], signal: request.signal })
+      const result = await readFollowUpPages<FollowUpItem>({ status, filters: orderFilters ?? filters, context: emailOrganizationId && emailUserId ? { organizationId: emailOrganizationId, userId: emailUserId } : undefined, depth, retained: [...retained], signal: request.signal })
       if (!active() || revokedRef.current) return
       if (epoch !== readEpoch.current) { if (explicit) { pageFailed.current = true; setPageError('The list changed while loading. Retry to continue with your current drafts.') }; return }
-      setItems(result.items); setWriteAllowed(result.canWrite ?? canWrite); setTaskProgressSupported(result.taskProgress === true); pagesLoaded.current = result.pages
+      if (orderFilters) { retainedOrderCommit.current = orderFilters; setFilters(orderFilters); setFilterDraft(current => current === draftAtStart ? orderFilters : current); retryOrder.current = undefined }
+      setItems(result.items); setWriteAllowed(result.canWrite ?? canWrite); setTaskProgressSupported(result.taskProgress === true); setTaskOrderSupported(result.taskOrder === true); pagesLoaded.current = result.pages
       setNextCursor(result.nextCursor); setPageSupported(result.paged); setCallbackCatchUp(result.callbackCatchUp)
     } catch (cause) {
       if (!active()) return
       if (followUpAccessLost(cause)) { invalidate(cause); return }
       pageFailed.current = true
       setPageError(epoch !== readEpoch.current ? 'The list changed while loading. Retry to continue with your current drafts.' : cause instanceof Error ? cause.message : 'Unable to load follow-ups. Retry to continue.')
-    } finally { if (active()) { pageController.current = null; setPageTask(null); const again = pendingRevalidation.current && !pageFailed.current && !revokedRef.current && !bulkBusyRef.current; pendingRevalidation.current = false; if (again) void revalidatePages(pagesLoaded.current, false) } }
+    } finally { if (active()) { pageController.current = null; setPageTask(null); const again = !orderFilters && pendingRevalidation.current && !pageFailed.current && !revokedRef.current && !bulkBusyRef.current; pendingRevalidation.current = false; if (again) void revalidatePages(pagesLoaded.current, false) } }
   }, [status, filters, emailOrganizationId, emailUserId, focusedReplyId, canWrite, invalidate])
   useEffect(() => () => abortPages(), [abortPages])
   useEffect(() => {
@@ -326,15 +340,16 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       {focusedError && <p role="alert" className="text-sm text-destructive">{focusedError}</p>}
       <section role="search" aria-label="Follow-up filters" className="space-y-3 rounded-lg border bg-card p-4">
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <label className="grid gap-1.5 text-sm font-medium">Search follow-ups<input type="search" className={fieldClass} maxLength={200} value={filterDraft.search} disabled={revoked} placeholder="Lead name, email or follow-up title" onChange={event => { setFilterError(''); setFilterDraft(current => ({ ...current, search: event.target.value })) }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); if (!loading && !revoked) applyFilters() } }} /></label>
+          <label className="grid gap-1.5 text-sm font-medium">Search follow-ups<input type="search" className={fieldClass} maxLength={200} value={filterDraft.search} disabled={revoked} placeholder="Lead name, email or follow-up title" onChange={event => { setFilterError(''); setFilterDraft(current => ({ ...current, search: event.target.value })) }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); if (!loading && !revoked && !retryOrder.current) applyFilters() } }} /></label>
           <label className="grid gap-1.5 text-sm font-medium">Follow-up source<select className={fieldClass} value={filterDraft.source} disabled={revoked} onChange={event => setFilterDraft(current => ({ ...current, source: event.target.value as FollowUpFilters['source'] }))}><option value="ALL">All sources</option><option value="EMAIL">Email replies</option><option value="CALL">Callbacks</option></select></label>
         </div>
-        {status === 'APPROVED' && <label className="grid gap-1.5 text-sm font-medium">Task progress<select aria-label="Task progress" aria-describedby={taskProgressDescription} className={fieldClass} value={filterDraft.taskProgress ?? ''} disabled={revoked || !taskProgressSupported} onChange={event => { const value = event.target.value as FollowUpFilters['taskProgress']; setFilterDraft(current => ({ ...filtersForFollowUpTab(current, 'PENDING'), dueOnly: false, ...(value ? { taskProgress: value } : {}) })) }}><option value="">All tasks</option><option value="OPEN">Open · including overdue</option><option value="OVERDUE">Overdue</option><option value="COMPLETED">Completed</option></select><span id={taskProgressDescription} className="text-xs font-normal text-muted-foreground">{taskProgressSupported ? 'Progress is checked by the server. Task completion requires review and confirmation. Unavailable tasks are excluded from progress filters.' : 'Task progress is unavailable. Reload to check support.'}</span></label>}
+        {status === 'APPROVED' && <label className="grid gap-1.5 text-sm font-medium">Task progress<select aria-label="Task progress" aria-describedby={taskProgressDescription} className={fieldClass} value={filterDraft.taskProgress ?? ''} disabled={revoked || !taskProgressSupported} onChange={event => { const value = event.target.value as FollowUpFilters['taskProgress']; setFilterDraft(({ taskProgress: _previous, ...current }) => ({ ...current, dueOnly: false, ...(value ? { taskProgress: value } : {}) })) }}><option value="">All tasks</option><option value="OPEN">Open · including overdue</option><option value="OVERDUE">Overdue</option><option value="COMPLETED">Completed</option></select><span id={taskProgressDescription} className="text-xs font-normal text-muted-foreground">{taskProgressSupported ? 'Progress is checked by the server. Task completion requires review and confirmation. Unavailable tasks are excluded from progress filters.' : 'Task progress is unavailable. Reload to check support.'}</span></label>}
+        {status === 'APPROVED' && <label className="grid gap-1.5 text-sm font-medium">Task order<select aria-label="Task order" className={fieldClass} value={filterDraft.taskOrder ?? ''} disabled={revoked || !taskOrderSupported || !taskProgressSupported || pageTask !== null} onChange={event => { const value = event.target.value as FollowUpFilters['taskOrder']; setFilterDraft(({ taskOrder: _previous, ...current }) => ({ ...current, dueOnly: false, ...(value ? { taskOrder: value } : {}) })) }}><option value="">Newest follow-ups</option><option value="DUE_ASC">Earliest task deadline</option></select><span className="text-xs font-normal text-muted-foreground">{taskOrderSupported ? 'Overdue first, then upcoming deadlines. Unavailable tasks appear last. Changing only order keeps unsent drafts.' : 'Deadline ordering is unavailable. Reload to check support.'}</span></label>}
         <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={filterDraft.dueOnly} disabled={revoked} onChange={event => setFilterDraft(current => ({ ...(event.target.checked ? filtersForFollowUpTab(current, 'PENDING') : current), dueOnly: event.target.checked }))} />Due reminders only</label>
         <p className="text-xs text-muted-foreground">Search includes older accessible follow-ups. Due reminders are elapsed snoozes awaiting review in Pending. Apply to update the list.</p>
-        <div className="flex flex-wrap gap-2"><Button type="button" disabled={loading || revoked || bulkBusy} onClick={applyFilters}>Apply filters</Button><Button type="button" variant="outline" disabled={loading || revoked || bulkBusy} onClick={() => { setFilterError(''); setFilterDraft(emptyFilters); navigate({ filters: emptyFilters }) }}>Clear filters</Button></div>
+        <div className="flex flex-wrap gap-2"><Button type="button" disabled={loading || revoked || bulkBusy || pageTask !== null && retryOrder.current !== undefined} onClick={applyFilters}>Apply filters</Button><Button type="button" variant="outline" disabled={loading || revoked || bulkBusy} onClick={() => { setFilterError(''); setFilterDraft(emptyFilters); navigate({ filters: emptyFilters }) }}>Clear filters</Button></div>
         {filterError && <p role="alert" className="text-sm text-destructive">{filterError}</p>}
-        <p className="break-words text-xs text-muted-foreground">{hasFollowUpFilters(filters) ? `Applied: ${filters.search ? `Search “${filters.search}” · ` : ''}${filters.source === 'ALL' ? 'All sources' : filters.source === 'EMAIL' ? 'Email replies' : 'Callbacks'}${filters.dueOnly ? ' · Due reminders only' : ''}${filters.taskProgress ? ` · ${filters.taskProgress === 'OPEN' ? 'Open tasks' : filters.taskProgress === 'OVERDUE' ? 'Overdue tasks' : 'Completed tasks'}` : ''}` : 'Applied: all follow-ups in this tab.'} Open drafts and focused replies can appear outside the filters.</p>
+        <p className="break-words text-xs text-muted-foreground">{hasFollowUpFilters(filters) ? `Applied: ${filters.search ? `Search “${filters.search}” · ` : ''}${filters.source === 'ALL' ? 'All sources' : filters.source === 'EMAIL' ? 'Email replies' : 'Callbacks'}${filters.dueOnly ? ' · Due reminders only' : ''}${filters.taskProgress ? ` · ${filters.taskProgress === 'OPEN' ? 'Open tasks' : filters.taskProgress === 'OVERDUE' ? 'Overdue tasks' : 'Completed tasks'}` : ''}` : 'Applied: all follow-ups in this tab.'} {status === 'APPROVED' && (filters.taskOrder ? 'Order: earliest task deadline. ' : 'Order: newest follow-ups. ')}Open drafts and focused replies can appear outside the filters.</p>
       </section>
       {!loading && !revoked && callbackCatchUp && <section aria-label="Callback catch-up" aria-busy={pageTask === 'catch-up'} className="space-y-3 rounded-lg border bg-card p-4">
         <h2 className="text-sm font-medium">Callback catch-up</h2>
@@ -369,7 +384,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       {!loading && !revoked && (pageSupported || pageError) && <section aria-label="Follow-up pagination" className="space-y-3">
         {pageTask && pageTask !== 'catch-up' && <p role="status" className="text-sm text-muted-foreground">{pageTask === 'more' ? 'Loading more follow-ups…' : 'Checking follow-ups…'}</p>}
         {pageError && !retryCatchUp.current && <p role="alert" className="text-sm text-destructive">{pageError}</p>}
-        <div className="flex flex-wrap gap-2">{nextCursor && <Button type="button" variant="outline" disabled={pageTask !== null || bulkBusy} onClick={() => void readLoadedPages(pagesLoaded.current + 1, true)}>Load more</Button>}{pageError && !retryCatchUp.current && <Button type="button" variant="outline" disabled={pageTask !== null || bulkBusy} onClick={() => void readLoadedPages(retryDepth.current, true)}>Retry loading</Button>}</div>
+        <div className="flex flex-wrap gap-2">{nextCursor && <Button type="button" variant="outline" disabled={pageTask !== null || bulkBusy} onClick={() => void readLoadedPages(pagesLoaded.current + 1, true)}>Load more</Button>}{pageError && !retryCatchUp.current && <Button type="button" variant="outline" disabled={pageTask !== null || bulkBusy} onClick={() => void readLoadedPages(retryDepth.current, true, false, retryOrder.current)}>Retry loading</Button>}</div>
         {pageSupported && !nextCursor && !callbackCatchUp?.hasMore && !pageTask && !pageError && <p className="text-xs text-muted-foreground">All matching follow-ups are loaded.</p>}
       </section>}
       <p className="text-xs text-muted-foreground">{pageSupported ? `${items.length} loaded items assigned to you, including retained drafts and focused replies. Load more keeps your filters and unsent drafts.` : 'Showing up to 100 recent items assigned to you, plus open drafts and a focused reply.'} Email sources are previews, and draft text is a starting template. Approving a task does not send an email.</p>

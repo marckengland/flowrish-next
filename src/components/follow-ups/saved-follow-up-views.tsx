@@ -1,4 +1,5 @@
 'use client'
+import { FOLLOW_UP_TASK_ORDER_HEADER } from '@/lib/follow-up-task-order'
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { z } from 'zod'
@@ -38,7 +39,7 @@ function PersonalViews(props: SavedFollowUpViewsProps) {
   const inputId = useId(), selectId = useId(), titleId = useId()
 
   const request = useCallback(async (path: string, method = 'GET', body?: unknown) => {
-    const response = await fetch(path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json', [FOLLOW_UP_TASK_PROGRESS_HEADER]: '1', ...followUpHeaders({ organizationId, userId }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+    const response = await fetch(path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json', [FOLLOW_UP_TASK_PROGRESS_HEADER]: '1', [FOLLOW_UP_TASK_ORDER_HEADER]: '1', ...followUpHeaders({ organizationId, userId }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
     return (await followUpData<unknown>(response, { organizationId, userId })).data
   }, [organizationId, userId])
 
@@ -124,7 +125,7 @@ function PersonalViews(props: SavedFollowUpViewsProps) {
       {selected && <Button type="button" variant="outline" className="min-h-11" disabled={loading || busy || denied || props.disabled || !!pendingCreate} onClick={() => select(views.find(view => view.id === selected.id) ?? null)}>Reload selected view</Button>}
     </div>
     <div className="flex flex-wrap items-end gap-3"><div className="min-w-0 flex-1 space-y-1"><label htmlFor={inputId} className="text-sm">View name</label><Input id={inputId} value={name} maxLength={80} disabled={busy || denied || props.disabled || !!pendingCreate} onChange={event => { setName(event.target.value); setConfirmDelete(false) }} className="min-h-11" /></div><Button type="button" className="min-h-11" disabled={disabled || !name.trim() || views.length >= SAVED_FOLLOW_UP_VIEW_LIMIT} onClick={create}>Save as new view</Button></div>
-    <p className="text-xs text-muted-foreground">{views.length}/{SAVED_FOLLOW_UP_VIEW_LIMIT} views. Saves the applied tab, search, source and due-reminder filter. Drafts are never saved in views. Applying uses your current follow-up permissions.</p>
+    <p className="text-xs text-muted-foreground">{views.length}/{SAVED_FOLLOW_UP_VIEW_LIMIT} views. Saves the applied tab, search, source, reminder and task-progress filters, and task order. Drafts are never saved in views. Applying uses your current follow-up permissions.</p>
     {selected && <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" className="min-h-11" disabled={disabled || stale || !name.trim()} onClick={() => { void change('PATCH', { expectedRevision: selected.revision, name }) }}>Rename view</Button><Button type="button" variant="outline" className="min-h-11" disabled={disabled || stale} onClick={() => { void change('PATCH', { expectedRevision: selected.revision, settings: props.settings }) }}>Replace saved settings</Button><Button type="button" variant="outline" className="min-h-11" disabled={disabled || stale} onClick={() => setConfirmDelete(true)}>Delete saved view</Button></div>}
     {confirmDelete && selected && <div className="space-y-2 rounded-md border p-3"><p>Delete “{selected.name}”? Your follow-ups, filters and drafts will be kept.</p><div className="flex flex-wrap gap-2"><Button type="button" className="min-h-11" disabled={disabled || stale} onClick={() => { void change('DELETE', { expectedRevision: selected.revision }) }}>Confirm delete saved view</Button><Button type="button" variant="outline" disabled={busy} onClick={() => setConfirmDelete(false)}>Cancel deletion</Button></div></div>}
     {pendingCreate && !busy && <div className="space-y-2"><p className="text-sm">The save outcome is uncertain. Retry the same name and settings without creating a duplicate.</p><Button type="button" variant="outline" className="min-h-11" disabled={denied || props.disabled} onClick={() => { void change('POST', pendingCreate) }}>Retry save</Button></div>}

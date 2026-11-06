@@ -1,0 +1,50 @@
+import { expect, test, type Page } from '@playwright/test'
+import { coreIds } from './rehearsal-app/core-fixtures'
+test.use({ storageState: { cookies: [], origins: [] }, serviceWorkers: 'block', timezoneId: 'Asia/Manila' })
+const scope={organizationId:coreIds.organization,userId:coreIds.user},stamp='2026-11-06T01:00:00.000Z',version='a'.repeat(64)
+const id=(n:number)=>String(n+1).padStart(8,'0')+'-7777-4777-8777-777777777777'
+const rows=[0,1,2].map(n=>({id:id(n),taskId:id(n+10),status:'APPROVED',sourceType:'EMAIL',sourceText:'Synthetic deadline source '+n,title:'Clinic work '+n,description:'Synthetic notes',draftSubject:'Quote',draftBody:'Synthetic unsent reply',createdAt:stamp,taskProgress:n===2?{state:'UNAVAILABLE'}:{state:'OVERDUE',dueDate:n?'2020-01-01T00:00:00.000Z':'2099-01-01T00:00:00.000Z',completedAt:null,checkedAt:stamp},lead:{id:coreIds.lead,firstName:'Practice '+n,lastName:'Clinic',email:'lead@example.invalid'}}))
+const state=()=>({readonly:false,stale:false,fail:false,hold:false,held:false,release:()=>{},calls:[] as URL[],views:[] as Array<{id:string;name:string;settings:unknown;revision:number;updatedAt:string}>,writes:[] as unknown[],unexpected:[] as string[]})
+async function mock(page:Page,base:string,s:ReturnType<typeof state>){
+ const origin=new URL(base).origin
+ await page.route('**/*',async route=>{
+  const req=route.request(),url=new URL(req.url()),path=url.pathname,method=req.method(),q=url.searchParams
+  const reply=(data:unknown,page?:unknown)=>route.fulfill({json:{data,scope:s.stale?{...scope,userId:'other'}:scope,capabilities:{canWrite:!s.readonly,taskProgress:true,taskOrder:true},...(page?{page}:{})}})
+  if(url.origin!==origin||/receptionist-widget/.test(path)){s.unexpected.push(method+' '+path);await route.abort();return}
+  if(path==='/api/follow-ups'&&method==='GET'){
+   expect(req.headers()['x-flowrish-task-order']).toBe('1');expect(req.headers()['x-flowrish-follow-up-scope']).toBe(JSON.stringify([scope.organizationId,scope.userId]));s.calls.push(url)
+   if(q.has('taskOrder')){if(s.hold){s.hold=false;s.held=true;await new Promise<void>(resolve=>{s.release=resolve})}if(s.fail){await route.fulfill({status:409,json:{error:{code:'FOLLOW_UP_ORDER_CHANGED',message:'Synthetic deadlines changed. Refresh to try again.'}}});return}}
+   let data=q.get('status')==='APPROVED'?(q.has('taskOrder')?[rows[1],rows[0],rows[2]]:rows):[]
+   if(s.readonly&&q.has('taskOrder'))data=q.has('after')?[rows[2]]:[rows[1],rows[0]]
+   await reply(data,{nextCursor:s.readonly&&q.has('taskOrder')&&!q.has('after')?'next':null,accessVersion:version,...(q.has('taskOrder')?{orderVersion:version}:{})});return
+  }
+  if(path==='/api/follow-up-views'&&method==='GET'){expect(req.headers()['x-flowrish-task-order']).toBe('1');await reply(s.views);return}
+  if(path==='/api/follow-up-views'&&method==='POST'){
+   const body=req.postDataJSON();expect(body.settings.filters.taskOrder).toBe('DUE_ASC');expect(body.settings.status).toBe('APPROVED');s.writes.push(body);const view={...body,revision:1,updatedAt:stamp};s.views.push(view);await reply(view);return
+  }
+  if(path==='/api/email/matches'&&method==='GET'){await reply([]);return}
+  if(path.startsWith('/api/')||!['GET','HEAD'].includes(method)){s.unexpected.push(method+' '+path);await route.abort();return}await route.continue()
+ })
+}
+const card=(page:Page,n=0)=>page.getByRole('article',{name:'Follow-up for Practice '+n+' Clinic',exact:true})
+async function approved(page:Page){await page.goto('/follow-up-access');await expect(page.getByText('No pending follow-ups',{exact:true})).toBeVisible();await page.getByRole('tab',{name:'Approved',exact:true}).click();await expect(card(page)).toBeVisible();await expect(page.getByRole('combobox',{name:'Task order',exact:true})).toBeEnabled()}
+async function sort(page:Page){await page.getByRole('combobox',{name:'Task order',exact:true}).selectOption('DUE_ASC');await page.getByRole('button',{name:'Apply filters',exact:true}).click()}
+async function draft(page:Page){await card(page).getByRole('button',{name:'Review email draft',exact:true}).click();const subject=page.getByRole('textbox',{name:'Subject',exact:true});await subject.fill('Keep deadline order draft');await subject.evaluate(el=>el.setAttribute('data-synthetic-mounted','original'));return subject}
+async function sorted(page:Page){await expect(page.getByRole('article').first()).toHaveAccessibleName('Follow-up for Practice 1 Clinic');await expect(page.getByRole('button',{name:'Apply filters',exact:true})).toBeEnabled()}
+for(const width of [1280,390])test('approved deadline sort keeps filters and exact unsent composer at '+width+'px',async({page,baseURL},info)=>{
+ const s=state();await page.setViewportSize({width,height:900});await mock(page,baseURL!,s);await approved(page);await page.getByRole('combobox',{name:'Task progress',exact:true}).selectOption('OPEN');await page.getByRole('button',{name:'Apply filters',exact:true}).click();await expect(page.getByRole('button',{name:'Apply filters',exact:true})).toBeEnabled();const subject=await draft(page);await sort(page);await sorted(page)
+ await expect(subject).toHaveValue('Keep deadline order draft');await expect(subject).toHaveAttribute('data-synthetic-mounted','original');await expect(page.getByRole('group',{name:'Open draft confirmation',exact:true})).toHaveCount(0);await expect(page.getByRole('combobox',{name:'Task progress',exact:true})).toHaveValue('OPEN');expect(s.calls.at(-1)?.searchParams.getAll('retain')).toContain(id(0));expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('deadline-order.png'),fullPage:true});expect(s.writes).toEqual([]);expect(s.unexpected).toEqual([])
+})
+test('approved deadline sort pages read-only work and keeps unavailable dates last',async({page,baseURL})=>{
+ const s=state();s.readonly=true;await mock(page,baseURL!,s);await approved(page);await sort(page);await sorted(page);await expect(page.getByRole('article')).toHaveCount(2);await page.getByRole('button',{name:'Load more',exact:true}).click();await expect(page.getByRole('article')).toHaveCount(3);await expect(page.getByRole('article').last()).toHaveAccessibleName('Follow-up for Practice 2 Clinic');await expect(card(page,2).getByText('Progress unavailable',{exact:true})).toBeVisible();await expect(card(page,2).getByRole('link',{name:'Open task',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Review email draft',exact:true})).toHaveCount(0);await expect(page.getByRole('combobox',{name:'Task order',exact:true})).toHaveValue('DUE_ASC');expect(s.calls.some(url=>url.searchParams.get('after')==='next')).toBe(true);expect(s.writes).toEqual([]);expect(s.unexpected).toEqual([])
+})
+test('approved deadline sort stores a personal view and applies it on another device with current scope',async({page,browser,baseURL})=>{
+ const s=state();await mock(page,baseURL!,s);await approved(page);await sort(page);await sorted(page);await page.getByText('Saved views',{exact:true}).click();await expect(page.getByRole('button',{name:'Refresh saved views',exact:true})).toBeEnabled();await page.getByRole('textbox',{name:'View name',exact:true}).fill('Earliest work');await page.getByRole('button',{name:'Save as new view',exact:true}).click();await expect(page.getByText('View saved.',{exact:true})).toBeVisible()
+ const context=await browser.newContext({storageState:{cookies:[],origins:[]},serviceWorkers:'block',timezoneId:'Asia/Manila'});const other=await context.newPage();try{await mock(other,baseURL!,s);await approved(other);const subject=await draft(other);await other.getByText('Saved views',{exact:true}).click();await other.getByRole('combobox',{name:'Saved follow-up view',exact:true}).selectOption({label:'Earliest work'});await other.getByRole('button',{name:'Apply view',exact:true}).click();await sorted(other);await expect(subject).toHaveAttribute('data-synthetic-mounted','original');await expect(subject).toHaveValue('Keep deadline order draft');expect(s.writes).toHaveLength(1);expect(s.unexpected).toEqual([])}finally{await context.close()}
+})
+test('approved deadline sort retries a changed-order error explicitly and keeps the original draft',async({page,baseURL})=>{
+ const s=state();s.fail=true;await mock(page,baseURL!,s);await approved(page);const subject=await draft(page);await sort(page);const pagination=page.getByRole('region',{name:'Follow-up pagination',exact:true});await expect(pagination.getByRole('alert')).toHaveText('Synthetic deadlines changed. Refresh to try again.');const count=s.calls.length;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));expect(s.calls).toHaveLength(count);await expect(page.getByRole('article').first()).toHaveAccessibleName('Follow-up for Practice 0 Clinic');s.fail=false;await pagination.getByRole('button',{name:'Retry loading',exact:true}).click();await sorted(page);await expect(subject).toHaveAttribute('data-synthetic-mounted','original');await expect(subject).toHaveValue('Keep deadline order draft');expect(s.writes).toEqual([]);expect(s.unexpected).toEqual([])
+})
+test('approved deadline sort rejects a delayed response after editor changes and clears stale-account data',async({page,baseURL})=>{
+ const s=state();s.hold=true;await mock(page,baseURL!,s);await approved(page);await sort(page);await expect.poll(()=>s.held).toBe(true);const subject=await draft(page);s.release();const pagination=page.getByRole('region',{name:'Follow-up pagination',exact:true});await expect(pagination.getByRole('alert')).toHaveText('The list changed while loading. Retry to continue with your current drafts.');await expect(subject).toHaveValue('Keep deadline order draft');s.stale=true;await pagination.getByRole('button',{name:'Retry loading',exact:true}).click();await expect(page.getByText('Access changed. Reload before continuing.',{exact:true})).toBeVisible();await expect(page.getByRole('article')).toHaveCount(0);await expect(page.getByRole('textbox',{name:'Subject',exact:true})).toHaveCount(0);expect(s.writes).toEqual([]);expect(s.unexpected).toEqual([])
+})

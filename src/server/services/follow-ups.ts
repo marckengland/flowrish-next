@@ -1,3 +1,5 @@
+import { readDeadlinePage, readDeadlineVersion, followUpOrderChanged } from './follow-up-deadline-page'
+import { compareTaskDeadline } from '@/lib/follow-up-task-order'
 import { approvalInput, type ApprovalInput } from '@/lib/follow-up-approval'
 import { assertReviewedApproval, approvalAuditFields } from './follow-up-approval-guard'
 import { z } from 'zod'
@@ -64,12 +66,13 @@ export async function reviewFollowUp(organizationId: string, userId: string, id:
 }
 
 /** Materializes authorized callback work; pending reviews follow their task owner. */
-export async function listFollowUps(organizationId: string, userId: string, status = 'PENDING', retainedIds: readonly string[] = [], rawFilters: unknown = {}, rawPage?: unknown, includeTaskProgress = false) {
+export async function listFollowUps(organizationId: string, userId: string, status = 'PENDING', retainedIds: readonly string[] = [], rawFilters: unknown = {}, rawPage?: unknown, includeTaskProgress = false, includeTaskOrder = false) {
   const paging = rawPage === undefined ? undefined : followUpPageRequest.parse(rawPage)
   const filters = followUpFilterSchema.parse(rawFilters)
   const retained = z.array(z.string().min(1).max(128)).max(100).parse(retainedIds)
   if (!['PENDING', 'APPROVED', 'DISMISSED', 'SNOOZED'].includes(status)) throw new AppError('VALIDATION_ERROR', 'Invalid follow-up status', 400)
   if (filters.taskProgress && (status !== 'APPROVED' || !includeTaskProgress)) throw new AppError('VALIDATION_ERROR', 'Task progress filters require the Approved progress view.', 400)
+  if (filters.taskOrder && (status !== 'APPROVED' || !includeTaskProgress || !includeTaskOrder || !paging)) throw new AppError('VALIDATION_ERROR', 'Task ordering requires the paged Approved progress view.', 400)
   const progressMode = includeTaskProgress && status === 'APPROVED'
   const cursorScope = { organizationId, userId, status, filters, ...(includeTaskProgress ? { taskProgress: true } : {}) }
   const after = paging?.after ? decodeFollowUpCursor(cursorScope, paging.after) : null
@@ -143,8 +146,7 @@ export async function listFollowUps(organizationId: string, userId: string, stat
     const checkedAt = progressMode ? await snoozeClock(tx) : undefined
     const progressFields = progressMode ? Prisma.sql`,pt.id AS "progressTaskId",pt."dueDate" AS "progressDueDate",pt."isComplete" AS "progressComplete"` : Prisma.empty
     const progressJoin = progressMode ? Prisma.sql`LEFT JOIN "Task" pt ON pt.id=f."taskId" AND pt."organizationId"=f."organizationId" AND pt."leadId"=f."leadId" AND (${final.taskScope.assigneeId ? Prisma.sql`pt."assigneeId"=${final.taskScope.assigneeId}` : Prisma.sql`TRUE`})` : Prisma.empty
-    const eligible = await tx.$queryRaw<Array<{ id: string; createdAt: Date; isPage: boolean; hasMore: boolean }>>`WITH eligible AS (
-      SELECT f.id,f."createdAt",f.status,s.until,f."sourceType",concat_ws(' ',l."firstName",l."lastName",l.email,f.title) AS "searchText"${progressFields} FROM "FollowUpSuggestion" f
+    const eligibleSql = Prisma.sql`      SELECT f.id,f."createdAt",f.status,s.until,f."sourceType",concat_ws(' ',l."firstName",l."lastName",l.email,f.title) AS "searchText"${progressFields} FROM "FollowUpSuggestion" f
       LEFT JOIN "FollowUpSnooze" s ON s."organizationId"=f."organizationId" AND s."userId"=${userId} AND s."followUpId"=f.id
       JOIN "Lead" l ON l.id=f."leadId" AND l."organizationId"=${organizationId}
       ${progressJoin}
@@ -153,7 +155,10 @@ export async function listFollowUps(organizationId: string, userId: string, stat
         AND (f.status<>'PENDING' OR (f."taskId" IS NULL AND f."sourceType"<>'CALL') OR EXISTS (
           SELECT 1 FROM "Task" t WHERE t.id=f."taskId" AND t."organizationId"=${organizationId}
             AND t."assigneeId"=${userId} AND t."leadId"=f."leadId" AND t."isComplete"=false))
-    ), page_candidates AS (
+    `
+    const predicate = Prisma.sql`${view} AND (${followUpFilterSql(filters, checkedAt)})`
+    const deadlinePage = filters.taskOrder ? await readDeadlinePage(tx, eligibleSql, predicate, retained, after) : undefined
+    const eligible = deadlinePage ? deadlinePage.keys : await tx.$queryRaw<Array<{ id: string; createdAt: Date; isPage: boolean; hasMore: boolean; dueDate?: Date | null }>>`WITH eligible AS (${eligibleSql}), page_candidates AS (
       SELECT id,"createdAt" FROM eligible WHERE ${view} AND (${followUpFilterSql(filters, checkedAt)}) AND (${position}) ORDER BY "createdAt" DESC,id LIMIT ${paging ? 101 : 100}
     ), selected AS (
       (SELECT id,"createdAt",true AS "isPage" FROM page_candidates ORDER BY "createdAt" DESC,id LIMIT 100)
@@ -171,6 +176,10 @@ export async function listFollowUps(organizationId: string, userId: string, stat
       const lead = byId.get(row.leadId)
       return lead ? [{ ...snoozeView(followUpView(row, lead), snoozeById.get(row.id) ?? null), ...(progress?.has(row.id) ? { taskProgress: progress.get(row.id)! } : {}) }] : []
     })
+    if (deadlinePage) {
+      if (await readDeadlineVersion(tx, eligibleSql, predicate) !== deadlinePage.orderVersion) throw followUpOrderChanged()
+      items.sort(compareTaskDeadline)
+    }
     const callbackCatchUp = paging && !after && !progressMode ? { created: callbacksCreated, hasMore: (await queryCallbacks(1, leadScope)).length > 0 } : undefined
     const current = await currentFollowUpAccess(tx, organizationId, userId)
     if (JSON.stringify(current.filter) !== JSON.stringify(final.filter) || progressMode && JSON.stringify(current.taskScope) !== JSON.stringify(final.taskScope)) throw followUpUnavailable()
@@ -179,8 +188,8 @@ export async function listFollowUps(organizationId: string, userId: string, stat
       const visible = new Set(items.map(row => row.id))
       const anchor = eligible.filter(row => row.isPage && visible.has(row.id)).at(-1)
       if (!anchor) throw followUpChanged()
-      nextCursor = encodeFollowUpCursor(cursorScope, anchor)
+      nextCursor = encodeFollowUpCursor(cursorScope, { ...anchor, ...(deadlinePage ? { orderVersion: deadlinePage.orderVersion } : {}) })
     }
-    return { items, canWrite: current.canWrite, ...(paging ? { page: { nextCursor, accessVersion: followUpPageAccessVersion(current.filter, progressMode ? current.taskScope : undefined), ...(callbackCatchUp ? { callbackCatchUp } : {}) } } : {}) }
+    return { items, canWrite: current.canWrite, ...(paging ? { page: { nextCursor, ...(deadlinePage ? { orderVersion: deadlinePage.orderVersion } : {}), accessVersion: followUpPageAccessVersion(current.filter, progressMode ? current.taskScope : undefined), ...(callbackCatchUp ? { callbackCatchUp } : {}) } } : {}) }
   }, { timeout: 20000 }))
 }

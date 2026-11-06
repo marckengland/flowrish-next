@@ -1,3 +1,4 @@
+import { taskOrderFromRequest } from '@/lib/follow-up-task-order'
 import { taskProgressFromRequest } from '@/lib/follow-up-task-progress'
 import { AppError } from '@/lib/errors'
 import { followUpHttp } from '@/server/services/follow-up-http'
@@ -7,7 +8,7 @@ import { createSavedFollowUpView, listSavedFollowUpViews } from '@/server/servic
 export async function GET(request: Request) {
   return followUpHttp(request, false, async session => {
     if (new URL(request.url).search) throw new AppError('VALIDATION_ERROR', 'Saved views use your current business and account.', 400)
-    return { data: await (taskProgressFromRequest(request) ? listSavedFollowUpViews(session.organizationId, session.dbUser.id, true) : listSavedFollowUpViews(session.organizationId, session.dbUser.id)), canWrite: false }
+    return { data: await (taskOrderFromRequest(request) ? listSavedFollowUpViews(session.organizationId, session.dbUser.id, taskProgressFromRequest(request), true) : taskProgressFromRequest(request) ? listSavedFollowUpViews(session.organizationId, session.dbUser.id, true) : listSavedFollowUpViews(session.organizationId, session.dbUser.id)), canWrite: false }
   })
 }
 export async function POST(request: Request) {
