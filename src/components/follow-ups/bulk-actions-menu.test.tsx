@@ -1,0 +1,46 @@
+import {afterEach,expect,it,vi} from 'vitest'
+import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react'
+import {FollowUpInbox} from './follow-up-inbox'
+vi.mock('./email-match-inbox',()=>({EmailMatchInbox:()=>null}))
+vi.mock('@/components/email/email-compose',()=>({EmailCompose:()=><label>Menu draft<input defaultValue="Keep draft"/></label>}))
+const scope={organizationId:'org',userId:'actor'},at='2026-11-06T00:00:00.000Z',version='a'.repeat(64)
+const row=(id='a')=>({id,status:'PENDING',taskId:null as string|null,sourceType:'EMAIL',sourceText:'Synthetic menu source '+id,title:'Callback '+id,description:'Notes',draftSubject:'Subject',draftBody:'Reply',createdAt:at,snoozeVersion:version,snooze:null,taskProgress:{state:'OPEN',dueDate:'2099-01-01T00:00:00.000Z',completedAt:null,checkedAt:at},lead:{id:'lead-'+id,firstName:'Practice '+id,lastName:'Clinic',email:'lead@example.invalid'}})
+afterEach(()=>{cleanup();vi.restoreAllMocks()})
+async function setup(approved=false,readonly=false,unsupportedCall=false){
+ const s={calls:[] as string[],posts:0,lose:false,empty:false},items=[row('a'),row('b')]
+ if(unsupportedCall)items[0].sourceType='CALL'
+ if(approved)for(const item of items){item.status='APPROVED';item.taskId='task-'+item.id}
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(url,init)=>{
+  const path=String(url),method=init?.method??'GET';s.calls.push(method+' '+path);const q=new URL(path,'https://example.invalid').searchParams
+  const reply=(data:unknown,page?:unknown)=>new Response(JSON.stringify({data,scope,capabilities:{canWrite:!readonly,taskProgress:true,taskOrder:true},...(page?{page}:{})}))
+  if(path.startsWith('/api/follow-ups?'))return reply(q.get('status')===(approved?'APPROVED':'PENDING')&&!s.empty?items:[],{nextCursor:null,accessVersion:version,...(q.has('taskOrder')?{orderVersion:version}:{})})
+  if(path==='/api/follow-ups/batches'&&method==='POST')return reply({registration:JSON.parse(String(init?.body)),createdAt:at})
+  const match=path.match(/^\/api\/follow-ups\/([^/]+)\/(task-completion|task-reschedule|approval)$/)
+  if(match){const id=match[1];if(method==='POST'){s.posts++;throw new Error('Synthetic lost receipt')}
+   if(q.has('requestId'))return reply({id,requestId:q.get('requestId'),state:'not-recorded',task:null})
+   if(match[2]==='approval')return reply({id,version,sourceType:'EMAIL',leadName:'Practice '+id+' Clinic',title:'Fresh approval '+id,description:'Current description',assigneeId:'actor',existingTask:null})
+   return reply({id,version,leadName:'Practice '+id+' Clinic',task:{id:'task-'+id,title:'Fresh task '+id,description:'Current notes',assigneeId:'actor',assigneeName:'Owner',dueDate:'2099-01-01T00:00:00.000Z'},...(match[2]==='task-reschedule'?{localTime:q.get('localTime'),timeZone:q.get('timeZone'),newDueDate:'2099-11-07T01:00:00.000Z'}:{})})
+  }
+  throw new Error('Unexpected '+method+' '+path)
+ })
+ render(<FollowUpInbox canWrite={!readonly} emailMatchContext={scope}/>);if(approved){await screen.findByText('No pending follow-ups');fireEvent.click(screen.getByRole('tab',{name:'Approved'}))}await screen.findByText('Synthetic menu source a');return s
+}
+const choose=(value:string)=>fireEvent.change(screen.getByRole('combobox',{name:'Bulk actions'}),{target:{value}})
+it('starts compact, offers contextual actions and switches idle panels without network activity or draft loss',async()=>{
+ const s=await setup();expect(screen.queryByRole('region',{name:'Bulk snooze'})).not.toBeInTheDocument();expect(screen.queryByRole('region',{name:'Bulk task approval'})).not.toBeInTheDocument();expect(screen.getByRole('combobox',{name:'Bulk actions'})).toHaveValue('');expect(within(screen.getByRole('combobox',{name:'Bulk actions'})).getAllByRole('option').map(o=>(o as HTMLOptionElement).value)).toEqual(['','snooze','approve'])
+ fireEvent.click(within(screen.getAllByRole('article')[0]).getByRole('button',{name:'Review email draft'}));const draft=screen.getByLabelText('Menu draft');fireEvent.change(draft,{target:{value:'Exact menu draft'}});const before=s.calls.length;choose('snooze');expect(screen.getByRole('region',{name:'Bulk snooze'})).toBeInTheDocument();choose('approve');expect(screen.getByRole('region',{name:'Bulk task approval'})).toBeInTheDocument();expect(screen.queryByRole('region',{name:'Bulk snooze'})).not.toBeInTheDocument();choose('');expect(screen.getByLabelText('Menu draft')).toBe(draft);expect(draft).toHaveValue('Exact menu draft');expect(s.calls).toHaveLength(before);expect(s.posts).toBe(0)
+})
+it('keeps an edited deadline visible and mounted when choosing another action and guards navigation',async()=>{
+ const s=await setup(true);choose('reschedule');const deadline=screen.getByLabelText('Bulk new deadline');fireEvent.change(deadline,{target:{value:'2099-11-07T09:00'}});choose('complete');expect(screen.getByLabelText('Bulk new deadline')).toBe(deadline);expect(deadline).toHaveValue('2099-11-07T09:00');expect(screen.getByRole('region',{name:'Bulk deadline rescheduling'})).toBeInTheDocument();fireEvent.click(screen.getByRole('tab',{name:'Pending'}));expect(screen.getByRole('group',{name:'Bulk deadline rescheduling navigation'})).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Stay with bulk rescheduling'}));expect(s.posts).toBe(0)
+})
+it('pins uncertain completion results and exact checks after changing the menu',async()=>{
+ const s=await setup(true);choose('complete');const panel=screen.getByRole('region',{name:'Bulk task completion'});fireEvent.click(within(panel).getByRole('button',{name:'Select up to 20 for completion'}));fireEvent.click(within(panel).getByRole('button',{name:'Review selected task completions'}));await within(panel).findByRole('group',{name:'Bulk completion review'});fireEvent.click(within(panel).getByRole('button',{name:'Confirm bulk completion'}));await within(panel).findByText(/Completion could not be confirmed/);choose('reschedule');expect(screen.getByRole('region',{name:'Bulk task completion'})).toBe(panel);expect(within(panel).getByRole('button',{name:'Check completion results'})).toBeEnabled();expect(s.posts).toBe(1)
+})
+it('keeps approval edits and snooze targets until explicitly cleared',async()=>{
+ const s=await setup();choose('approve');const approval=screen.getByRole('region',{name:'Bulk task approval'});fireEvent.click(within(approval).getByRole('button',{name:'Select up to 20 for approval'}));fireEvent.click(within(approval).getByRole('button',{name:'Review task approvals'}));const title=await within(approval).findByLabelText('Approval task title for Practice a Clinic');fireEvent.change(title,{target:{value:'Keep reviewed title'}});choose('snooze');expect(title).toHaveValue('Keep reviewed title');expect(screen.getByRole('region',{name:'Bulk task approval'})).toBe(approval);const snooze=screen.getByRole('region',{name:'Bulk snooze'});await waitFor(()=>expect(within(snooze).getByRole('button',{name:'Tomorrow at 9:00'})).toBeEnabled());fireEvent.click(within(snooze).getByRole('button',{name:'Tomorrow at 9:00'}));const time=within(snooze).getByLabelText('Bulk reminder time');const value=(time as HTMLInputElement).value;choose('');expect(within(snooze).getByLabelText('Bulk reminder time')).toBe(time);expect(time).toHaveValue(value);fireEvent.click(within(snooze).getByRole('button',{name:'Clear snooze work'}));expect(screen.queryByRole('region',{name:'Bulk snooze'})).not.toBeInTheDocument();expect(screen.getByLabelText('Approval task title for Practice a Clinic')).toBe(title);expect(title).toHaveValue('Keep reviewed title');expect(s.posts).toBe(0)
+})
+it('hides write menus from read-only users',async()=>{const s=await setup(false,true);expect(screen.queryByRole('combobox',{name:'Bulk actions'})).not.toBeInTheDocument();expect(s.calls.every(call=>call.startsWith('GET '))).toBe(true)})
+
+it('offers only actions valid for the loaded selection and reports its count',async()=>{const s=await setup(false,false,true);const menu=screen.getByRole('combobox',{name:'Bulk actions'});expect(within(menu).getByRole('option',{name:'Approve tasks'})).toBeInTheDocument();fireEvent.click(screen.getByRole('checkbox',{name:'Select follow-up for Practice a Clinic: Callback a'}));expect(within(menu).queryByRole('option',{name:'Approve tasks'})).not.toBeInTheDocument();choose('snooze');expect(within(screen.getByRole('region',{name:'Bulk actions'})).getByText('1 selected')).toBeInTheDocument();expect(s.posts).toBe(0)})
+
+it('retains an unselected snooze editor when background reads remove eligible rows, until explicitly cleared',async()=>{const s=await setup();choose('snooze');const input=screen.getByLabelText('Bulk reminder time');fireEvent.change(input,{target:{value:'2099-11-07T09:00'}});s.empty=true;fireEvent.focus(window);await screen.findByText('No pending follow-ups');expect(screen.getByLabelText('Bulk reminder time')).toBe(input);expect(input).toHaveValue('2099-11-07T09:00');fireEvent.click(screen.getByRole('button',{name:'Clear snooze work'}));await waitFor(()=>expect(screen.queryByLabelText('Bulk reminder time')).not.toBeInTheDocument());fireEvent.click(screen.getByRole('tab',{name:'Snoozed'}));await screen.findByText('No snoozed follow-ups');expect(screen.queryByRole('group',{name:'Active bulk work navigation'})).not.toBeInTheDocument();expect(s.posts).toBe(0)})

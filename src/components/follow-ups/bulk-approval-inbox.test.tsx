@@ -17,7 +17,7 @@ async function setup(write = true) {
  })
  render(<FollowUpInbox canWrite={write} emailMatchContext={context} />); await screen.findByText(seed.sourceText); return calls
 }
-async function open() { const details = screen.getByText('Bulk task approval').closest('details')!; details.open = true; fireEvent(details, new Event('toggle')); await screen.findByRole('button', { name: 'Select up to 20 for approval' }); fireEvent.click(screen.getByRole('button', { name: 'Select up to 20 for approval' })) }
+async function open() { fireEvent.change(screen.getByRole('combobox', { name: 'Bulk actions' }), { target: { value: 'approve' } }); await screen.findByRole('button', { name: 'Select up to 20 for approval' }); fireEvent.click(screen.getByRole('button', { name: 'Select up to 20 for approval' })) }
 it('preserves the mounted email draft and filters while approving, refreshing and clearing selection', async () => {
  const calls = await setup(); const filters = screen.getByRole('search', { name: 'Follow-up filters' }); fireEvent.change(within(filters).getByRole('searchbox'), { target: { value: 'Clinic' } }); fireEvent.click(within(filters).getByRole('button', { name: 'Apply filters' })); await screen.findByText(seed.sourceText)
  fireEvent.click(screen.getByRole('button', { name: 'Review email draft' })); fireEvent.change(screen.getByLabelText('Unsent approval subject'), { target: { value: 'Keep email edits' } }); const subject = screen.getByLabelText('Unsent approval subject'); subject.setAttribute('data-mounted', 'original')
