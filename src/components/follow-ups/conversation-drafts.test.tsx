@@ -38,7 +38,7 @@ describe('conversation follow-up drafts', () => {
     let resolve!: (response: Response) => void
     const request = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(ok([item])).mockImplementationOnce(() => new Promise<Response>(done => { resolve = done })).mockResolvedValueOnce(ok({ ...item, status: 'DISMISSED' }))
     render(<FollowUpInbox canWrite />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Generate contextual draft' }))
+fireEvent.click(await screen.findByRole('button', { name: 'Review follow-up' }));     fireEvent.click(await screen.findByRole('button', { name: 'Generate contextual draft' }))
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
     await screen.findByText('Follow-up dismissed.')
     await act(async () => resolve(ok(generated)))

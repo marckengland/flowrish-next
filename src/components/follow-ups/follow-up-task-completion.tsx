@@ -7,7 +7,7 @@ import { taskCompletionInput, taskCompletionPreview, taskCompletionReceipt, type
 import type { TaskProgress } from '@/lib/follow-up-task-progress'
 
 type Confirmed = Extract<TaskCompletionReceipt, { state: 'confirmed' }>
-type Props = { id: string; taskId: string | null; progress?: TaskProgress; context: FollowUpContext; canWrite: boolean; disabled: boolean; onChanged: (receipt: Confirmed) => void; onBusyChange: (busy: boolean) => void; onPendingChange?: (id: string, pending: boolean) => void; onAccessLost: (cause: unknown, id: string) => void }
+type Props = { id: string; taskId: string | null; progress?: TaskProgress; context: FollowUpContext; canWrite: boolean; disabled: boolean; onChanged: (receipt: Confirmed) => void; onBusyChange: (busy: boolean) => void; onPendingChange?: (id: string, pending: boolean) => void; onWorkChange?: (work: boolean) => void; onAccessLost: (cause: unknown, id: string) => void }
 export function FollowUpTaskCompletion(props: Props) {
  const [review, setReview] = useState<TaskCompletionPreview | null>(null), [plan, setPlan] = useState<TaskCompletionInput | null>(null)
  const [busy, setBusy] = useState(false), [done, setDone] = useState(false), [lost, setLost] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('')
@@ -15,6 +15,8 @@ export function FollowUpTaskCompletion(props: Props) {
  latest.current = props
  const keyFor = (p: Props) => JSON.stringify([p.context.organizationId, p.context.userId, p.id, p.taskId, p.progress?.state, p.progress && p.progress.state !== 'UNAVAILABLE' ? p.progress.dueDate : null])
  const key = keyFor(props), available = Boolean(props.taskId && props.progress && ['OPEN', 'OVERDUE'].includes(props.progress.state))
+ const work = Boolean(review && !plan), onWorkChange = props.onWorkChange
+ useEffect(() => { onWorkChange?.(work); return () => onWorkChange?.(false) }, [work, onWorkChange])
  useEffect(() => { const life = live, counter = generation, request = controller, running = writing, current = latest, unresolved = pending, id = props.id; life.current = true; return () => { life.current = false; counter.current++; request.current?.abort(); if (running.current) current.current.onBusyChange(false); if (unresolved.current) current.current.onPendingChange?.(id, false) } }, [props.id])
  useEffect(() => {
   if (!props.canWrite || props.progress?.state === 'UNAVAILABLE') {

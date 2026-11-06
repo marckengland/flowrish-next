@@ -1,3 +1,4 @@
+import {revealFollowUpDetails} from './helpers/follow-up-details'
 import { expect, test, type Page } from '@playwright/test'
 import { coreIds, coreLead, coreTask } from './rehearsal-app/core-fixtures'
 test.use({
@@ -286,7 +287,7 @@ for (const mobile of [false, true])
       }),
     ).toHaveCount(0)
     await page.goto('/follow-ups')
-    await expect(
+    await revealFollowUpDetails(page); await expect(
       page.getByRole('textbox', { name: 'Task title', exact: true }),
     ).toBeVisible()
     expect(
@@ -294,10 +295,10 @@ for (const mobile of [false, true])
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true)
-    await page
+    await revealFollowUpDetails(page); await page
       .getByRole('textbox', { name: 'Task title', exact: true })
       .fill('Review approved practice follow-up')
-    await page
+    await revealFollowUpDetails(page); await page
       .getByRole('button', { name: 'Approve task', exact: true })
       .click()
     await expect(

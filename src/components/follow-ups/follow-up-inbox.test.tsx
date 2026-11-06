@@ -28,7 +28,7 @@ describe('FollowUpInbox', () => {
   it('approves the edited task and shows its resulting link without sending email', async () => {
     const request = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(ok([item])).mockResolvedValueOnce(ok({ ...item, status: 'APPROVED', taskId: 'task-1' }))
     render(<FollowUpInbox canWrite />)
-    fireEvent.change(await screen.findByLabelText('Task title'), { target: { value: 'Call Jane about pricing' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Review follow-up' })); fireEvent.change(await screen.findByLabelText('Task title'), { target: { value: 'Call Jane about pricing' } })
     fireEvent.change(screen.getByLabelText('Task description'), { target: { value: 'Confirm team size' } })
     fireEvent.change(screen.getByLabelText('Due date'), { target: { value: '2026-11-04' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve task' }))
@@ -41,7 +41,7 @@ describe('FollowUpInbox', () => {
   it('dismisses without approving a task', async () => {
     const request = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(ok([item])).mockResolvedValueOnce(ok({ ...item, status: 'DISMISSED' }))
     render(<FollowUpInbox canWrite />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }))
+fireEvent.click(await screen.findByRole('button', { name: 'Review follow-up' }));     fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Follow-up dismissed')
     expect(JSON.parse(request.mock.calls[1][1]?.body as string)).toEqual({ action: 'dismiss' })
   })
@@ -49,7 +49,7 @@ describe('FollowUpInbox', () => {
   it('retains edits and permits retry after failed approval', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(ok([item])).mockResolvedValueOnce({ ok: false, json: async () => ({ error: { message: 'Lead is unavailable' } }) } as Response)
     render(<FollowUpInbox canWrite />)
-    fireEvent.change(await screen.findByLabelText('Task title'), { target: { value: 'Keep my edit' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Review follow-up' })); fireEvent.change(await screen.findByLabelText('Task title'), { target: { value: 'Keep my edit' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve task' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Lead is unavailable')
     expect(screen.getByLabelText('Task title')).toHaveValue('Keep my edit')
@@ -68,7 +68,7 @@ describe('FollowUpInbox', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok([{ ...item, sourceType: 'CALL', taskId: 'callback-1', draftBody: null, draftSubject: null }]))
     render(<FollowUpInbox canWrite />)
     expect(await screen.findByText('Call summary')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Mark reviewed' })).toBeInTheDocument()
+fireEvent.click(await screen.findByRole('button', { name: 'Review follow-up' }));     expect(screen.getByRole('button', { name: 'Mark reviewed' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open task' })).toHaveAttribute('href', '/tasks/callback-1')
     expect(screen.queryByRole('button', { name: 'Approve task' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Review email draft' })).not.toBeInTheDocument()

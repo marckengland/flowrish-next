@@ -1,3 +1,4 @@
+import {revealFollowUpDetails} from './helpers/follow-up-details'
 import { test, expect } from '@playwright/test'
 
 test.setTimeout(60_000)
@@ -36,9 +37,9 @@ test('reviews a synthetic reply, approves edited task once, and never sends impl
     } else await route.fulfill({ json: { data: [item] } })
   })
   await page.goto('/follow-ups')
-  await page.getByLabel('Task title', { exact: true }).fill('Call Jane tomorrow')
-  await page.getByRole('textbox', { name: 'Task description', exact: true }).fill('Ask about the proposal.')
-  await page.getByRole('button', { name: 'Approve task', exact: true }).click()
+  await revealFollowUpDetails(page); await page.getByLabel('Task title', { exact: true }).fill('Call Jane tomorrow')
+  await revealFollowUpDetails(page); await page.getByRole('textbox', { name: 'Task description', exact: true }).fill('Ask about the proposal.')
+  await revealFollowUpDetails(page); await page.getByRole('button', { name: 'Approve task', exact: true }).click()
   await expect(page.getByRole('link', { name: 'Open task', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Approve task', exact: true })).toHaveCount(0)
   expect(approvals).toBe(1)

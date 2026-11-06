@@ -1,3 +1,4 @@
+import {revealFollowUpDetails} from './helpers/follow-up-details'
 import { expect, test, type Page } from '@playwright/test'
 import { coreIds } from './rehearsal-app/core-fixtures'
 test.use({ storageState: { cookies: [], origins: [] }, serviceWorkers: 'block', timezoneId: 'Asia/Manila' })
@@ -27,7 +28,7 @@ async function mock(page: Page, base: string, s: ReturnType<typeof state>) {
 const card = (page: Page) => page.getByRole('article', { name: 'Follow-up for Practice Clinic', exact: true })
 const history = (page: Page) => card(page).getByRole('region', { name: 'Task activity', exact: true })
 async function approved(page: Page) { await page.goto('/follow-up-access'); await expect(page.getByText('No pending follow-ups', { exact: true })).toBeVisible(); await page.getByRole('tab', { name: 'Approved', exact: true }).click(); await expect(card(page)).toBeVisible() }
-async function open(page: Page) { await card(page).getByRole('button', { name: 'View task activity', exact: true }).click(); await expect(history(page)).toBeVisible() }
+async function open(page: Page) { await revealFollowUpDetails(page); await card(page).getByRole('button', { name: 'View task activity', exact: true }).click(); await expect(history(page)).toBeVisible() }
 for (const width of [1280, 390]) test('approved task history reads actors and Manila deadlines without changing filters or drafts at ' + width + 'px', async ({ page, baseURL }, info) => {
  const s = state(); await page.setViewportSize({ width, height: 900 }); await mock(page, baseURL!, s); await approved(page); expect(s.history).toEqual([])
  const filters = page.getByRole('search', { name: 'Follow-up filters', exact: true }); await filters.getByRole('combobox', { name: 'Task progress', exact: true }).selectOption('OVERDUE'); await filters.getByRole('button', { name: 'Apply filters', exact: true }).click(); await expect(card(page)).toBeVisible(); await expect(filters.getByRole('button', { name: 'Apply filters', exact: true })).toBeEnabled()

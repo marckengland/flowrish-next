@@ -1,3 +1,4 @@
+import {revealFollowUpDetails} from './helpers/follow-up-details'
 import { test, expect } from '@playwright/test'
 
 test('generates a contextual draft and sends only after explicit review and Send', async ({ page }) => {
@@ -21,9 +22,9 @@ test('generates a contextual draft and sends only after explicit review and Send
     } else await route.fulfill({ json: { data: [item] } })
   })
   await page.goto('/follow-ups')
-  await page.getByRole('textbox', { name: 'Draft instructions', exact: true }).fill('Suggest Thursday afternoon.')
+  await revealFollowUpDetails(page); await page.getByRole('textbox', { name: 'Draft instructions', exact: true }).fill('Suggest Thursday afternoon.')
   expect(generated).toBe(0)
-  await page.getByRole('button', { name: 'Generate contextual draft', exact: true }).click()
+  await revealFollowUpDetails(page); await page.getByRole('button', { name: 'Generate contextual draft', exact: true }).click()
   await expect(page.getByText(/Generated from 4 messages/)).toBeVisible()
   expect(sent).toBe(0)
   await page.getByRole('button', { name: 'Review email draft', exact: true }).click()

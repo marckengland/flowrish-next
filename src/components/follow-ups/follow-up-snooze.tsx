@@ -7,13 +7,15 @@ import { followUpHeaders, type FollowUpContext } from '@/lib/follow-up-access'
 import { followUpData, followUpAccessLost } from '@/lib/follow-up-client'
 const receipt = z.object({ id: z.string(), snoozeVersion: z.string().regex(/^[a-f0-9]{64}$/), snooze: snoozeMetadata.nullable() })
 type Item = { id: string; snoozeVersion?: string; snooze?: z.infer<typeof snoozeMetadata> | null }
-export function FollowUpSnoozeControls({ item, context, disabled, compose, onDiscard, onChanged, onAccessLost, onBusyChange }: { item: Item; context: FollowUpContext; disabled: boolean; compose: boolean; onDiscard: () => void; onChanged: (item: z.infer<typeof receipt>) => void; onAccessLost: (cause: unknown, id: string) => void; onBusyChange?: (busy: boolean) => void }) {
+export function FollowUpSnoozeControls({ item, context, disabled, compose, onDiscard, onChanged, onAccessLost, onBusyChange, onWorkChange }: { item: Item; context: FollowUpContext; disabled: boolean; compose: boolean; onDiscard: () => void; onChanged: (item: z.infer<typeof receipt>) => void; onAccessLost: (cause: unknown, id: string) => void; onBusyChange?: (busy: boolean) => void; onWorkChange?: (work: boolean) => void }) {
   const [localTime, setLocalTime] = useState(''), [zone, setZone] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState(''), [uncertain, setUncertain] = useState(false)
   const [confirmation, setConfirmation] = useState<{ action: 'snooze' | 'wake'; localTime?: string } | null>(null)
   const descriptionId = useId()
   const live = useRef(true), writing = useRef(false), generation = useRef(0)
   useEffect(() => { const requestGeneration = generation; live.current = true; setZone(Intl.DateTimeFormat().resolvedOptions().timeZone); return () => { live.current = false; requestGeneration.current++; onBusyChange?.(false) } }, [onBusyChange])
   useEffect(() => { generation.current++; setConfirmation(null) }, [item.snoozeVersion, disabled])
+  const retained = Boolean(localTime || confirmation || busy || uncertain)
+  useEffect(() => { onWorkChange?.(retained); return () => onWorkChange?.(false) }, [retained, onWorkChange])
   const blocked = disabled || busy || uncertain || !item.snoozeVersion || !zone
   async function save(values: { action: 'snooze' | 'wake'; localTime?: string }, discard = false) {
     if (blocked || writing.current) return
@@ -36,6 +38,7 @@ export function FollowUpSnoozeControls({ item, context, disabled, compose, onDis
     {item.snooze?.until && <p className="text-sm">Reminder: <time dateTime={item.snooze.until}>{new Date(item.snooze.until).toLocaleString()}</time> ({item.snooze.timeZone})</p>}
     <div className="flex flex-wrap items-end gap-2"><Button variant="outline" disabled={blocked} onClick={() => void save({ action: 'snooze', localTime: tomorrowLocal() })}>Snooze until tomorrow</Button>{item.snooze?.until && <Button variant="outline" disabled={blocked} onClick={() => void save({ action: 'wake' })}>Wake now</Button>}</div>
     <div className="flex flex-wrap items-end gap-2"><label className="grid gap-1 text-sm">Snooze until<input aria-label="Snooze until" aria-describedby={descriptionId} type="datetime-local" className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2" value={localTime} onChange={event => setLocalTime(event.target.value)} disabled={blocked} /><span id={descriptionId} className="text-xs text-muted-foreground">{zone || 'Detecting timezone…'} · tomorrow means 9:00 AM</span></label><Button variant="outline" disabled={blocked || !localTime} onClick={() => void save({ action: 'snooze', localTime })}>Set snooze</Button></div>
+    {localTime && !uncertain && <Button type="button" variant="outline" disabled={busy || disabled} onClick={() => { setLocalTime(''); setConfirmation(null) }}>Clear snooze time</Button>}
     {confirmation && <div role="group" aria-label="Snooze draft confirmation"><p className="text-sm">Snoozing closes this draft and discards its unsent edits.</p><div className="mt-2 flex flex-wrap gap-2"><Button disabled={blocked} onClick={() => void save(confirmation, true)}>Discard draft and snooze</Button><Button variant="outline" onClick={() => setConfirmation(null)}>Keep editing</Button></div></div>}
     {busy && <p role="status" className="text-sm">Saving snooze…</p>}{error && <p role="alert" className="text-sm text-destructive">{error}</p>}
   </section>
