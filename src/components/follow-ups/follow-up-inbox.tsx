@@ -1,4 +1,5 @@
 'use client'
+import { followUpCardError, type FollowUpCardError } from '@/lib/follow-up-card-error'
 import { FollowUpBulkActions, type FollowUpBulkAction } from './follow-up-bulk-actions'
 import { FollowUpBulkTaskReschedule, type BulkRescheduleHold } from './follow-up-bulk-task-reschedule'
 import { canBulkRescheduleTask, BULK_TASK_RESCHEDULE_LIMIT } from '@/lib/follow-up-bulk-task-reschedule'
@@ -449,6 +450,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
 
 function FollowUpCard({ item, canWrite, context, showTaskProgress = false, taskProgressSupported = false, batchBusy = false, onRescheduleHoldChange, onTaskRescheduled, rescheduleBlocked, completionBlocked, onCompletionPendingChange, onCompletionBusyChange, onTaskCompleted, onAccessLost, onComposerChange, onEditorChange, onSnoozeChanged }: { item: FollowUpItem; canWrite: boolean; context?: FollowUpContext; showTaskProgress?: boolean; taskProgressSupported?: boolean; batchBusy?: boolean; onRescheduleHoldChange: (id: string, hold: RescheduleHold) => void; onTaskRescheduled: (receipt: Extract<TaskRescheduleReceipt, { state: 'confirmed' }>) => void; rescheduleBlocked: boolean; completionBlocked: boolean; onCompletionPendingChange: (id: string, pending: boolean) => void; onCompletionBusyChange: (busy: boolean) => void; onTaskCompleted: (receipt: Extract<TaskCompletionReceipt, { state: 'confirmed' }>) => void; onAccessLost: (cause?: unknown, id?: string) => void; onComposerChange: (id: string, open: boolean) => void; onEditorChange: (id: string, dirty: boolean, activeRequest?: boolean) => void; onSnoozeChanged: (item: Pick<FollowUpItem, 'id' | 'snoozeVersion' | 'snooze'>, preserveEdits?: boolean) => void }): React.JSX.Element {
   const detailsId = useId()
+  const disclosureRef = useRef<HTMLButtonElement>(null), detailsRef = useRef<HTMLDivElement>(null), focusAfterDismiss = useRef(false)
   const [expanded, setExpanded] = useState(false)
   const [snoozeWork, setSnoozeWork] = useState(false)
   const [completionWork, setCompletionWork] = useState(false)
@@ -464,7 +466,14 @@ function FollowUpCard({ item, canWrite, context, showTaskProgress = false, taskP
   const [result, setResult] = useState(item)
   const [busy, setBusy] = useState(false)
   const [snoozing, setSnoozing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<FollowUpCardError | null>(null)
+  const [unconfirmedErrors, setUnconfirmedErrors] = useState<Partial<Record<'draft' | 'review', FollowUpCardError>>>({})
+  const hasUnconfirmedResults = Object.keys(unconfirmedErrors).length > 0
+  function recordError(cause: unknown, operation: 'draft' | 'review') {
+    const failure = followUpCardError(cause, operation)
+    setError(failure)
+    if (!failure.dismissible) setUnconfirmedErrors(current => ({ ...current, [operation]: failure }))
+  }
   const [notice, setNotice] = useState('')
   const [compose, setCompose] = useState(false)
   useEffect(() => {
@@ -501,7 +510,7 @@ function FollowUpCard({ item, canWrite, context, showTaskProgress = false, taskP
       setNotice('Contextual draft generated. Review it before sending.')
     } catch (cause) {
       if (followUpAccessLost(cause)) { if (mounted.current) onAccessLost(cause, item.id); return }
-      if (mounted.current && version === requestVersion.current) setError(cause instanceof Error ? cause.message : 'Unable to generate this draft.')
+      if (mounted.current && version === requestVersion.current) recordError(cause, 'draft')
     } finally {
       if (mounted.current && version === requestVersion.current) setGenerating(false)
     }
@@ -509,9 +518,15 @@ function FollowUpCard({ item, canWrite, context, showTaskProgress = false, taskP
   const pending = result.status === 'PENDING'
   const editable = pending && canWrite
   const dirty = canWrite && ((editable && !result.taskId && (title !== item.title || description !== item.description || dueDate !== '')) || instructions !== '')
-  const retained = dirty || snoozeWork || completionWork || Boolean(rescheduleWork) || Boolean(error) || busy || generating
+  const retained = dirty || snoozeWork || completionWork || Boolean(rescheduleWork) || Boolean(error) || hasUnconfirmedResults || busy || generating
   const keepOpen = retained || completionPending || compose || confirmReplace || busy || snoozing || generating || taskBusy
   const detailsOpen = expanded || keepOpen
+  useEffect(() => {
+    if (error || !focusAfterDismiss.current) return
+    focusAfterDismiss.current = false
+    if (disclosureRef.current && !disclosureRef.current.disabled) disclosureRef.current.focus()
+    else (detailsRef.current?.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled])') ?? detailsRef.current?.querySelector<HTMLElement>('button:not([disabled])'))?.focus()
+  }, [error])
   useEffect(() => { onEditorChange(item.id, retained, busy || generating); return () => onEditorChange(item.id, false) }, [retained, busy, generating, item.id, onEditorChange])
   const fullName = `${item.lead.firstName} ${item.lead.lastName}`.trim() || 'Lead'
   const Icon = item.sourceType === 'CALL' ? Phone : Mail
@@ -536,7 +551,7 @@ function FollowUpCard({ item, canWrite, context, showTaskProgress = false, taskP
     } catch (cause) {
       if (!mounted.current || version !== requestVersion.current) return
       if (followUpAccessLost(cause)) { onAccessLost(cause, item.id); return }
-      setError(cause instanceof Error ? cause.message : 'Unable to update this follow-up.')
+      recordError(cause, 'review')
     } finally {
       if (mounted.current && version === requestVersion.current) setBusy(false)
     }
@@ -553,13 +568,13 @@ function FollowUpCard({ item, canWrite, context, showTaskProgress = false, taskP
       {showTaskProgress && result.status === 'APPROVED' && <FollowUpTaskProgress progress={taskProgressSupported ? item.taskProgress : undefined} compact={!detailsOpen} />}
       {pending && result.snooze?.until && <p className="mt-2 text-sm">Snoozed review · {new Date(result.snooze.until).toLocaleString()}</p>}
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" aria-expanded={detailsOpen} aria-controls={detailsId} disabled={keepOpen || batchBusy} onClick={() => setExpanded(!detailsOpen)}>{detailsOpen ? 'Hide details' : 'Review follow-up'}</Button>
+        <Button type="button" variant="outline" ref={disclosureRef} aria-expanded={detailsOpen} aria-controls={detailsId} disabled={keepOpen || batchBusy} onClick={() => setExpanded(!detailsOpen)}>{detailsOpen ? 'Hide details' : 'Review follow-up'}</Button>
         {result.taskId && !(showTaskProgress && taskProgressSupported && item.taskProgress?.state === 'UNAVAILABLE') && <Link className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/tasks/${result.taskId}`}>Open task</Link>}
         {canWrite && result.status !== 'DISMISSED' && recipient && result.draftBody && <Button type="button" variant="outline" disabled={busy || generating || snoozing} onClick={() => { setExpanded(true); setCompose(value => !value) }}>{compose ? 'Close draft' : 'Review email draft'}</Button>}
       </div>
       {keepOpen && <p className="mt-2 text-xs text-muted-foreground">Details stay open while you have edits, an open draft, an active review or a result to check.</p>}
       {/* Keep detail forms mounted so disclosure never resets local edits or request checks. */}
-      <div id={detailsId} hidden={!detailsOpen}>
+      <div id={detailsId} ref={detailsRef} hidden={!detailsOpen}>
       {editable && !result.taskId ? <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px]">
         <label className="grid gap-1.5 text-sm font-medium">Task title<input className={fieldClass} value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} disabled={busy || snoozing || batchBusy} required /></label>
         <label className="grid gap-1.5 text-sm font-medium">Due date<input className={fieldClass} type="date" aria-label="Due date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} disabled={busy || snoozing || batchBusy} /><span className="text-xs font-normal text-muted-foreground">Optional · UTC date</span></label>
@@ -567,13 +582,17 @@ function FollowUpCard({ item, canWrite, context, showTaskProgress = false, taskP
       </div> : <div className="mt-4"><p className="mt-1 whitespace-pre-wrap break-words text-sm text-muted-foreground">{result.description}</p>{result.taskId && pending && <p className="mt-2 text-xs text-muted-foreground">A callback task already exists. Marking this reviewed keeps the existing task.</p>}</div>}
       {showTaskProgress && taskProgressSupported && result.status === 'APPROVED' && context && <FollowUpTaskCompletion key={JSON.stringify([item.id, result.taskId, context.organizationId, context.userId])} id={item.id} taskId={result.taskId} progress={item.taskProgress} context={context} canWrite={canWrite} disabled={busy || generating || snoozing || batchBusy || completionBlocked} onChanged={onTaskCompleted} onPendingChange={retainCardCompletion} onWorkChange={setCompletionWork} onBusyChange={trackTaskBusy} onAccessLost={onAccessLost} />}
       {showTaskProgress && taskProgressSupported && result.status === 'APPROVED' && context && <FollowUpTaskReschedule key={JSON.stringify(['reschedule', item.id, result.taskId, context.organizationId, context.userId])} id={item.id} taskId={result.taskId} progress={item.taskProgress} context={context} canWrite={canWrite} disabled={busy || generating || snoozing || batchBusy || rescheduleBlocked} onChanged={onTaskRescheduled} onHoldChange={retainRescheduleWork} onBusyChange={trackTaskBusy} onAccessLost={onAccessLost} />}
-      {editable && context && result.snoozeVersion && <FollowUpSnoozeControls item={result} context={context} onBusyChange={setSnoozing} onWorkChange={setSnoozeWork} disabled={busy || generating || batchBusy} compose={compose} onDiscard={() => setCompose(false)} onChanged={updated => onSnoozeChanged(updated, dirty || Boolean(error))} onAccessLost={onAccessLost} />}
+      {editable && context && result.snoozeVersion && <FollowUpSnoozeControls item={result} context={context} onBusyChange={setSnoozing} onWorkChange={setSnoozeWork} disabled={busy || generating || batchBusy} compose={compose} onDiscard={() => setCompose(false)} onChanged={updated => onSnoozeChanged(updated, dirty || Boolean(error) || hasUnconfirmedResults)} onAccessLost={onAccessLost} />}
       {editable && !result.taskId && dirty && <Button type="button" variant="outline" className="mt-3" disabled={busy || snoozing || generating || batchBusy} onClick={() => { setTitle(item.title); setDescription(item.description); setDueDate('') }}>Reset task edits</Button>}
       {instructions !== '' && <Button type="button" variant="outline" className="mt-3" disabled={generating || busy || snoozing || batchBusy} onClick={() => setInstructions('')}>Clear draft instructions</Button>}
       {canGenerate && <div className="mt-4 grid gap-2"><label className="grid gap-1.5 text-sm font-medium">Draft instructions<textarea className={fieldClass} rows={2} maxLength={2000} value={instructions} onChange={event => setInstructions(event.target.value)} disabled={generating || busy || snoozing || batchBusy} placeholder="Optional: ask about their timeline, or keep the reply brief" /></label><p className="text-xs text-muted-foreground">Generate from the full email conversation. Attachments are excluded.</p><Button type="button" variant="outline" className="w-fit" disabled={generating || busy || snoozing || batchBusy} onClick={() => void generateDraft()}>{generating ? 'Generating draft…' : generated ? 'Regenerate contextual draft' : 'Generate contextual draft'}</Button></div>}
       {confirmReplace && <div className="mt-3 rounded-lg border p-3" role="group" aria-label="Replace open draft confirmation"><p className="text-sm">A draft is open. Regenerating will replace it and discard its edits after generation succeeds.</p><div className="mt-2 flex flex-wrap gap-2"><Button type="button" onClick={() => void generateDraft(true)}>Replace open draft</Button><Button type="button" variant="outline" onClick={() => setConfirmReplace(false)}>Keep editing</Button></div></div>}
       {generated && result.draftContext && <div className="mt-3 break-words text-xs text-muted-foreground"><p>Generated from {result.draftContext.messageCount} messages · {result.draftContext.provider === 'gmail' ? 'Gmail' : 'Microsoft 365'} {result.draftContext.mailboxEmail ? `mailbox ${result.draftContext.mailboxEmail}` : 'mailbox'}</p><p>Reply to {result.draftContext.recipientEmail} in the source conversation</p>{result.draftGeneratedAt && <p>Generated <time dateTime={result.draftGeneratedAt}>{new Date(result.draftGeneratedAt).toLocaleString()}</time></p>}</div>}
-      {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+      {error && <div role="group" aria-label="Follow-up error" className="mt-3 space-y-2">
+        <p role="alert" className="text-sm text-destructive">{error.message}</p>
+        {error.dismissible ? <><p className="text-xs text-muted-foreground">Dismissing only clears this message. Your drafts, edits and other results stay open.</p><Button type="button" variant="outline" disabled={busy || generating || snoozing || taskBusy || batchBusy} onClick={() => { if (!error.dismissible || busy || generating || snoozing || taskBusy || batchBusy) return; focusAfterDismiss.current = true; setError(null) }}>Dismiss error</Button></> : <p className="text-xs text-muted-foreground">This result cannot be confirmed. Keep it open until you refresh or verify it. No action is retried automatically.</p>}
+      </div>}
+      {Object.entries(unconfirmedErrors).map(([operation, failure]) => failure && failure !== error && <div key={operation} role="group" aria-label={`Unconfirmed ${operation} result`} className="mt-3 space-y-2"><p role="alert" className="text-sm text-destructive">{failure.message}</p><p className="text-xs text-muted-foreground">{operation === 'draft' ? 'Draft generation' : 'Task approval or dismissal'} is still unconfirmed. Clearing another message does not resolve it. Keep this result open until you refresh or verify it.</p></div>)}
       {notice && <p role="status" className="mt-3 flex items-center gap-1.5 text-sm text-brand"><Check className="size-4" aria-hidden="true" />{notice}</p>}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {editable && <><Button type="button" disabled={busy || snoozing || batchBusy || (!result.taskId && !title.trim())} onClick={() => void review('approve')}>{busy ? 'Saving…' : result.taskId ? 'Mark reviewed' : 'Approve task'}</Button><Button type="button" variant="outline" disabled={busy || snoozing || batchBusy} onClick={() => void review('dismiss')}>Dismiss</Button></>}
