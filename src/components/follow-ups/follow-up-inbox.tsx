@@ -1,4 +1,5 @@
 'use client'
+import { FollowUpTaskHistory } from './follow-up-task-history'
 import { FollowUpTaskProgress } from './follow-up-task-progress'
 import { FollowUpTaskReschedule, type RescheduleHold } from './follow-up-task-reschedule'
 import type { TaskRescheduleReceipt } from '@/lib/follow-up-task-reschedule'
@@ -485,6 +486,7 @@ function FollowUpCard({ item, canWrite, context, showTaskProgress = false, taskP
         {result.taskId && !(showTaskProgress && taskProgressSupported && item.taskProgress?.state === 'UNAVAILABLE') && <Link className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/tasks/${result.taskId}`}>Open task</Link>}
         {canWrite && result.status !== 'DISMISSED' && recipient && result.draftBody && <Button type="button" variant="outline" disabled={busy || generating || snoozing} onClick={() => setCompose((value) => !value)}>{compose ? 'Close draft' : 'Review email draft'}</Button>}
       </div>
+      {showTaskProgress && taskProgressSupported && result.status === 'APPROVED' && context && result.taskId && item.taskProgress && item.taskProgress.state !== 'UNAVAILABLE' && <FollowUpTaskHistory id={item.id} taskId={result.taskId} context={context} revision={JSON.stringify([item.taskProgress.state, item.taskProgress.dueDate, item.taskProgress.completedAt])} onAccessLost={onAccessLost} />}
       {context && <FollowUpHistory id={item.id} context={context} revision={`${result.status}:${result.taskId}:${result.snoozeVersion}`} onAccessLost={onAccessLost} />}
       {compose && canWrite && result.status !== 'DISMISSED' && result.draftBody && recipient && <div className="mt-5 min-w-0 border-t pt-5"><p className="mb-3 text-xs text-muted-foreground">{generated ? 'Review and edit this contextual reply before sending. The recipient, mailbox and conversation are bound to this draft.' : 'Review and edit this template before sending. This starts a new email; check the subject and recipient.'}</p><EmailCompose key={result.draftVersion ?? 'template'} leadId={item.lead.id} leadEmail={recipient} leadName={fullName} defaultSubject={result.draftSubject ?? ''} defaultBody={draftHtml(result.draftBody)} followUpId={item.id} followUpContext={context} onAccessLost={() => onAccessLost(undefined, item.id)} {...(generated ? { draftVersion: result.draftVersion!, replyToThreadId: result.draftContext!.threadId, replySubject: result.draftSubject ?? '' } : {})} onSent={() => { setCompose(false); setNotice('Email sent. Task review is tracked separately.') }} /></div>}
     </article>
