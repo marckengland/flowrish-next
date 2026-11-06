@@ -386,6 +386,13 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   ]
   const retainedBulkWork = snoozeWork || approvalReviewCount > 0 || approvalLocked || completionHoldCount > 0 || Boolean(deadlineHold)
   const unappliedFilters = (['search', 'source', 'dueOnly', 'taskProgress', 'taskOrder'] as const).some(key => filterDraft[key] !== filters[key])
+  function openOverdueTasks() {
+    if (bulkBusyRef.current || loadingRef.current || pageController.current || revokedRef.current || !taskProgressSupported || !countState.data) return
+    if (status === 'APPROVED' && filters.taskProgress === 'OVERDUE') { document.getElementById('follow-ups-APPROVED')?.focus(); return }
+    const target: Navigation = { settings: { status: 'APPROVED', filters: { ...filtersForFollowUpTab(filters, 'APPROVED'), taskProgress: 'OVERDUE' } } }
+    if (unappliedFilters) { setNavigation(target); return }
+    if (navigate(target)) document.getElementById('follow-ups-APPROVED')?.focus()
+  }
   const selectedBulkCount = bulkAction === 'complete' ? completionSelected.length : bulkAction === 'reschedule' ? deadlineSelected.length : bulkSelected.length
 
   return (
@@ -444,7 +451,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       </div>
       {countsVisible && <section aria-label="Inbox totals" className="space-y-1 text-xs text-muted-foreground">
         {tabs.map(tab => <span className="sr-only" id={`${countDescriptionId}-${tab.value}`} key={tab.value}>{countState.data ? `${countState.data.counts[tab.value]} matching follow-ups${tab.value === 'APPROVED' ? `, ${countState.data.overdueTasks} unique overdue tasks` : ''}.` : `${tab.label} count unavailable.`}</span>)}
-        <div className="flex flex-wrap items-center gap-3"><span className={countState.data?.overdueTasks ? 'font-medium text-destructive' : ''}>{countState.data ? `Overdue tasks: ${countState.data.overdueTasks.toLocaleString()}` : countsWaitingForList && !loading ? 'Counts unavailable until the inbox reloads.' : countState.status === 'error' ? 'Counts unavailable.' : 'Updating counts…'}</span><Button type="button" variant="outline" size="sm" disabled={countsWaitingForList || countState.status === 'loading'} onClick={countState.refresh}>Refresh counts</Button>{countState.data && <span>Checked <time dateTime={countState.data.checkedAt}>{new Date(countState.data.checkedAt).toLocaleTimeString()}</time></span>}</div>
+        <div className="flex flex-wrap items-center gap-3">{countState.data ? <Button type="button" variant="link" size="sm" className={cn('h-auto min-h-11 px-0 text-xs', countState.data.overdueTasks ? 'text-destructive' : 'text-muted-foreground')} aria-label={`View overdue tasks (${countState.data.overdueTasks})`} aria-controls="follow-up-panel" disabled={countsWaitingForList || bulkBusy || pageTask !== null || !taskProgressSupported} onClick={openOverdueTasks}>{`Overdue tasks: ${countState.data.overdueTasks.toLocaleString()}`}</Button> : <span>{countsWaitingForList && !loading ? 'Counts unavailable until the inbox reloads.' : countState.status === 'error' ? 'Counts unavailable.' : 'Updating counts…'}</span>}<Button type="button" variant="outline" size="sm" disabled={countsWaitingForList || countState.status === 'loading'} onClick={countState.refresh}>Refresh counts</Button>{countState.data && <span>Checked <time dateTime={countState.data.checkedAt}>{new Date(countState.data.checkedAt).toLocaleTimeString()}</time></span>}</div>
         {countsWaitingForList && !loading && <p>Use Try again below to reload the inbox and its counts.</p>}
         <p>Totals match each tab’s applied filters. Drafts outside filters and callbacks waiting for catch-up are excluded. Overdue counts unique linked tasks.</p>
       </section>}
