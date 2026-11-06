@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto'
 import {beforeAll,afterAll,expect,it,vi} from 'vitest'
+const clock=vi.hoisted(()=>({now:new Date()}))
 vi.mock('@/server/db/client',async()=>{
  const raw=process.env.COUNTS_TEST_DATABASE_URL
  if(!raw)throw new Error('Explicit disposable database required.')
@@ -8,14 +9,14 @@ vi.mock('@/server/db/client',async()=>{
  const {PrismaClient}=await import('@prisma/client')
  return {prisma:new PrismaClient({datasources:{db:{url:raw}},log:[]})}
 })
-vi.mock('@/server/services/follow-up-snooze',async()=>({...await vi.importActual<typeof import('@/server/services/follow-up-snooze')>('@/server/services/follow-up-snooze'),snoozeClock:async()=>new Date('2026-11-06T01:00:00.000Z')}))
+vi.mock('@/server/services/follow-up-snooze',async()=>({...await vi.importActual<typeof import('@/server/services/follow-up-snooze')>('@/server/services/follow-up-snooze'),snoozeClock:async()=>new Date(clock.now)}))
 import {prisma} from '@/server/db/client'
 import {readFollowUpCounts} from '@/server/services/follow-up-counts'
 import {listFollowUps} from '@/server/services/follow-ups'
 import {followUpFilterSchema} from '@/lib/follow-up-filters'
 import {filtersForFollowUpTab} from '@/lib/follow-up-task-progress'
 const org=randomUUID(),foreign=randomUUID(),actor=randomUUID(),other=randomUUID(),lead=randomUUID(),hidden=randomUUID(),deleted=randomUUID(),merged=randomUUID(),pipeline=randomUUID(),stage=randomUUID(),team=randomUUID(),role=randomUUID()
-const ids:Record<string,string>={},now=new Date('2026-11-06T01:00:00Z')
+const ids:Record<string,string>={},now=clock.now
 const task=(key:string,extra:Record<string,unknown>={})=>({id:ids[key]=randomUUID(),organizationId:org,leadId:lead,assigneeId:actor,title:key,dueDate:new Date(now.getTime()-60000),...extra})
 const item=(key:string,status='PENDING',extra:Record<string,unknown>={})=>({id:ids[key]=randomUUID(),organizationId:org,assigneeId:actor,leadId:lead,sourceKey:key,sourceType:'EMAIL',sourceId:key,sourceText:'Synthetic',title:key,description:'Synthetic',status,...extra})
 beforeAll(async()=>{
