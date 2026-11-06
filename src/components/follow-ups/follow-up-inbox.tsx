@@ -1,4 +1,6 @@
 'use client'
+import { followUpCountsFilterKey } from '@/lib/follow-up-counts'
+import { useFollowUpCounts } from './use-follow-up-counts'
 import { followUpCardError, type FollowUpCardError } from '@/lib/follow-up-card-error'
 import { FollowUpBulkActions, type FollowUpBulkAction } from './follow-up-bulk-actions'
 import { FollowUpBulkTaskReschedule, type BulkRescheduleHold } from './follow-up-bulk-task-reschedule'
@@ -105,6 +107,9 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   const emailOrganizationId = emailMatchContext?.organizationId, emailUserId = emailMatchContext?.userId
   const [writeAllowed, setWriteAllowed] = useState(canWrite)
   const taskProgressDescription = useId()
+  const countDescriptionId = useId()
+  const [countsSupported, setCountsSupported] = useState(false)
+  const [countsRevision, setCountsRevision] = useState(0)
   const filterPanelId = useId()
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [taskOrderSupported, setTaskOrderSupported] = useState(false)
@@ -114,6 +119,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   const [status, setStatus] = useState<FollowUpView>('PENDING')
   const [viewsOpen, setViewsOpen] = useState(false)
   const [filters, setFilters] = useState<FollowUpFilters>(emptyFilters)
+  const [countsFilters, setCountsFilters] = useState<FollowUpFilters>(emptyFilters)
   const [filterDraft, setFilterDraft] = useState<FollowUpFilters>(emptyFilters)
   const filterDraftRef = useRef(filterDraft); filterDraftRef.current = filterDraft
   const retainedOrderCommit = useRef<FollowUpFilters | null>(null), retryOrder = useRef<FollowUpFilters | undefined>(undefined)
@@ -202,19 +208,23 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   const retainApprovalReview = useCallback((ids: string[], locked: boolean) => { setApprovalReviewCount(ids.length); approvedRetained.current = new Set(ids); approvalLockRef.current = locked; setApprovalLocked(locked) }, [])
   const bulkApprovalChanged = useCallback((receipt: Extract<ApprovalReceipt, { state: 'confirmed' }>) => {
     readEpoch.current++
+    setCountsRevision(value => value + 1)
     approvedRetained.current.add(receipt.id)
     setItems(rows => rows.map(row => row.id === receipt.id ? { ...row, status: 'APPROVED', taskId: receipt.task.id, title: receipt.task.title, description: receipt.task.description } : row))
   }, [])
   const taskCompleted = useCallback((receipt: Extract<TaskCompletionReceipt, { state: 'confirmed' }>) => {
     readEpoch.current++
+    setCountsRevision(value => value + 1)
     setItems(rows => rows.map(row => row.status === 'APPROVED' && row.taskId === receipt.task.id && row.taskProgress?.state !== 'UNAVAILABLE' ? { ...row, taskProgress: { state: 'COMPLETED', dueDate: receipt.task.dueDate, completedAt: receipt.task.completedAt, checkedAt: receipt.task.checkedAt } } : row))
   }, [])
   const taskRescheduled = useCallback((receipt: Extract<TaskRescheduleReceipt, { state: 'confirmed' }>) => {
     readEpoch.current++
+    setCountsRevision(value => value + 1)
     setItems(rows => rows.map(row => row.status === 'APPROVED' && row.taskId === receipt.task.id && row.taskProgress?.state !== 'UNAVAILABLE' ? { ...row, taskProgress: { state: new Date(receipt.task.dueDate) < new Date(receipt.task.checkedAt) ? 'OVERDUE' : 'OPEN', dueDate: receipt.task.dueDate, completedAt: null, checkedAt: receipt.task.checkedAt } } : row))
   }, [])
   const bulkSnoozeChanged = useCallback((updated: BulkSnoozeReceipt, reminderOnly = false) => {
     readEpoch.current++
+    setCountsRevision(value => value + 1)
     if (updated.id === focusedReplyId && !openDrafts.current.has(updated.id) && !dirtyEditors.current.has(updated.id)) hiddenFocused.current = updated.snooze?.until ? updated.id : null
     // A minimal verification receipt cannot refresh source details or their version.
     setItems(rows => rows.map(row => row.id === updated.id ? { ...row, snooze: updated.snooze, ...(!reminderOnly ? { snoozeVersion: updated.snoozeVersion } : {}) } : row))
@@ -239,7 +249,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     setBulkAction(''); retainSnoozeWork(false); setApprovalReviewCount(0)
     revokedRef.current = true
     setRevoked(true)
-    setWriteAllowed(false); setTaskProgressSupported(false); setTaskOrderSupported(false)
+    setWriteAllowed(false); setTaskProgressSupported(false); setTaskOrderSupported(false); setCountsSupported(false)
     setNextCursor(null); setPageSupported(false); setCallbackCatchUp(undefined); pagesLoaded.current = 1
     setFilters(emptyFilters)
     setFilterDraft(emptyFilters)
@@ -314,7 +324,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       .then(value => { const item = focusedEmailReply.parse(value); if (item.id !== focusedReplyId) throw new Error('The requested email reply changed. Refresh to try again.'); return item })
       .catch(cause => { if (cause instanceof EmailNotificationError && ([401, 403].includes(cause.status) || /CONTEXT|WORKSPACE/.test(cause.code))) throw cause; if (current) setFocusedError(cause instanceof Error ? cause.message : 'Requested reply is no longer available.'); return null }) : Promise.resolve(null)
     Promise.all([readFollowUpPages<FollowUpItem>({ status, filters, context: emailContext, depth: 1, retained: [], signal: request.signal }), focused])
-      .then(([result, item]) => { if (current && epoch === readEpoch.current && !revokedRef.current) { const rows = result.items; setNextCursor(result.nextCursor); setPageSupported(result.paged); setCallbackCatchUp(result.callbackCatchUp); pagesLoaded.current = result.pages; setWriteAllowed(result.canWrite ?? canWrite); setTaskProgressSupported(result.taskProgress === true); setTaskOrderSupported(result.taskOrder === true); setItems(item ? [item, ...rows.filter(row => row.id !== item.id)] : focusedReplyId && emailContext && status === 'PENDING' ? rows.filter(row => row.id !== focusedReplyId) : rows) } })
+      .then(([result, item]) => { if (current && epoch === readEpoch.current && !revokedRef.current) { const rows = result.items; setNextCursor(result.nextCursor); setPageSupported(result.paged); setCallbackCatchUp(result.callbackCatchUp); pagesLoaded.current = result.pages; setWriteAllowed(result.canWrite ?? canWrite); setTaskProgressSupported(result.taskProgress === true); setTaskOrderSupported(result.taskOrder === true); setCountsSupported(result.inboxCounts === true); setCountsFilters(filters); setCountsRevision(value => value + 1); setItems(item ? [item, ...rows.filter(row => row.id !== item.id)] : focusedReplyId && emailContext && status === 'PENDING' ? rows.filter(row => row.id !== focusedReplyId) : rows) } })
       .catch((cause) => { if (current) { if (followUpAccessLost(cause) || cause instanceof EmailNotificationError && ([401, 403].includes(cause.status) || /CONTEXT|WORKSPACE/.test(cause.code))) invalidate(cause); else setError(cause instanceof Error ? cause.message : 'Unable to load follow-ups.') } })
       .finally(() => { if (current) { loadingRef.current = false; setLoading(false) } })
     return () => { current = false; request.abort() }
@@ -336,7 +346,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       if (!active() || revokedRef.current) return
       if (epoch !== readEpoch.current) { if (explicit) { pageFailed.current = true; setPageError('The list changed while loading. Retry to continue with your current drafts.') }; return }
       if (orderFilters) { retainedOrderCommit.current = orderFilters; setFilters(orderFilters); setFilterDraft(current => current === draftAtStart ? orderFilters : current); retryOrder.current = undefined }
-      setItems(result.items); setWriteAllowed(result.canWrite ?? canWrite); setTaskProgressSupported(result.taskProgress === true); setTaskOrderSupported(result.taskOrder === true); pagesLoaded.current = result.pages
+      setItems(result.items); setWriteAllowed(result.canWrite ?? canWrite); setTaskProgressSupported(result.taskProgress === true); setTaskOrderSupported(result.taskOrder === true); setCountsSupported(result.inboxCounts === true); setCountsFilters(orderFilters ?? filters); setCountsRevision(value => value + 1); pagesLoaded.current = result.pages
       setNextCursor(result.nextCursor); setPageSupported(result.paged); setCallbackCatchUp(result.callbackCatchUp)
     } catch (cause) {
       if (!active()) return
@@ -363,6 +373,9 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     }
   }, [items, writeAllowed, bulkSelected, approvalLocked])
 
+  const countsVisible = countsSupported && Boolean(emailMatchContext) && !revoked
+  const countsWaitingForList = loading || Boolean(error) || followUpCountsFilterKey(countsFilters) !== followUpCountsFilterKey(filters)
+  const countState = useFollowUpCounts({ context: emailMatchContext, filters: countsFilters, enabled: countsVisible && !countsWaitingForList, revision: countsRevision, onAccessLost: invalidate })
   const pendingSelection = items.filter(row => bulkSelected.includes(row.id))
   const canChoosePending = (check: (row: FollowUpItem) => boolean) => items.some(check) && (!bulkSelected.length || pendingSelection.length === bulkSelected.length && pendingSelection.every(check))
   const availableActions: FollowUpBulkAction[] = [
@@ -421,14 +434,20 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
         <div className="flex flex-wrap gap-2">{callbackCatchUp.hasMore && <Button type="button" variant="outline" disabled={pageTask !== null || Boolean(pageError)} onClick={() => void readLoadedPages(pagesLoaded.current, true, true)}>Continue catch-up</Button>}{pageError && retryCatchUp.current && <Button type="button" variant="outline" disabled={pageTask !== null || bulkBusy} onClick={() => void readLoadedPages(retryDepth.current, true, true)}>Retry catch-up</Button>}</div>
       </section>}
       <div role="tablist" aria-label="Follow-up status" className="flex w-fit max-w-full flex-wrap gap-1 rounded-lg border bg-muted/40 p-1">
-        {tabs.map((tab) => <button key={tab.value} id={`follow-ups-${tab.value}`} type="button" role="tab" disabled={bulkBusy} aria-selected={status === tab.value} aria-controls="follow-up-panel" tabIndex={status === tab.value ? 0 : -1} onKeyDown={(event) => {
+        {tabs.map((tab) => <button key={tab.value} id={`follow-ups-${tab.value}`} type="button" role="tab" disabled={bulkBusy} aria-selected={status === tab.value} aria-describedby={countsVisible ? `${countDescriptionId}-${tab.value}` : undefined} aria-controls="follow-up-panel" tabIndex={status === tab.value ? 0 : -1} onKeyDown={(event) => {
           const index = tabs.findIndex((value) => value.value === tab.value)
           const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1
           if (next < 0) return
           event.preventDefault()
           if (navigate(tabs[next].value)) document.getElementById(`follow-ups-${tabs[next].value}`)?.focus()
-        }} onClick={() => navigate(tab.value)} className={cn('rounded-md px-3 py-2 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring', status === tab.value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>{tab.label}</button>)}
+        }} onClick={() => navigate(tab.value)} className={cn('rounded-md px-3 py-2 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring', status === tab.value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>{tab.label}{countsVisible && <span aria-hidden="true" className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-xs tabular-nums">{countState.data ? countState.data.counts[tab.value].toLocaleString() : '—'}</span>}</button>)}
       </div>
+      {countsVisible && <section aria-label="Inbox totals" className="space-y-1 text-xs text-muted-foreground">
+        {tabs.map(tab => <span className="sr-only" id={`${countDescriptionId}-${tab.value}`} key={tab.value}>{countState.data ? `${countState.data.counts[tab.value]} matching follow-ups${tab.value === 'APPROVED' ? `, ${countState.data.overdueTasks} unique overdue tasks` : ''}.` : `${tab.label} count unavailable.`}</span>)}
+        <div className="flex flex-wrap items-center gap-3"><span className={countState.data?.overdueTasks ? 'font-medium text-destructive' : ''}>{countState.data ? `Overdue tasks: ${countState.data.overdueTasks.toLocaleString()}` : countsWaitingForList && !loading ? 'Counts unavailable until the inbox reloads.' : countState.status === 'error' ? 'Counts unavailable.' : 'Updating counts…'}</span><Button type="button" variant="outline" size="sm" disabled={countsWaitingForList || countState.status === 'loading'} onClick={countState.refresh}>Refresh counts</Button>{countState.data && <span>Checked <time dateTime={countState.data.checkedAt}>{new Date(countState.data.checkedAt).toLocaleTimeString()}</time></span>}</div>
+        {countsWaitingForList && !loading && <p>Use Try again below to reload the inbox and its counts.</p>}
+        <p>Totals match each tab’s applied filters. Drafts outside filters and callbacks waiting for catch-up are excluded. Overdue counts unique linked tasks.</p>
+      </section>}
       {!loading && !revoked && writeAllowed && emailMatchContext && availableActions.length > 0 && <FollowUpBulkActions action={bulkAction} available={availableActions} selectedCount={selectedBulkCount} retained={retainedBulkWork} disabled={bulkBusy || pageTask !== null} onChange={action => { if (bulkBusyRef.current) return; setBulkAction(action); if (action === 'approve') setApprovalOpen(true) }} />}
       {!loading && !revoked && writeAllowed && taskProgressSupported && emailMatchContext && status === 'APPROVED' && <div hidden={bulkAction !== 'reschedule' && !deadlineHold}><FollowUpBulkTaskReschedule items={items} selectedIds={deadlineSelected} blockedIds={[...dirtyEditors.current, ...pendingCompletions.current, ...rescheduleHolds.current.keys()]} context={emailMatchContext} disabled={!writeAllowed} otherBusy={bulkBusy && !deadlineBusy || pendingCompletionCount > 0 || rescheduleCount > 0 || completionHoldCount > 0 || approvalLocked} refreshing={pageTask !== null} onSelectionChange={changeDeadlineSelection} onChanged={taskRescheduled} onAccessLost={invalidate} onBusyChange={changeDeadlineBusy} onHold={holdBulkDeadline} /></div>}
       {!loading && !revoked && writeAllowed && taskProgressSupported && emailMatchContext && status === 'APPROVED' && <div hidden={bulkAction !== 'complete' && completionHoldCount === 0}><FollowUpBulkTaskCompletion items={items} selectedIds={completionSelected} blockedIds={[...dirtyEditors.current, ...pendingCompletions.current, ...rescheduleHolds.current.keys()]} context={emailMatchContext} disabled={!writeAllowed} otherBusy={bulkBusy && !completionBusy || Boolean(deadlineHold) || pendingCompletionCount > 0 || rescheduleCount > 0 || approvalLocked} refreshing={pageTask !== null} onSelectionChange={changeCompletionSelection} onChanged={taskCompleted} onAccessLost={invalidate} onBusyChange={changeCompletionBusy} onHold={holdBulkCompletion} /></div>}

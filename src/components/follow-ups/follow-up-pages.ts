@@ -11,7 +11,7 @@ export async function readFollowUpPages<T extends {id:string;createdAt:string}>(
   if(input.retained.length>100)throw new Error('Finish or close some editors before loading more; up to 100 edited or selected follow-ups can be retained at once.')
   const items=new Map<string,T>(),seen=new Set<string>()
   let after:string|undefined,nextCursor:string|null=null,accessVersion:string|undefined,canWrite:boolean|undefined,pages=0
-  let taskProgress:boolean|undefined, taskOrder:boolean|undefined, orderVersion:string|undefined
+  let taskProgress:boolean|undefined, taskOrder:boolean|undefined, orderVersion:string|undefined, inboxCounts=false
   let callbackCatchUp:FollowUpPageMeta['callbackCatchUp']=undefined
   for(let n=0;n<input.depth;n++) {
     input.signal.throwIfAborted()
@@ -23,6 +23,7 @@ export async function readFollowUpPages<T extends {id:string;createdAt:string}>(
     if(input.filters.taskProgress&&!result.taskProgress)throw new Error('Task progress filters are unavailable. Reload or clear this filter.')
     if(n>0&&taskProgress!==Boolean(result.taskProgress))throw new FollowUpClientError('Task access changed while loading. Reload before continuing.',409,'FOLLOW_UP_CONTEXT_CHANGED')
     if(input.filters.taskOrder&&(!result.taskOrder||!result.taskProgress))throw new Error('Task deadline ordering is unavailable. Reload or choose Newest follow-ups.')
+    inboxCounts=n===0?result.inboxCounts===true:inboxCounts&&result.inboxCounts===true
     taskOrder=Boolean(result.taskOrder)
     taskProgress=Boolean(result.taskProgress)
     if(taskProgress&&input.status==='APPROVED')for(const row of result.data){const value=row as T&{status?:unknown;taskProgress?:unknown};if(value.status==='APPROVED')taskProgressSchema.parse(value.taskProgress)}
@@ -43,5 +44,5 @@ export async function readFollowUpPages<T extends {id:string;createdAt:string}>(
     if(seen.has(nextCursor))throw new Error('The follow-up cursor did not advance. Refresh to try again.')
     seen.add(nextCursor);after=nextCursor
   }
-  return {...(taskOrder?{taskOrder:true as const}:{}),...(taskProgress?{taskProgress:true as const}:{}),callbackCatchUp,paged:accessVersion!==undefined,items:[...items.values()].sort(input.filters.taskOrder?compareTaskDeadline:(a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)||(a.id<b.id?-1:a.id>b.id?1:0)),nextCursor,canWrite,pages}
+  return {...(inboxCounts?{inboxCounts:true as const}:{}),...(taskOrder?{taskOrder:true as const}:{}),...(taskProgress?{taskProgress:true as const}:{}),callbackCatchUp,paged:accessVersion!==undefined,items:[...items.values()].sort(input.filters.taskOrder?compareTaskDeadline:(a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)||(a.id<b.id?-1:a.id>b.id?1:0)),nextCursor,canWrite,pages}
 }

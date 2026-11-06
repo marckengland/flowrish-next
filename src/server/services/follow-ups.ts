@@ -1,3 +1,4 @@
+import { followUpEligibleSql, followUpLeadScope } from './follow-up-eligibility-sql'
 import { readDeadlinePage, readDeadlineVersion, followUpOrderChanged } from './follow-up-deadline-page'
 import { compareTaskDeadline } from '@/lib/follow-up-task-order'
 import { approvalInput, type ApprovalInput } from '@/lib/follow-up-approval'
@@ -136,26 +137,14 @@ export async function listFollowUps(organizationId: string, userId: string, stat
       const allowed = await tx.lead.findMany({ where: { organizationId, id: { in: [...touched] }, mergedIntoId: null, AND: [final.filter] }, select: { id: true } })
       if (allowed.length !== touched.size) throw followUpUnavailable()
     }
-    const assigned = final.filter.assignedUserId
-    const leadScope = assigned === undefined ? Prisma.sql`TRUE` : typeof assigned === 'string' ? Prisma.sql`l."assignedUserId"=${assigned}` : assigned.in.length ? Prisma.sql`l."assignedUserId" IN (${Prisma.join(assigned.in)})` : Prisma.sql`FALSE`
+    const leadScope = followUpLeadScope(final)
     const retainScope = retained.length ? Prisma.sql`id IN (${Prisma.join(retained)})` : Prisma.sql`FALSE`
     // Apply lead and callback ownership eligibility before the page limit. Open
     // drafts/focused rows are revalidated independently of status and pagination.
     const view = status === 'SNOOZED' ? Prisma.sql`status='PENDING' AND until>timezone('UTC',statement_timestamp())` : status === 'PENDING' ? Prisma.sql`status='PENDING' AND (until IS NULL OR until<=timezone('UTC',statement_timestamp()))` : Prisma.sql`status=${status}`
-    const position = after ? Prisma.sql`("createdAt"<${after.createdAt} OR ("createdAt"=${after.createdAt} AND id>${after.id}))` : Prisma.sql`TRUE`
+    const position = after ? Prisma.sql`("createdAt"<timezone('UTC',${after.createdAt}::timestamptz) OR ("createdAt"=timezone('UTC',${after.createdAt}::timestamptz) AND id>${after.id}))` : Prisma.sql`TRUE`
     const checkedAt = progressMode ? await snoozeClock(tx) : undefined
-    const progressFields = progressMode ? Prisma.sql`,pt.id AS "progressTaskId",pt."dueDate" AS "progressDueDate",pt."isComplete" AS "progressComplete"` : Prisma.empty
-    const progressJoin = progressMode ? Prisma.sql`LEFT JOIN "Task" pt ON pt.id=f."taskId" AND pt."organizationId"=f."organizationId" AND pt."leadId"=f."leadId" AND (${final.taskScope.assigneeId ? Prisma.sql`pt."assigneeId"=${final.taskScope.assigneeId}` : Prisma.sql`TRUE`})` : Prisma.empty
-    const eligibleSql = Prisma.sql`      SELECT f.id,f."createdAt",f.status,s.until,f."sourceType",concat_ws(' ',l."firstName",l."lastName",l.email,f.title) AS "searchText"${progressFields} FROM "FollowUpSuggestion" f
-      LEFT JOIN "FollowUpSnooze" s ON s."organizationId"=f."organizationId" AND s."userId"=${userId} AND s."followUpId"=f.id
-      JOIN "Lead" l ON l.id=f."leadId" AND l."organizationId"=${organizationId}
-      ${progressJoin}
-      WHERE f."organizationId"=${organizationId} AND f."assigneeId"=${userId}
-        AND l."deletedAt" IS NULL AND l."mergedIntoId" IS NULL AND (${leadScope})
-        AND (f.status<>'PENDING' OR (f."taskId" IS NULL AND f."sourceType"<>'CALL') OR EXISTS (
-          SELECT 1 FROM "Task" t WHERE t.id=f."taskId" AND t."organizationId"=${organizationId}
-            AND t."assigneeId"=${userId} AND t."leadId"=f."leadId" AND t."isComplete"=false))
-    `
+    const eligibleSql = followUpEligibleSql(organizationId, userId, final, progressMode)
     const predicate = Prisma.sql`${view} AND (${followUpFilterSql(filters, checkedAt)})`
     const deadlinePage = filters.taskOrder ? await readDeadlinePage(tx, eligibleSql, predicate, retained, after) : undefined
     const eligible = deadlinePage ? deadlinePage.keys : await tx.$queryRaw<Array<{ id: string; createdAt: Date; isPage: boolean; hasMore: boolean; dueDate?: Date | null }>>`WITH eligible AS (${eligibleSql}), page_candidates AS (
