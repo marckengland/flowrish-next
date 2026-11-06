@@ -1,4 +1,5 @@
 'use client'
+import { TASK_BATCH_HEADER } from './follow-up-task-batches'
 import { z } from 'zod'
 import { taskRescheduleInput, taskReschedulePreview, taskRescheduleReceipt, taskRescheduleTarget, type TaskRescheduleReceipt } from './follow-up-task-reschedule'
 import { resolveLocalMinute } from './callback-time'
@@ -11,7 +12,7 @@ const entry = z.object({ id, listKey: z.string().max(4096), previousDueDate: z.s
 const entries = z.array(entry).min(1).max(BULK_TASK_RESCHEDULE_LIMIT).refine(rows => new Set(rows.map(row => row.id)).size === rows.length && new Set(rows.map(row => row.input.requestId)).size === rows.length && new Set(rows.map(row => row.input.taskId)).size === rows.length, 'Use unique follow-ups and requests.')
 export type BulkTaskReschedulePlan = z.infer<typeof entries>
 export type BulkTaskRescheduleOutcome = { id: string; state: 'rescheduled' | 'verified' | 'failed' | 'unconfirmed' | 'not-attempted' | 'not-recorded'; message: string }
-type Hooks = { active: () => boolean; signal?: AbortSignal; onChanged: (receipt: Extract<TaskRescheduleReceipt, { state: 'confirmed' }>) => void; onAccessLost?: (cause: unknown, id: string) => void; onProgress?: (rows: BulkTaskRescheduleOutcome[]) => void; isCurrent?: (row: BulkTaskReschedulePlan[number]) => boolean }
+type Hooks = { batchId?: string; active: () => boolean; signal?: AbortSignal; onChanged: (receipt: Extract<TaskRescheduleReceipt, { state: 'confirmed' }>) => void; onAccessLost?: (cause: unknown, id: string) => void; onProgress?: (rows: BulkTaskRescheduleOutcome[]) => void; isCurrent?: (row: BulkTaskReschedulePlan[number]) => boolean }
 function chosenTarget(raw: unknown, future: boolean) {
  const value=taskRescheduleTarget.parse(raw),dueDate=new Date(resolveLocalMinute(value.localTime,value.timeZone)).toISOString()
  if(future&&Date.parse(dueDate)<=Date.now())throw new Error('Choose a future deadline.')
@@ -25,12 +26,12 @@ export function makeBulkTaskReschedulePlan(raw: unknown): BulkTaskReschedulePlan
 }
 // Both actions select currently authorized open Approved tasks.
 export { canBulkCompleteTask as canBulkRescheduleTask, uniqueCompletionSelection as uniqueRescheduleSelection, completionListKey as rescheduleListKey, type CompletionItem as RescheduleItem } from './follow-up-bulk-task-completion'
-async function request(id: string, context: FollowUpContext, method: 'GET' | 'POST', body: unknown, signal?: AbortSignal, requestId?: string, target?: {localTime:string;timeZone:string}) {
+async function request(id: string, context: FollowUpContext, method: 'GET' | 'POST', body: unknown, signal?: AbortSignal, requestId?: string, target?: {localTime:string;timeZone:string}, batchId?: string) {
  const controller = new AbortController(), abort = () => controller.abort(), timer = setTimeout(abort, 25000)
  if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true })
  try {
   const query = requestId ? new URLSearchParams({requestId}) : target ? new URLSearchParams(target) : null
-  const response = await fetch(`/api/follow-ups/${encodeURIComponent(id)}/task-reschedule${query ? `?${query}` : ''}`, { method, cache: 'no-store', headers: { ...followUpHeaders(context), ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}) }, ...(method === 'POST' ? { body: JSON.stringify(body) } : {}), signal: controller.signal })
+  const response = await fetch(`/api/follow-ups/${encodeURIComponent(id)}/task-reschedule${query ? `?${query}` : ''}`, { method, cache: 'no-store', headers: { ...followUpHeaders(context), ...(method === 'POST' ? { 'Content-Type': 'application/json', ...(batchId ? { [TASK_BATCH_HEADER]: batchId } : {}) } : {}) }, ...(method === 'POST' ? { body: JSON.stringify(body) } : {}), signal: controller.signal })
   const result = await followUpData(response, context)
   if (result.canWrite !== true) throw new FollowUpClientError('Editing access changed. Reload before continuing.', 403, 'FORBIDDEN')
   return result.data
@@ -69,7 +70,7 @@ export async function runBulkTaskReschedule(raw: unknown, context: FollowUpConte
   if (Date.parse(row.dueDate)<=Date.now()) { results[index]={id:row.id,state:'not-attempted',message:'Not attempted: the reviewed deadline has passed. Review again.'};hooks.onProgress?.([...results]);break }
   if (hooks.isCurrent && !hooks.isCurrent(row)) { results[index] = { id: row.id, state: 'not-attempted', message: 'Not attempted: the selected task changed. Review again.' }; hooks.onProgress?.([...results]); break }
   try {
-   const receipt = checkedReceipt(await request(row.id, context, 'POST', row.input, hooks.signal), row)
+   const receipt = checkedReceipt(await request(row.id, context, 'POST', row.input, hooks.signal, undefined, undefined, hooks.batchId), row)
    if (!hooks.active()) break
    if (receipt.state !== 'confirmed') throw new Error('Rescheduling not confirmed')
    hooks.onChanged(receipt); results[index] = { id: row.id, state: 'rescheduled', message: 'Task deadline change confirmed.' }

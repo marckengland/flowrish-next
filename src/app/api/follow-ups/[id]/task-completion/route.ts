@@ -1,3 +1,5 @@
+import { TASK_BATCH_HEADER } from '@/lib/follow-up-task-batches'
+import { withTaskBatchAttempt } from '@/server/services/follow-up-task-batches'
 import { z } from 'zod'
 import { AppError } from '@/lib/errors'
 import { followUpBody, followUpHttp, followUpId } from '@/server/services/follow-up-http'
@@ -13,5 +15,9 @@ export async function GET(request: Request, context: Context) {
  })
 }
 export async function POST(request: Request, context: Context) {
- return followUpHttp(request, true, async session => ({ data: await completeFollowUpTask(session.organizationId, session.dbUser.id, followUpId((await context.params).id), await followUpBody(request)), canWrite: true }))
+ return followUpHttp(request, true, async session => {
+  const id = followUpId((await context.params).id), body = await followUpBody(request), header = request.headers.get(TASK_BATCH_HEADER)
+  const run = () => completeFollowUpTask(session.organizationId, session.dbUser.id, id, body)
+  return { data: header === null ? await run() : await withTaskBatchAttempt(session.organizationId, session.dbUser.id, z.string().uuid().parse(header), 'COMPLETE', id, body, run), canWrite: true }
+ })
 }

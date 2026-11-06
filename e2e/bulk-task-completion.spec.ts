@@ -11,6 +11,7 @@ async function mock(page:Page,base:string,s:ReturnType<typeof state>){
   const req=route.request(),url=new URL(req.url()),path=url.pathname,method=req.method(),q=url.searchParams
   const reply=(data:unknown,page?:unknown,stale=false)=>route.fulfill({json:{data,scope:stale?{...scope,userId:'other'}:scope,capabilities:{canWrite:!s.readonly,taskProgress:true,taskOrder:true},...(page?{page}:{})}})
   if(url.origin!==origin||/receptionist-widget/.test(path)){s.unexpected.push(method+' '+path);await route.abort();return}
+  if(path==='/api/follow-ups/batches'&&method==='POST'){await reply({registration:req.postDataJSON(),createdAt:at});return}
   if(path==='/api/follow-ups'&&method==='GET'){
    s.reads.push(url);const visible=q.get('status')==='APPROVED'?(s.paging&&q.has('after')?[rows[3]]:rows.slice(0,3)):[];for(const retained of q.getAll('retain')){const row=rows.find(row=>row.id===retained);if(row&&!visible.some(item=>item.id===retained))visible.push(row)}
    const data=visible.map(row=>({...row,taskProgress:s.unavailable?{state:'UNAVAILABLE'}:{...row.taskProgress,...(s.changed?{dueDate:'2098-01-01T00:00:00.000Z'}:{}),...(s.completed.has(row.taskId)?{state:'COMPLETED',completedAt:at}:{})}}));await reply(data,{nextCursor:s.paging&&q.get('status')==='APPROVED'&&!q.has('after')?'next':null,accessVersion:version,...(q.has('taskOrder')?{orderVersion:version}:{})});return

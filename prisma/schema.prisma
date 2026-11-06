@@ -347,6 +347,7 @@ model OrganizationMember {
   isDefault             Boolean                @default(false) // User's default org
   emailNotificationReads EmailNotificationRead[]
   followUpSnoozes FollowUpSnooze[]
+  followUpTaskBatches FollowUpTaskBatch[]
   savedFollowUpViews SavedFollowUpView[]
   savedLeadViews        SavedLeadView[]
   bulkLeadUpdates       BulkLeadUpdate[]
@@ -1587,4 +1588,22 @@ model EmailNotificationRead {
   readAt DateTime @default(now())
 
   @@id([organizationId, userId, key])
+}
+
+// Private immutable intent and server-recorded attempt progress; audit receipts prove success.
+model FollowUpTaskBatch {
+  id String @id
+  organizationId String
+  userId String
+  member OrganizationMember @relation(fields: [userId, organizationId], references: [userId, organizationId], onDelete: Cascade, onUpdate: Cascade)
+  kind String
+  requestHash String
+  plan Json
+  progress Json
+  nextIndex Int @default(0)
+  activeIndex Int?
+  stopped Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  @@index([userId, organizationId, createdAt(sort: Desc), id])
 }

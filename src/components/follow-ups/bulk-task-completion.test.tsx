@@ -12,6 +12,7 @@ async function setup(readonly=false,extra=false){
  vi.spyOn(globalThis,'fetch').mockImplementation(async(url,init)=>{
   const path=String(url),method=init?.method??'GET';s.calls.push({path,method});const q=new URL(path,'https://example.invalid').searchParams
   const reply=(data:unknown,wrong=false,page?:unknown)=>new Response(JSON.stringify({data,scope:wrong?{...scope,userId:'other'}:scope,capabilities:{canWrite:!readonly,taskProgress:true,taskOrder:true},...(page?{page}:{})}))
+  if(path === '/api/follow-ups/batches' && method === 'POST') return reply({registration: JSON.parse(String(init?.body)), createdAt: at})
   if(path.startsWith('/api/follow-ups?'))return reply(q.get('status')==='APPROVED'?items.map(row=>({...row,taskProgress:s.unavailable?{state:'UNAVAILABLE'}:{...row.taskProgress,dueDate:s.changed?'2098-01-01T00:00:00.000Z':row.taskProgress.dueDate,...(s.completed.has(row.taskId)?{state:'COMPLETED',completedAt:at}:{})}})):[],false,{nextCursor:null,accessVersion:version,...(q.has('taskOrder')?{orderVersion:version}:{})})
   const match=path.match(/^\/api\/follow-ups\/([^/]+)\/task-completion/)
   if(match){const id=decodeURIComponent(match[1]),taskId=items.find(row=>row.id===id)!.taskId
