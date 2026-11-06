@@ -80,7 +80,6 @@ export async function listFollowUps(organizationId: string, userId: string, stat
   return safeFollowUp(() => prisma.$transaction(async tx => {
     await lockFollowUpMember(tx, organizationId, userId)
     const access = await currentFollowUpAccess(tx, organizationId, userId)
-    const owned = progressMode ? [] : await tx.task.findMany({ where: { organizationId, assigneeId: userId, isComplete: false, lead: { organizationId, mergedIntoId: null, AND: [access.filter] } }, select: { id: true, leadId: true } })
     const touched = new Set<string>()
     let callbacksCreated = 0
     const lockSource = async (leadId: string, taskId: string) => {
@@ -88,8 +87,7 @@ export async function listFollowUps(organizationId: string, userId: string, stat
       const task = await tx.task.findFirst({ where: { id: taskId, organizationId, assigneeId: userId, isComplete: false, leadId: lead.id } })
       return task
     }
-    const callbackAssigned = access.filter.assignedUserId
-    const callbackLeadScope = callbackAssigned === undefined ? Prisma.sql`TRUE` : typeof callbackAssigned === 'string' ? Prisma.sql`l."assignedUserId"=${callbackAssigned}` : callbackAssigned.in.length ? Prisma.sql`l."assignedUserId" IN (${Prisma.join(callbackAssigned.in)})` : Prisma.sql`FALSE`
+    const callbackLeadScope = followUpLeadScope(access)
     // Committed source keys are the checkpoint. Exclude represented calls before
     // LIMIT so repeated first-page reads advance without resetting reviewed work.
     const queryCallbacks = (limit: number, scope: Prisma.Sql) => tx.$queryRaw<Array<{ id: string }>>`WITH callback_candidates AS (
@@ -103,9 +101,17 @@ export async function listFollowUps(organizationId: string, userId: string, stat
           AND f."sourceKey"=('[' || '"call",' || to_json(c.id)::text || ']'))
       ORDER BY c."createdAt" ASC,c.id ASC LIMIT ${limit}
     ) SELECT id FROM callback_candidates`
-    const candidates = !after && owned.length ? await queryCallbacks(100, callbackLeadScope) : []
-    const callbacks = candidates.length ? await tx.receptionistCall.findMany({ where: { organizationId, id: { in: candidates.map(row => row.id) }, status: 'completed', taskId: { in: owned.map(task => task.id) }, leadId: { not: null } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 100 }) : []
-    const pending = owned.length ? await tx.followUpSuggestion.findMany({ where: { organizationId, sourceType: 'CALL', status: 'PENDING', taskId: { in: owned.map(task => task.id) }, assigneeId: { not: userId } }, orderBy: { id: 'asc' }, take: 100 }) : []
+    const candidates = !after && !progressMode ? await queryCallbacks(100, callbackLeadScope) : []
+    const callbacks = candidates.length ? await tx.receptionistCall.findMany({ where: { organizationId, id: { in: candidates.map(row => row.id) }, status: 'completed', taskId: { not: null }, leadId: { not: null } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 100 }) : []
+    const pending = progressMode ? [] : await tx.$queryRaw<Array<{ id: string; leadId: string; taskId: string; sourceType: string }>>`WITH pending_callback_reassignments AS (
+      SELECT f.id,f."leadId",f."taskId",f."sourceType" FROM "FollowUpSuggestion" f
+      JOIN "Task" t ON t.id=f."taskId" AND t."organizationId"=f."organizationId" AND t."leadId"=f."leadId"
+      JOIN "Lead" l ON l.id=f."leadId" AND l."organizationId"=f."organizationId"
+      WHERE f."organizationId"=${organizationId} AND f."sourceType"='CALL' AND f.status='PENDING' AND f."assigneeId"<>${userId}
+        AND t."assigneeId"=${userId} AND t."isComplete"=false
+        AND l."deletedAt" IS NULL AND l."mergedIntoId" IS NULL AND (${callbackLeadScope})
+      ORDER BY f.id ASC LIMIT 100
+    ) SELECT * FROM pending_callback_reassignments`
     const leadIds = [...new Set([...callbacks.map(row => row.leadId!), ...pending.map(row => row.leadId)])].sort()
     const taskIds = [...new Set([...callbacks.map(row => row.taskId!), ...pending.flatMap(row => row.taskId ? [row.taskId] : [])])].sort()
     // Match email routing's canonical lead order before taking any task/suggestion lock.
@@ -122,7 +128,7 @@ export async function listFollowUps(organizationId: string, userId: string, stat
       callbacksCreated += created.count
       if (created.count) touched.add(task.leadId!)
     }
-    if (owned.length) {
+    if (pending.length) {
       for (const row of pending) {
         if (row.sourceType !== 'CALL' || !row.taskId) continue
         const task = await lockSource(row.leadId, row.taskId)
@@ -147,7 +153,7 @@ export async function listFollowUps(organizationId: string, userId: string, stat
     const eligibleSql = followUpEligibleSql(organizationId, userId, final, progressMode)
     const predicate = Prisma.sql`${view} AND (${followUpFilterSql(filters, checkedAt)})`
     const deadlinePage = filters.taskOrder ? await readDeadlinePage(tx, eligibleSql, predicate, retained, after) : undefined
-    const eligible = deadlinePage ? deadlinePage.keys : await tx.$queryRaw<Array<{ id: string; createdAt: Date; isPage: boolean; hasMore: boolean; dueDate?: Date | null }>>`WITH eligible AS (${eligibleSql}), page_candidates AS (
+    const eligible = deadlinePage ? deadlinePage.keys : await tx.$queryRaw<Array<{ id: string; createdAt: Date; isPage: boolean; hasMore: boolean; dueDate?: Date | null }>>`WITH eligible AS NOT MATERIALIZED (${eligibleSql}), page_candidates AS (
       SELECT id,"createdAt" FROM eligible WHERE ${view} AND (${followUpFilterSql(filters, checkedAt)}) AND (${position}) ORDER BY "createdAt" DESC,id LIMIT ${paging ? 101 : 100}
     ), selected AS (
       (SELECT id,"createdAt",true AS "isPage" FROM page_candidates ORDER BY "createdAt" DESC,id LIMIT 100)
@@ -155,7 +161,8 @@ export async function listFollowUps(organizationId: string, userId: string, stat
     ) SELECT id,"createdAt",bool_or("isPage") AS "isPage",(SELECT count(*)>100 FROM page_candidates) AS "hasMore" FROM selected GROUP BY id,"createdAt" ORDER BY "createdAt" DESC,id`
     const rows = await tx.followUpSuggestion.findMany({ where: { organizationId, assigneeId: userId, id: { in: eligible.map(row => row.id) } }, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] })
     const leads = await tx.lead.findMany({ where: { organizationId, mergedIntoId: null, id: { in: rows.map(row => row.leadId) }, AND: [final.filter] }, select: { id: true, firstName: true, lastName: true, email: true } })
-    const tasks = await tx.task.findMany({ where: { organizationId, assigneeId: userId, isComplete: false, lead: { organizationId, mergedIntoId: null, AND: [final.filter] } }, select: { id: true, leadId: true } })
+    const pendingTaskIds = [...new Set(rows.flatMap(row => row.status === 'PENDING' && row.taskId ? [row.taskId] : []))]
+    const tasks = pendingTaskIds.length ? await tx.task.findMany({ where: { organizationId, id: { in: pendingTaskIds }, assigneeId: userId, isComplete: false, lead: { organizationId, mergedIntoId: null, AND: [final.filter] } }, select: { id: true, leadId: true } }) : []
     const byId = new Map(leads.map(lead => [lead.id, lead])), taskById = new Map(tasks.map(task => [task.id, task.leadId]))
     const snoozes = await tx.followUpSnooze.findMany({ where: { organizationId, userId, followUpId: { in: rows.map(row => row.id) } } })
     const snoozeById = new Map(snoozes.map(row => [row.followUpId, row]))

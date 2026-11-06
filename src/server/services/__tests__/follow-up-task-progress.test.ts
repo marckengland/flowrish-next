@@ -11,7 +11,7 @@ const actor = (hierarchy = 3) => ({ id: 'actor', organizationMemberships: [{ org
 let query: Prisma.Sql | undefined
 beforeEach(() => {
  vi.resetAllMocks(); query = undefined; m.tx.mockImplementation(run => run(m.db)); m.db.user.findUnique.mockResolvedValue(actor()); m.db.lead.findMany.mockResolvedValue([{ id: 'lead', firstName: 'Practice', lastName: 'Clinic', email: 'lead@example.invalid' }]); m.db.task.findMany.mockImplementation(async args => args.select.dueDate ? [task] : []); m.db.followUpSuggestion.findMany.mockResolvedValue([row]); m.db.followUpSnooze.findMany.mockResolvedValue([])
- m.db.$queryRaw.mockImplementation(async (q, ...values) => { const sql = Prisma.sql(q as TemplateStringsArray, ...values); if (sql.text.includes('AS now')) return [{ now }]; if (sql.text.includes('WITH eligible')) { query = sql; return [{ id, createdAt: now, isPage: true, hasMore: false }] }; return [{ id: 'member' }] })
+ m.db.$queryRaw.mockImplementation(async (q, ...values) => { const sql = Prisma.sql(q as TemplateStringsArray, ...values); if (sql.text.includes('pending_callback_reassignments') || sql.text.includes('callback_candidates')) return []; if (sql.text.includes('AS now')) return [{ now }]; if (sql.text.includes('WITH eligible')) { query = sql; return [{ id, createdAt: now, isPage: true, hasMore: false }] }; return [{ id: 'member' }] })
 })
 it('reads overdue metadata with member task scope and no catch-up or workflow writes', async () => {
  const result = await listFollowUps('org', 'actor', 'APPROVED', [], { taskProgress: 'OVERDUE' }, {}, true)
@@ -27,7 +27,7 @@ it('rejects task-state races rather than returning a mismatched filtered page', 
  m.db.task.findMany.mockImplementation(async args => args.select.dueDate ? [{ ...task, isComplete: true }] : []); await expect(listFollowUps('org', 'actor', 'APPROVED', [], { taskProgress: 'OPEN' }, {}, true)).rejects.toMatchObject({ statusCode: 409 })
 })
 it('keeps retained drafts outside the task filter and leaves legacy responses unchanged', async () => {
- m.db.$queryRaw.mockImplementation(async (q, ...values) => { const sql = Prisma.sql(q as TemplateStringsArray, ...values); if (sql.text.includes('AS now')) return [{ now }]; if (sql.text.includes('WITH eligible')) return [{ id, createdAt: now, isPage: false, hasMore: false }]; return [{ id: 'member' }] })
+ m.db.$queryRaw.mockImplementation(async (q, ...values) => { const sql = Prisma.sql(q as TemplateStringsArray, ...values); if (sql.text.includes('pending_callback_reassignments') || sql.text.includes('callback_candidates')) return []; if (sql.text.includes('AS now')) return [{ now }]; if (sql.text.includes('WITH eligible')) return [{ id, createdAt: now, isPage: false, hasMore: false }]; return [{ id: 'member' }] })
  expect((await listFollowUps('org', 'actor', 'APPROVED', [id], { taskProgress: 'COMPLETED' }, {}, true)).items[0].taskProgress).toMatchObject({ state: 'OVERDUE' })
  expect((await listFollowUps('org', 'actor', 'APPROVED')).items[0]).not.toHaveProperty('taskProgress')
 })
