@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Input, inputBaseClass } from '@/components/ui/input'
 import { SAVED_FOLLOW_UP_VIEW_LIMIT, savedFollowUpViewCreateSchema, savedFollowUpViewUpdateSchema, savedFollowUpViewDeleteSchema, savedFollowUpViewSchema, type SavedFollowUpView } from '@/lib/saved-follow-up-views'
+import { FOLLOW_UP_TASK_PROGRESS_HEADER } from '@/lib/follow-up-task-progress'
 import { followUpHeaders, type FollowUpContext } from '@/lib/follow-up-access'
 import { followUpData, FollowUpClientError } from '@/lib/follow-up-client'
 import type { SavedFollowUpSettings } from '@/lib/saved-follow-up-views'
@@ -37,7 +38,7 @@ function PersonalViews(props: SavedFollowUpViewsProps) {
   const inputId = useId(), selectId = useId(), titleId = useId()
 
   const request = useCallback(async (path: string, method = 'GET', body?: unknown) => {
-    const response = await fetch(path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json', ...followUpHeaders({ organizationId, userId }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+    const response = await fetch(path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json', [FOLLOW_UP_TASK_PROGRESS_HEADER]: '1', ...followUpHeaders({ organizationId, userId }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
     return (await followUpData<unknown>(response, { organizationId, userId })).data
   }, [organizationId, userId])
 

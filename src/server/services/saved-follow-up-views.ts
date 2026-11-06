@@ -31,11 +31,13 @@ async function write<T>(organizationId: string, userId: string, action: (db: Pri
     return action(db)
   }))
 }
-export async function listSavedFollowUpViews(organizationId: string, userId: string) {
+export async function listSavedFollowUpViews(organizationId: string, userId: string, taskProgress = false) {
   return safe(async () => {
     await access(organizationId, userId)
     const rows = await prisma.savedFollowUpView.findMany({ where: { organizationId, userId }, orderBy: [{ name: 'asc' }, { id: 'asc' }], take: SAVED_FOLLOW_UP_VIEW_LIMIT })
-    return rows.map(wire)
+    // Older clients cannot parse this optional filter; do not silently broaden their views.
+    const visible = taskProgress ? rows : rows.filter(row => (row.settings as { filters?: { taskProgress?: unknown } } | null)?.filters?.taskProgress === undefined)
+    return visible.map(wire)
   })
 }
 export async function createSavedFollowUpView(organizationId: string, userId: string, raw: unknown) {

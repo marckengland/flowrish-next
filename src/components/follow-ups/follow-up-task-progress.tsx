@@ -1,0 +1,6 @@
+'use client'
+import type { TaskProgress } from '@/lib/follow-up-task-progress'
+export function FollowUpTaskProgress({ progress }: { progress?: TaskProgress }) {
+ if (!progress || progress.state === 'UNAVAILABLE') return <div aria-label="Linked task progress" className="mt-3 text-sm text-muted-foreground"><p>Progress unavailable</p><p className="text-xs">The task may be unavailable in your current access.</p></div>
+ return <div aria-label="Linked task progress" className="mt-3 space-y-1 text-sm"><p className={progress.state === 'OVERDUE' ? 'font-medium text-destructive' : 'font-medium'}>{progress.state === 'OPEN' ? 'Open' : progress.state === 'OVERDUE' ? 'Overdue' : 'Completed'}</p><p>Due <time dateTime={progress.dueDate}>{new Date(progress.dueDate).toLocaleString()}</time></p>{progress.state === 'COMPLETED' && progress.completedAt && <p>Completed <time dateTime={progress.completedAt}>{new Date(progress.completedAt).toLocaleString()}</time></p>}<p className="text-xs text-muted-foreground">Checked <time dateTime={progress.checkedAt}>{new Date(progress.checkedAt).toLocaleString()}</time>. Dates use your browser timezone.</p></div>
+}

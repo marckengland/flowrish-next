@@ -1,0 +1,13 @@
+--- a/src/server/services/saved-follow-up-views.ts
++++ b/src/server/services/saved-follow-up-views.ts
+@@ -35,7 +35,9 @@
+   return safe(async () => {
+     await access(organizationId, userId)
+     const rows = await prisma.savedFollowUpView.findMany({ where: { organizationId, userId }, orderBy: [{ name: 'asc' }, { id: 'asc' }], take: SAVED_FOLLOW_UP_VIEW_LIMIT })
+-    return rows.map(wire)
++    // Retain new view JSON without exposing unsupported filters to older clients.
++    const visible = rows.filter(row => (row.settings as { filters?: { taskProgress?: unknown } } | null)?.filters?.taskProgress === undefined)
++    return visible.map(wire)
+   })
+ }
+ export async function createSavedFollowUpView(organizationId: string, userId: string, raw: unknown) {

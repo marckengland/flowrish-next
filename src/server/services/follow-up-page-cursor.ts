@@ -4,9 +4,9 @@ import {z} from 'zod'
 import type {LeadAccessFilter} from './access'
 import type {FollowUpFilters} from '@/lib/follow-up-filters'
 import {AppError} from '@/lib/errors'
-type Scope={organizationId:string;userId:string;status:string;filters:FollowUpFilters}
+type Scope={organizationId:string;userId:string;status:string;filters:FollowUpFilters;taskProgress?:boolean}
 const cursor=z.object({v:z.literal(1),binding:z.string().regex(/^[a-f0-9]{64}$/),id:z.string().uuid(),createdAt:z.string().datetime()}).strict()
-const binding=(scope:Scope)=>createHash('sha256').update(JSON.stringify([scope.organizationId,scope.userId,scope.status,scope.filters.search,scope.filters.source,scope.filters.dueOnly])).digest('hex')
+const binding=(scope:Scope)=>createHash('sha256').update(JSON.stringify([scope.organizationId,scope.userId,scope.status,scope.filters.search,scope.filters.source,scope.filters.dueOnly,...(scope.taskProgress||scope.filters.taskProgress?['task-progress',Boolean(scope.taskProgress),scope.filters.taskProgress??null]:[])])).digest('hex')
 /** Position only: independent list authorization is required on every request. */
 export function encodeFollowUpCursor(scope:Scope,anchor:{id:string;createdAt:Date}) {
   return Buffer.from(JSON.stringify(cursor.parse({v:1,binding:binding(scope),id:anchor.id,createdAt:anchor.createdAt.toISOString()}))).toString('base64url')
@@ -19,8 +19,8 @@ export function decodeFollowUpCursor(scope:Scope,raw:string) {
   return {id:value.id,createdAt:new Date(value.createdAt)}
 }
 
-export function followUpPageAccessVersion(filter:LeadAccessFilter) {
+export function followUpPageAccessVersion(filter:LeadAccessFilter,taskScope?:{assigneeId?:string}) {
   const assigned=filter.assignedUserId
   const normalized={...filter,...(assigned&&typeof assigned==='object'?{assignedUserId:{in:[...new Set(assigned.in)].sort()}}:{})}
-  return createHash('sha256').update(JSON.stringify(normalized)).digest('hex')
+  return createHash('sha256').update(JSON.stringify(taskScope?{lead:normalized,task:taskScope}:normalized)).digest('hex')
 }

@@ -1,4 +1,5 @@
 import 'server-only'
+import { memberTaskScope } from './task-access'
 import { Prisma } from '@prisma/client'
 import { ZodError } from 'zod'
 import { AppError } from '@/lib/errors'
@@ -14,7 +15,7 @@ export async function currentFollowUpAccess(db: Prisma.TransactionClient, organi
   if (!user || !user.organizationMemberships.some(row => row.organizationId === organizationId)) throw new AppError('FORBIDDEN', 'Current business membership is required.', 403)
   requirePermission(user, 'leads:read')
   if (write) requirePermission(user, 'leads:write')
-  return { filter: await getLeadAccessFilter(user, organizationId), canWrite: hasPermission(user, 'leads:write') }
+  return { filter: await getLeadAccessFilter(user, organizationId), canWrite: hasPermission(user, 'leads:write'), taskScope: memberTaskScope(user) ? { assigneeId: userId } : {} }
 }
 export async function followUpLead(db: Prisma.TransactionClient, organizationId: string, userId: string, leadId: string, write = false) {
   const access = await currentFollowUpAccess(db, organizationId, userId, write)
