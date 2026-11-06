@@ -33,3 +33,16 @@ it('loads older history and ignores responses after workspace changes', async ()
  ui.rerender(<SavedTaskBatches context={{ ...context, organizationId: 'other' }} onAccessLost={vi.fn()} />); release(reply({ items: [{ ...summary, id: '11111111-1111-4111-8111-111111111111' }], nextCursor: null }))
  expect(within(screen.getByRole('group', { name: 'Saved task batch history' })).queryByRole('button', { name: /View completion batch/ })).not.toBeInTheDocument()
 })
+it('does not release another inbox action lock when an idle recovery panel changes batches', async () => {
+ const other = '11111111-1111-4111-8111-111111111111', busy = vi.fn()
+ vi.spyOn(globalThis, 'fetch').mockImplementation(async url => {
+  const path = String(url), chosen = path.endsWith(other) ? other : id
+  const data = path === '/api/follow-ups/batches' ? { items: [summary, { ...summary, id: other }], nextCursor: null } : { ...detail, id: chosen, items: [{ index: 0, state: 'failed', currentChanged: false, task: { id: 'task', title: 'Idle recovery task', leadId: 'lead', leadName: 'Practice Clinic', dueDate: at, isComplete: false } }] }
+  return new Response(JSON.stringify({ data, scope: context, capabilities: { canWrite: true } }))
+ })
+ const ui = render(<SavedTaskBatches context={context} onAccessLost={vi.fn()} recovery={{ disabled: true, onBusyChange: busy, onCompleted: vi.fn(), onRescheduled: vi.fn() }} />)
+ const panel = screen.getByText('Saved bulk-action history').closest('details')!; panel.open = true; fireEvent(panel, new Event('toggle'))
+ fireEvent.click((await screen.findAllByRole('button', { name: /View completion batch/ }))[0]); await screen.findByRole('region', { name: 'Review remaining tasks' })
+ await waitFor(() => expect(screen.getAllByRole('button', { name: /View completion batch/ })[1]).toBeEnabled()); fireEvent.click(screen.getAllByRole('button', { name: /View completion batch/ })[1]); await screen.findByRole('region', { name: 'Review remaining tasks' })
+ expect(busy).not.toHaveBeenCalled(); ui.unmount(); expect(busy).not.toHaveBeenCalled()
+})

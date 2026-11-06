@@ -25,7 +25,7 @@ export const taskBatchRow = z.union([
  z.object({ index: z.number().int().min(0).max(19), state: z.literal('unavailable') }).strict(),
  z.object({ index: z.number().int().min(0).max(19), state: taskBatchState, currentChanged: z.boolean(), task: z.object({ id, title: z.string(), leadId: id, leadName: z.string(), dueDate: z.string().datetime(), isComplete: z.boolean() }).strict(), reviewedDeadline: z.object({ previousDueDate: z.string().datetime(), dueDate: z.string().datetime(), timeZone: z.string() }).strict().optional() }).strict(),
 ])
-export const taskBatchDetail = z.object({ id: z.string().uuid(), kind, createdAt: z.string().datetime(), checkedAt: z.string().datetime(), items: z.array(taskBatchRow).min(1).max(20) }).strict()
+export const taskBatchDetail = z.object({ id: z.string().uuid(), kind, createdAt: z.string().datetime(), checkedAt: z.string().datetime(), canReview: z.boolean().optional(), items: z.array(taskBatchRow).min(1).max(20) }).strict()
 const counts = z.object({ confirmed: z.number().int().min(0), failed: z.number().int().min(0), uncertain: z.number().int().min(0), 'not-attempted': z.number().int().min(0), unavailable: z.number().int().min(0) }).strict()
 export const taskBatchList = z.object({ items: z.array(z.object({ id: z.string().uuid(), kind, createdAt: z.string().datetime(), counts }).strict()).max(10), nextCursor: z.string().max(2048).nullable() }).strict()
 export type TaskBatchDetail = z.infer<typeof taskBatchDetail>

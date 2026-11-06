@@ -113,7 +113,7 @@ async function project(db: Prisma.TransactionClient, organizationId: string, use
  })
  const final = await currentFollowUpAccess(db, organizationId, userId, false)
  if (followUpPageAccessVersion(final.filter, final.taskScope) !== version) throw followUpChanged()
- return result
+ return result.map(detail => ({ ...detail, canReview: final.canWrite }))
 }
 export async function readTaskBatch(organizationId: string, userId: string, id: string) {
  z.string().uuid().parse(id)
