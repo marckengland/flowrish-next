@@ -1,3 +1,4 @@
+import {filterScreen} from './test-helpers/filter-screen'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { FollowUpInbox } from './follow-up-inbox'
@@ -20,9 +21,9 @@ it.each(['OPEN', 'OVERDUE'])('retains an uncertain completion under %s across fo
   throw new Error('Unexpected request ' + path)
  })
  render(<FollowUpInbox canWrite emailMatchContext={scope} />); await screen.findByText('No pending follow-ups'); fireEvent.click(screen.getByRole('tab', { name: 'Approved' })); await screen.findByText('Synthetic retained completion')
- fireEvent.change(screen.getByRole('combobox', { name: 'Task progress' }), { target: { value: filter } }); fireEvent.click(screen.getByRole('button', { name: 'Apply filters' })); await waitFor(() => expect(lists.at(-1)?.get('taskProgress')).toBe(filter)); await screen.findByText('Synthetic retained completion')
+ fireEvent.change(filterScreen().getByRole('combobox', { name: 'Task progress' }), { target: { value: filter } }); fireEvent.click(filterScreen().getByRole('button', { name: 'Apply filters' })); await waitFor(() => expect(lists.at(-1)?.get('taskProgress')).toBe(filter)); await screen.findByText('Synthetic retained completion')
 fireEvent.click(await screen.findByRole('button', { name: 'Review follow-up' }));  fireEvent.click(screen.getByRole('button', { name: 'Review task completion' })); await screen.findByRole('group', { name: 'Task completion review' }); fireEvent.click(screen.getByRole('button', { name: 'Confirm task completion' })); await screen.findByRole('button', { name: 'Check completion result' }); expect(writes).toHaveLength(1)
- fireEvent.focus(window); await waitFor(() => expect(lists.at(-1)?.getAll('retain')).toContain('item')); await waitFor(() => expect(screen.getByRole('button', { name: 'Check completion result' })).toBeEnabled()); expect(screen.getByRole('combobox', { name: 'Task progress' })).toHaveValue(filter)
+ fireEvent.focus(window); await waitFor(() => expect(lists.at(-1)?.getAll('retain')).toContain('item')); await waitFor(() => expect(screen.getByRole('button', { name: 'Check completion result' })).toBeEnabled()); expect(filterScreen().getByRole('combobox', { name: 'Task progress' })).toHaveValue(filter)
  fireEvent.click(screen.getByRole('tab', { name: 'Pending' })); const warning = await screen.findByRole('group', { name: 'Unconfirmed task completion navigation' }); expect(warning).toHaveTextContent('Check the completion result before leaving'); fireEvent.click(screen.getByRole('button', { name: 'Stay and check completion' })); expect(screen.getByRole('tab', { name: 'Approved' })).toHaveAttribute('aria-selected', 'true')
  fireEvent.click(screen.getByRole('button', { name: 'Check completion result' })); await screen.findByText('Task completion confirmed.'); expect(checks).toEqual([requestId]); expect(writes).toHaveLength(1)
  fireEvent.focus(window); await waitFor(() => expect(lists.at(-1)?.getAll('retain')).toEqual([])); await screen.findByText('No follow-ups match these filters.'); expect(writes).toHaveLength(1)

@@ -1,3 +1,4 @@
+import {revealFollowUpFilters} from './helpers/follow-up-filters'
 import { expect, test, type Page } from '@playwright/test'
 import { coreIds } from './rehearsal-app/core-fixtures'
 import type { SavedFollowUpView } from '../src/lib/saved-follow-up-views'
@@ -36,7 +37,7 @@ async function open(p: Page) { await expect(p.getByText(item.sourceText, { exact
 async function select(p: Page) { await region(p).getByRole('combobox', { name: 'Saved follow-up view', exact: true }).selectOption(seed.id) }
 for (const width of [1280, 390]) test(`saved follow-up views preserves filters and mounted drafts through CRUD at ${width}px`, async ({ page, baseURL }, info) => {
  const s = state(); await page.setViewportSize({ width, height: 900 }); await mock(page, baseURL!, s); await page.goto('/follow-up-access'); await open(page)
- const filters = page.getByRole('search', { name: 'Follow-up filters', exact: true }); await filters.getByRole('searchbox').fill('Current'); await filters.getByRole('button', { name: 'Apply filters', exact: true }).click(); await expect(page.getByText(item.sourceText, { exact: true })).toBeVisible()
+ await revealFollowUpFilters(page); const filters = page.getByRole('search', { name: 'Follow-up filters', exact: true }); await filters.getByRole('searchbox').fill('Current'); await revealFollowUpFilters(page); await filters.getByRole('button', { name: 'Apply filters', exact: true }).click(); await expect(page.getByText(item.sourceText, { exact: true })).toBeVisible()
  await page.getByRole('button', { name: 'Review email draft', exact: true }).click(); const subject = page.getByRole('textbox', { name: 'Subject', exact: true }); await subject.fill('Keep saved-view draft'); await subject.evaluate(el => el.setAttribute('data-synthetic-mounted', 'original'))
  await region(page).getByRole('textbox', { name: 'View name', exact: true }).fill('My current view'); await region(page).getByRole('button', { name: 'Save as new view', exact: true }).click(); await expect(region(page)).toContainText('View saved.'); expect(s.writes[0].body.settings).toEqual({ status: 'PENDING', filters: { search: 'Current', source: 'ALL', dueOnly: false } })
  await region(page).getByRole('textbox', { name: 'View name', exact: true }).fill('Renamed view'); await region(page).getByRole('button', { name: 'Rename view', exact: true }).click(); await expect(region(page)).toContainText('Saved view updated.'); await region(page).getByRole('button', { name: 'Replace saved settings', exact: true }).click(); await expect(region(page).getByRole('button', { name: 'Delete saved view', exact: true })).toBeEnabled()

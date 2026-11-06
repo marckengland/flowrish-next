@@ -1,3 +1,4 @@
+import {filterScreen} from './test-helpers/filter-screen'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { FollowUpInbox } from './follow-up-inbox'
@@ -28,7 +29,7 @@ it('applies the saved tab and filters together only after confirming unsent emai
   fireEvent.click(within(screen.getByRole('group', { name: 'Open draft confirmation' })).getByRole('button', { name: 'Keep editing' })); expect(screen.getByLabelText('Unsent subject')).toHaveValue('Keep these edits')
   fireEvent.click(screen.getByRole('button', { name: 'Apply view' })); fireEvent.click(screen.getByRole('button', { name: 'Discard and apply view' }))
   await waitFor(() => expect(calls.at(-1)).toBe('/api/follow-ups?status=APPROVED&search=Clinic&source=CALL'))
-  expect(screen.getByRole('tab', { name: 'Approved' })).toHaveAttribute('aria-selected', 'true'); expect(screen.getByRole('searchbox', { name: 'Search follow-ups' })).toHaveValue('Clinic'); expect(calls).toHaveLength(3)
+  expect(screen.getByRole('tab', { name: 'Approved' })).toHaveAttribute('aria-selected', 'true'); expect(filterScreen().getByRole('searchbox', { name: 'Search follow-ups' })).toHaveValue('Clinic'); expect(calls).toHaveLength(3)
 })
 it('protects unsaved task edits when applying a saved view, without mutating follow-ups', async () => {
   const calls = await setup(); fireEvent.change(screen.getByLabelText('Task title'), { target: { value: 'Keep task edits' } }); fireEvent.click(screen.getByRole('button', { name: 'Apply view' }))

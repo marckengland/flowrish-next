@@ -1,3 +1,4 @@
+import {filterScreen} from './test-helpers/filter-screen'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { FollowUpInbox } from './follow-up-inbox'
@@ -19,7 +20,7 @@ async function setup(write = true) {
 }
 async function open() { fireEvent.change(screen.getByRole('combobox', { name: 'Bulk actions' }), { target: { value: 'approve' } }); await screen.findByRole('button', { name: 'Select up to 20 for approval' }); fireEvent.click(screen.getByRole('button', { name: 'Select up to 20 for approval' })) }
 it('preserves the mounted email draft and filters while approving, refreshing and clearing selection', async () => {
- const calls = await setup(); const filters = screen.getByRole('search', { name: 'Follow-up filters' }); fireEvent.change(within(filters).getByRole('searchbox'), { target: { value: 'Clinic' } }); fireEvent.click(within(filters).getByRole('button', { name: 'Apply filters' })); await screen.findByText(seed.sourceText)
+ const calls = await setup(); const filters = filterScreen().getByRole('search', { name: 'Follow-up filters' }); fireEvent.change(within(filters).getByRole('searchbox'), { target: { value: 'Clinic' } }); fireEvent.click(within(filters).getByRole('button', { name: 'Apply filters' })); await screen.findByText(seed.sourceText)
  fireEvent.click(screen.getByRole('button', { name: 'Review email draft' })); fireEvent.change(screen.getByLabelText('Unsent approval subject'), { target: { value: 'Keep email edits' } }); const subject = screen.getByLabelText('Unsent approval subject'); subject.setAttribute('data-mounted', 'original')
  await open(); fireEvent.click(screen.getByRole('button', { name: 'Review task approvals' })); await screen.findByLabelText('Approval task title for Practice Clinic'); fireEvent.change(screen.getByLabelText('Approval task title for Practice Clinic'), { target: { value: 'Approved bulk title' } }); expect(calls.every(row => row.method === 'GET')).toBe(true)
  fireEvent.click(screen.getByRole('button', { name: 'Confirm bulk approval' })); await screen.findByText('1 of 1 task approvals confirmed or verified.'); expect(await screen.findByRole('link', { name: 'Open task' })).toHaveAttribute('href', '/tasks/task'); expect(screen.getByText('Approved bulk title')).toBeInTheDocument(); expect(subject).toHaveValue('Keep email edits'); expect(subject).toHaveAttribute('data-mounted', 'original'); expect(within(filters).getByRole('searchbox')).toHaveValue('Clinic')

@@ -1,3 +1,4 @@
+import {revealFollowUpFilters} from './helpers/follow-up-filters'
 import { expect, test, type Page } from '@playwright/test'
 import { coreIds } from './rehearsal-app/core-fixtures'
 
@@ -34,9 +35,9 @@ async function ready(p: Page) { await expect(p.getByText(first.sourceText, { exa
 async function draft(p: Page, value: string) { await p.getByRole('button', { name: 'Review email draft', exact: true }).click(); await p.getByRole('textbox', { name: 'Subject', exact: true }).fill(value) }
 for (const width of [1280, 390]) test(`follow-up load more preserves filters and the mounted unsent composer at ${width}px`, async ({ page, baseURL }, info) => {
   const s = state(); await page.setViewportSize({ width, height: 900 }); await mock(page, baseURL!, s); await page.goto('/follow-up-access'); await ready(page)
-  await filters(page).getByRole('searchbox', { name: 'Search follow-ups' }).fill('Clinic')
-  await filters(page).getByRole('combobox', { name: 'Follow-up source', exact: true }).selectOption('EMAIL')
-  await filters(page).getByRole('button', { name: 'Apply filters', exact: true }).click(); await ready(page)
+  await revealFollowUpFilters(page); await filters(page).getByRole('searchbox', { name: 'Search follow-ups' }).fill('Clinic')
+  await revealFollowUpFilters(page); await filters(page).getByRole('combobox', { name: 'Follow-up source', exact: true }).selectOption('EMAIL')
+  await revealFollowUpFilters(page); await filters(page).getByRole('button', { name: 'Apply filters', exact: true }).click(); await ready(page)
   await draft(page, 'Retain these exact unsent edits')
   await page.getByRole('textbox', { name: 'Subject', exact: true }).evaluate(el => { el.setAttribute('data-synthetic-mounted', 'original') })
   const before = s.reads.length; await page.getByRole('button', { name: 'Load more', exact: true }).click()
@@ -63,10 +64,10 @@ test('follow-up load more retains drafts on failure and retries only explicitly'
 test('follow-up load more ignores a delayed response after filters change', async ({ page, baseURL }) => {
   const s = state(); await mock(page, baseURL!, s); await page.goto('/follow-up-access'); await ready(page); s.hold = true
   await page.getByRole('button', { name: 'Load more', exact: true }).click(); await expect.poll(() => s.held).toBe(true)
-  await filters(page).getByRole('searchbox', { name: 'Search follow-ups' }).fill('Replacement'); await filters(page).getByRole('button', { name: 'Apply filters', exact: true }).click()
+  await revealFollowUpFilters(page); await filters(page).getByRole('searchbox', { name: 'Search follow-ups' }).fill('Replacement'); await revealFollowUpFilters(page); await filters(page).getByRole('button', { name: 'Apply filters', exact: true }).click()
   await expect(page.getByText('Replacement filtered source', { exact: true })).toBeVisible(); s.release!()
   await expect(page.getByText(first.sourceText, { exact: true })).toHaveCount(0); await expect(page.getByText(older.sourceText, { exact: true })).toHaveCount(0)
-  await expect(filters(page).getByRole('searchbox', { name: 'Search follow-ups' })).toHaveValue('Replacement'); expect(s.unexpected).toEqual([])
+  await revealFollowUpFilters(page); await expect(filters(page).getByRole('searchbox', { name: 'Search follow-ups' })).toHaveValue('Replacement'); expect(s.unexpected).toEqual([])
 })
 test('follow-up load more protects a draft opened during an in-flight page read', async ({ page, baseURL }) => {
   const s = state(); await mock(page, baseURL!, s); await page.goto('/follow-up-access'); await ready(page); s.hold = true
@@ -78,8 +79,8 @@ test('follow-up load more protects a draft opened during an in-flight page read'
   expect(s.reads.at(-1)?.getAll('retain')).toContain(first.id); await expect(page.getByRole('textbox', { name: 'Subject', exact: true })).toHaveValue('Opened during loading'); expect(s.unexpected).toEqual([])
 })
 test('follow-up load more clears private cards and unsent drafts on fresh access denial', async ({ page, baseURL }) => {
-  const s = state(); await mock(page, baseURL!, s); await page.goto('/follow-up-access'); await ready(page); await draft(page, 'Private unsent edits'); s.revoked = true
+  const s = state(); await mock(page, baseURL!, s); await page.goto('/follow-up-access'); await ready(page); await revealFollowUpFilters(page); await draft(page, 'Private unsent edits'); s.revoked = true
   await page.getByRole('button', { name: 'Load more', exact: true }).click(); await expect(page.getByText('Access changed. Reload before continuing.', { exact: true })).toBeVisible()
   await expect(page.getByText(first.sourceText, { exact: true })).toHaveCount(0); await expect(page.getByRole('form', { name: 'Compose email' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Load more', exact: true })).toHaveCount(0); await expect(filters(page).getByRole('button', { name: 'Apply filters', exact: true })).toBeDisabled(); expect(s.unexpected).toEqual([])
+  await expect(page.getByRole('button', { name: 'Load more', exact: true })).toHaveCount(0); await revealFollowUpFilters(page); await expect(filters(page).getByRole('button', { name: 'Apply filters', exact: true })).toBeDisabled(); expect(s.unexpected).toEqual([])
 })

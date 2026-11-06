@@ -105,6 +105,8 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   const emailOrganizationId = emailMatchContext?.organizationId, emailUserId = emailMatchContext?.userId
   const [writeAllowed, setWriteAllowed] = useState(canWrite)
   const taskProgressDescription = useId()
+  const filterPanelId = useId()
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [taskOrderSupported, setTaskOrderSupported] = useState(false)
   const [taskProgressSupported, setTaskProgressSupported] = useState(false)
   const [revoked, setRevoked] = useState(false)
@@ -370,6 +372,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     ...(status === 'APPROVED' && taskProgressSupported && (items.some(canBulkRescheduleTask) || deadlineSelected.length > 0 || deadlineHold || bulkAction === 'reschedule') ? ['reschedule' as const] : []),
   ]
   const retainedBulkWork = snoozeWork || approvalReviewCount > 0 || approvalLocked || completionHoldCount > 0 || Boolean(deadlineHold)
+  const unappliedFilters = (['search', 'source', 'dueOnly', 'taskProgress', 'taskOrder'] as const).some(key => filterDraft[key] !== filters[key])
   const selectedBulkCount = bulkAction === 'complete' ? completionSelected.length : bulkAction === 'reschedule' ? deadlineSelected.length : bulkSelected.length
 
   return (
@@ -392,6 +395,9 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       {snoozeNotice && <p role="status" className="text-sm">{snoozeNotice}</p>}
       {focusedError && <p role="alert" className="text-sm text-destructive">{focusedError}</p>}
       <section role="search" aria-label="Follow-up filters" className="space-y-3 rounded-lg border bg-card p-4">
+        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" disabled={revoked} aria-expanded={filtersOpen} aria-controls={filterPanelId} onClick={() => setFiltersOpen(value => !value)}>Filters</Button>{unappliedFilters && <p className="text-xs font-medium text-muted-foreground">Unapplied filter changes</p>}</div>
+        {/* Hide without unmounting so unfinished filter edits stay local and unchanged. */}
+        <div id={filterPanelId} hidden={!filtersOpen} className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
           <label className="grid gap-1.5 text-sm font-medium">Search follow-ups<input type="search" className={fieldClass} maxLength={200} value={filterDraft.search} disabled={revoked} placeholder="Lead name, email or follow-up title" onChange={event => { setFilterError(''); setFilterDraft(current => ({ ...current, search: event.target.value })) }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); if (!loading && !revoked && !retryOrder.current) applyFilters() } }} /></label>
           <label className="grid gap-1.5 text-sm font-medium">Follow-up source<select className={fieldClass} value={filterDraft.source} disabled={revoked} onChange={event => setFilterDraft(current => ({ ...current, source: event.target.value as FollowUpFilters['source'] }))}><option value="ALL">All sources</option><option value="EMAIL">Email replies</option><option value="CALL">Callbacks</option></select></label>
@@ -401,6 +407,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
         <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={filterDraft.dueOnly} disabled={revoked} onChange={event => setFilterDraft(current => ({ ...(event.target.checked ? filtersForFollowUpTab(current, 'PENDING') : current), dueOnly: event.target.checked }))} />Due reminders only</label>
         <p className="text-xs text-muted-foreground">Search includes older accessible follow-ups. Due reminders are elapsed snoozes awaiting review in Pending. Apply to update the list.</p>
         <div className="flex flex-wrap gap-2"><Button type="button" disabled={loading || revoked || bulkBusy || pageTask !== null && retryOrder.current !== undefined} onClick={applyFilters}>Apply filters</Button><Button type="button" variant="outline" disabled={loading || revoked || bulkBusy} onClick={() => { setFilterError(''); setFilterDraft(emptyFilters); navigate({ filters: emptyFilters }) }}>Clear filters</Button></div>
+        </div>
         {filterError && <p role="alert" className="text-sm text-destructive">{filterError}</p>}
         <p className="break-words text-xs text-muted-foreground">{hasFollowUpFilters(filters) ? `Applied: ${filters.search ? `Search “${filters.search}” · ` : ''}${filters.source === 'ALL' ? 'All sources' : filters.source === 'EMAIL' ? 'Email replies' : 'Callbacks'}${filters.dueOnly ? ' · Due reminders only' : ''}${filters.taskProgress ? ` · ${filters.taskProgress === 'OPEN' ? 'Open tasks' : filters.taskProgress === 'OVERDUE' ? 'Overdue tasks' : 'Completed tasks'}` : ''}` : 'Applied: all follow-ups in this tab.'} {status === 'APPROVED' && (filters.taskOrder ? 'Order: earliest task deadline. ' : 'Order: newest follow-ups. ')}Open drafts and focused replies can appear outside the filters.</p>
       </section>

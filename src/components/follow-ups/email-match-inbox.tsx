@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { EMAIL_MATCH_USER_HEADER, emailMatchListItem, emailMatchPreview, emailMatchResult, type EmailMatchAction, type EmailMatchPreview } from '@/lib/email-routing'
@@ -16,6 +16,7 @@ function ScopedEmailMatches({ context, canWrite, onResolved, initialMessageId }:
   const [selected, setSelected] = useState(''), [confirmed, setConfirmed] = useState(false), [busy, setBusy] = useState(false), [loading, setLoading] = useState(true)
   const [error, setError] = useState(''), [notice, setNotice] = useState(''), [revoked, setRevoked] = useState(false)
   const [pending, setPending] = useState<{ id: string; body: EmailMatchAction } | null>(null)
+  const detailsId = useId(), [detailsOpen, setDetailsOpen] = useState(false)
   const requested = useRef(false)
   const live = useRef(true), active = useRef(false)
   function revoke() { live.current = false; setItems([]); setPreview(null); setPending(null); setRevoked(true); setError('Access changed. Reload to check the current account and business.'); setBusy(false); setLoading(false) }
@@ -74,11 +75,14 @@ function ScopedEmailMatches({ context, canWrite, onResolved, initialMessageId }:
       failed(cause)
     } finally { active.current = false; if (live.current) setBusy(false) }
   }
-  return <section aria-label="Email match reviews" aria-busy={loading || busy} className="min-w-0 rounded-xl border bg-card p-4 sm:p-6">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">Email matches to review</h2><Button type="button" variant="outline" disabled={loading || busy || !!pending || revoked} onClick={() => void load()}>Refresh matches</Button></div>
+  const canCompact = !loading && !busy && !revoked && !error && !notice && !preview && !pending && !initialMessageId && items.length === 0
+  return <section aria-label="Email match reviews" aria-busy={loading || busy} className="min-w-0 rounded-xl border bg-card p-4">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">Email matches to review</h2><div className="flex flex-wrap gap-2">{canCompact && <Button type="button" variant="outline" aria-expanded={detailsOpen} aria-controls={detailsId} onClick={() => setDetailsOpen(value => !value)}>Email match details</Button>}<Button type="button" variant="outline" disabled={loading || busy || !!pending || revoked} onClick={() => void load()}>Refresh matches</Button></div></div>
+    {canCompact && <p className="mt-2 text-sm text-muted-foreground">No email matches need review in your connected mailboxes.</p>}
+    <div id={detailsId} hidden={canCompact && !detailsOpen}>
     <p className="mt-2 text-sm text-muted-foreground">Conflicting addresses stay unlinked until reviewed. Linking may stop matching cadences; sending still requires approval.</p>
     {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}{notice && <p role="status" className="mt-3 text-sm">{notice}</p>}
-    {!revoked && <>{loading ? <p role="status" className="mt-3 text-sm">Loading email matches…</p> : items.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">No email matches need review in your connected mailboxes.</p> : <ul className="mt-4 grid gap-3">{items.map(item => <li key={item.id} className="min-w-0 rounded-lg border p-3"><p className="break-words text-sm font-medium">{item.subject || '(No subject)'}</p><p className="mt-1 break-words text-xs text-muted-foreground">From {item.fromEmail} · Mailbox {item.mailboxEmail}</p><Button type="button" variant="outline" className="mt-2" disabled={busy || !!pending} onClick={() => void inspect(item.id)}>Review match</Button></li>)}</ul>}
+    {!revoked && <>{loading ? <p role="status" className="mt-3 text-sm">Loading email matches…</p> : items.length > 0 && <ul className="mt-4 grid gap-3">{items.map(item => <li key={item.id} className="min-w-0 rounded-lg border p-3"><p className="break-words text-sm font-medium">{item.subject || '(No subject)'}</p><p className="mt-1 break-words text-xs text-muted-foreground">From {item.fromEmail} · Mailbox {item.mailboxEmail}</p><Button type="button" variant="outline" className="mt-2" disabled={busy || !!pending} onClick={() => void inspect(item.id)}>Review match</Button></li>)}</ul>}
     {preview && <div id="email-match-review" role="group" aria-label="Review email match" className="mt-4 grid min-w-0 gap-3 rounded-lg border p-4"><h3 className="break-words font-medium">{preview.message.subject || '(No subject)'}</h3><p className="whitespace-pre-wrap break-words text-sm">{preview.message.bodyPreview || 'No message preview available.'}</p>
       {preview.restrictedMatches && <p className="text-sm text-muted-foreground">Other matches are unavailable in your current access.</p>}{preview.blocked && <p className="text-sm text-muted-foreground">This address group needs administrator review. Linking is unavailable.</p>}
       <fieldset disabled={busy || !!pending || !canWrite} className="grid gap-2"><legend className="mb-2 text-sm font-medium">Choose the retained lead</legend>{preview.candidates.length === 0 && <p className="text-sm">No accessible candidate is available.</p>}{preview.candidates.map(candidate => <label key={candidate.id} className="flex items-start gap-2 rounded-md border p-3 text-sm"><input type="radio" name="email-match-lead" value={candidate.id} checked={selected === candidate.id} disabled={!candidate.canLink} onChange={() => setSelected(candidate.id)} className="mt-1" /><span className="min-w-0 break-words">{candidate.label}{candidate.email && <span className="block text-xs text-muted-foreground">{candidate.email}</span>}{candidate.viaArchive && <span className="block text-xs text-muted-foreground">Matches an archived address</span>}{!candidate.canLink && <span className="block text-xs">An existing association or invalid address group prevents linking.</span>}</span></label>)}</fieldset>
@@ -86,5 +90,6 @@ function ScopedEmailMatches({ context, canWrite, onResolved, initialMessageId }:
     </div>}
     {pending && !busy && <div className="mt-3"><p className="text-sm">The result is uncertain. Retry the same confirmed update before starting another.</p><Button type="button" className="mt-2" onClick={() => void resolve(pending.body.action, true)}>Retry confirmed update</Button></div>}
     <p className="mt-3 text-xs text-muted-foreground">Showing up to 100 recent reviews from your mailboxes. Candidate lists are limited to 20. This review does not generate a draft, create a task, or send an email.</p></>}
+    </div>
   </section>
 }

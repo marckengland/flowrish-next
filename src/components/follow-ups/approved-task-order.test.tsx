@@ -1,3 +1,4 @@
+import {filterScreen} from './test-helpers/filter-screen'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { FollowUpInbox } from './follow-up-inbox'
@@ -19,11 +20,11 @@ async function setup(){
  render(<FollowUpInbox canWrite={true} emailMatchContext={scope}/>);await screen.findByText('No pending follow-ups');fireEvent.click(screen.getByRole('tab',{name:'Approved'}));await screen.findByText('Synthetic order source 0');return state
 }
 async function draft(){fireEvent.click(within(screen.getByRole('article',{name:'Follow-up for Practice 0 Clinic'})).getByRole('button',{name:'Review email draft'}));const node=await screen.findByLabelText('Unsent order subject');fireEvent.change(node,{target:{value:'Keep original order draft'}});return node}
-function choose(){fireEvent.change(screen.getByRole('combobox',{name:'Task order'}),{target:{value:'DUE_ASC'}});fireEvent.click(screen.getByRole('button',{name:'Apply filters'}))}
+function choose(){fireEvent.change(filterScreen().getByRole('combobox',{name:'Task order'}),{target:{value:'DUE_ASC'}});fireEvent.click(filterScreen().getByRole('button',{name:'Apply filters'}))}
 it('applies deadline order read-only while preserving the exact composer node, filters and unsent draft',async()=>{
  const state=await setup(),node=await draft();choose();await waitFor(()=>expect(state.calls.at(-1)).toContain('taskOrder=DUE_ASC'));await waitFor(()=>expect(screen.getAllByRole('article')[0]).toHaveAccessibleName('Follow-up for Practice 1 Clinic'))
  expect(screen.getByLabelText('Unsent order subject')).toBe(node);expect(node).toHaveValue('Keep original order draft');expect(screen.queryByRole('group',{name:'Open draft confirmation'})).not.toBeInTheDocument();expect(state.calls.at(-1)).toContain('retain=item-0')
- fireEvent.change(screen.getByRole('combobox',{name:'Task progress'}),{target:{value:'OPEN'}});expect(screen.getByRole('combobox',{name:'Task order'})).toHaveValue('DUE_ASC')
+ fireEvent.change(filterScreen().getByRole('combobox',{name:'Task progress'}),{target:{value:'OPEN'}});expect(filterScreen().getByRole('combobox',{name:'Task order'})).toHaveValue('DUE_ASC')
  fireEvent.click(screen.getByRole('tab',{name:'Pending'}));expect(screen.getByRole('group',{name:'Open draft confirmation'})).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Keep editing'}));expect(node).toHaveValue('Keep original order draft')
 })
 it('retains the applied list after sort failure and retries the requested order without discarding a draft',async()=>{
