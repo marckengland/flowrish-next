@@ -1,6 +1,6 @@
 # Production deployment
 
-Main pushes run the existing lint/type/unit job and isolated mocked browser rehearsal. The migration job starts only after both succeed and runs inside the GitHub `Production` environment, restricted to the `main` branch. A missing database secret fails the job.
+Main pushes run the existing lint/type/unit job, isolated mocked browser rehearsal, and secret-free synthetic inbox regression. The migration job starts only after all three succeed and runs inside the GitHub `Production` environment, restricted to the `main` branch. A missing database secret fails the job.
 
 The environment secret `SUPABASE_DB_URL` contains the Flowrish direct/session connection on port 5432. Provide it through GitHub's environment-secret UI or encrypted stdin with `gh secret set`; never place a connection value in command arguments or files in this repository. Dependency installation receives dummy localhost URLs. Only the migration step receives the production credential. Prisma runs with an explicit temporary configuration, a minimal child environment, and the pinned public Supabase trust root. Raw datasource output is withheld.
 

@@ -15,7 +15,7 @@ export function validateReleaseContext(env, phase) {
   if (env.GITHUB_ACTIONS !== 'true' || env.GITHUB_REPOSITORY !== repository || env.GITHUB_EVENT_NAME !== 'push' || env.GITHUB_REF !== 'refs/heads/main' || !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? '')) {
     throw new ReleaseError('Production release requires an Actions push to the expected main branch.')
   }
-  const required = phase === 'ready' ? ['CI_RESULT', 'BROWSER_RESULT', 'MIGRATE_RESULT'] : ['CI_RESULT', 'BROWSER_RESULT']
+  const required = phase === 'ready' ? ['CI_RESULT', 'BROWSER_RESULT', 'INBOX_PERFORMANCE_RESULT', 'MIGRATE_RESULT'] : ['CI_RESULT', 'BROWSER_RESULT', 'INBOX_PERFORMANCE_RESULT']
   if (required.some(key => env[key] !== 'success')) throw new ReleaseError('Every production prerequisite must explicitly succeed.')
 }
 

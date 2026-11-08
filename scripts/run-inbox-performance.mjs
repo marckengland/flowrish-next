@@ -1,9 +1,10 @@
 import {spawnSync} from 'node:child_process'
 import {randomUUID} from 'node:crypto'
-import {copyFileSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs'
+import {appendFileSync,copyFileSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {dirname,join,resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
+import {formatInboxPerformanceSummary} from './inbox-performance-summary.mjs'
 import {cleanEnvironment} from './rehearsal-safety.mjs'
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..')
 /**
@@ -53,6 +54,11 @@ export async function runInboxPerformance({run=spawnSync,sleep=ms=>new Promise(r
   if(readFileSync(guard,'utf8').trim())throw new Error('Synthetic inbox network/environment guard was triggered.')
   const results=parse(readFileSync(report,'utf8'))
   if(results.report?.length!==14||![1000,10000].every(size=>results.report.filter(r=>r.size===size).length===7))throw new Error('Incomplete synthetic performance report.')
+  const summary=formatInboxPerformanceSummary(results)
+  if(parentEnv.GITHUB_ACTIONS==='true'){
+   if(!parentEnv.GITHUB_STEP_SUMMARY)throw new Error('GitHub step summary path is required.')
+   try{appendFileSync(parentEnv.GITHUB_STEP_SUMMARY,summary)}catch{throw new Error('Cannot write synthetic performance job summary.')}
+  }
   for(const row of results.report)log(JSON.stringify({...row,plan:row.plan?'captured':undefined}))
   log('Performance report: '+report)
   return {report,guard}

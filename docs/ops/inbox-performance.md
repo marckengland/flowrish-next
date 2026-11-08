@@ -14,6 +14,14 @@ The command strips inherited datasource and provider credentials, copies the Pri
 
 The pass seeds separate 1,000- and 10,000-follow-up workspaces with mixed statuses, individual leads/tasks, private snoozes, and an inaccessible background population. It warms each operation once and records five samples. The table shows local service-wall-time medians, not production network latency or an SLA. Each before/after run used a fresh disposable database with the same fixture shape; generated identifiers differ. Timing variance is expected.
 
+## CI gate
+
+The `Synthetic inbox regression` job runs the same command on pushes and pull requests. It has no production environment or secrets. Install and Prisma generation receive inert loopback datasource placeholders; the runner strips them before creating its own disposable database. CI pulls the existing PostgreSQL 17 image by immutable digest `sha256:3b0cda93be7c8dba2ed484d19393d93845dc3dafb88973e248ba8e6d99d784e1` and tags it locally for the runner's pull-disabled startup. It uses the existing checkout/setup-node actions and project dependencies.
+
+Both migrations and the production release check require this job to succeed. Missing, failed, skipped, or cancelled results stop release validation before database access. Counts, pagination, retained drafts, callback duplicate protection, and bounded task hydration are required assertions. The native GitHub job summary shows all fourteen measurements, including median/p95 timings and task rows. Timings remain informational because runner speed varies. Query plans stay in local reports and are not included in the summary.
+
+This adds a Docker image download and disposable database startup to each CI run. Changing the pinned image later requires an intentional workflow edit and another regression run.
+
 ## Results
 
 | Follow-ups | Operation | Before median | After median | Task records hydrated before → after |
@@ -47,6 +55,6 @@ Counts were not changed. Their timing differences reflect separate runs. Deadlin
 
 ## Limits and rollback
 
-This is a local synthetic pass. It does not benchmark cold caches, production network latency, real mobile hardware, or rendering all 10,000 cards at once. Browser scenarios inspect the first two windows. No live AI, email, or authenticated production workflow is exercised. Production data, widget configuration, and dependencies are unchanged.
+This is a synthetic pass run locally and in CI. It does not benchmark cold caches, production network latency, real mobile hardware, or rendering all 10,000 cards at once. Browser scenarios inspect the first two windows. No live AI, email, or authenticated production workflow is exercised. Production data, widget configuration, and dependencies are unchanged.
 
-Rollback is a normal code revert. There are no persistent schema or data changes to undo.
+Rollback is a normal code revert. For the CI integration, revert its workflow and `scripts/production-release.mjs` changes together so the dependency graph and prerequisite validator stay consistent. Keep the existing production release check and migration safeguards in place; do not bypass them or use Force Promote. The inverse patch is tested against the base tree before release, and the restored validator is exercised with synthetic prerequisite results. There are no persistent schema or data changes to undo.

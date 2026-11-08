@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { normalizeDatabaseUrl, runRelease, validateReleaseContext } from '../../scripts/production-release.mjs'
 const sha = 'a'.repeat(40)
-const env = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'marckengland/flowrish-next', GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main', GITHUB_SHA: sha, GH_TOKEN: 'synthetic-github-token', CI_RESULT: 'success', BROWSER_RESULT: 'success', MIGRATE_RESULT: 'success', PRODUCTION_DATABASE_URL: 'postgresql://postgres.ilkfauwpjyrqcowlzwtz:synthetic-database-password@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres' }
+const env = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'marckengland/flowrish-next', GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main', GITHUB_SHA: sha, GH_TOKEN: 'synthetic-github-token', CI_RESULT: 'success', BROWSER_RESULT: 'success', INBOX_PERFORMANCE_RESULT: 'success', MIGRATE_RESULT: 'success', PRODUCTION_DATABASE_URL: 'postgresql://postgres.ilkfauwpjyrqcowlzwtz:synthetic-database-password@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres' }
 const fetchMain = () => vi.fn(async () => new Response(JSON.stringify({ sha }), { status: 200 }))
 afterEach(() => vi.restoreAllMocks())
 
@@ -13,7 +13,7 @@ it('allows only the expected Actions push on main', () => {
   }
 })
 it('accepts only explicit success, never skipped, canceled, missing, or neutral prerequisites', () => {
-  for (const key of ['CI_RESULT', 'BROWSER_RESULT', 'MIGRATE_RESULT']) for (const result of ['failure', 'skipped', 'cancelled', 'neutral', '']) {
+  for (const key of ['CI_RESULT', 'BROWSER_RESULT', 'INBOX_PERFORMANCE_RESULT', 'MIGRATE_RESULT']) for (const result of ['failure', 'skipped', 'cancelled', 'neutral', '']) {
     expect(() => validateReleaseContext({ ...env, [key]: result }, 'ready')).toThrow()
   }
   expect(() => validateReleaseContext({ ...env, MIGRATE_RESULT: '' }, 'migrate')).not.toThrow()
@@ -96,7 +96,7 @@ it('binds native promotion to the dedicated production-only GitHub check', () =>
   expect(check.timeout).toBeGreaterThanOrEqual(1800)
   const workflow = readFileSync('.github/workflows/ci.yml', 'utf8')
   expect(workflow).toContain("'Production release ready' || 'PR release not requested'")
-  expect(workflow).toContain('needs: [ci, receptionist-browser, migrate]')
+  expect(workflow).toContain('needs: [ci, receptionist-browser, inbox-performance, migrate]')
   expect(workflow).toContain('environment: Production')
   expect(workflow).not.toContain('skip=true')
 })

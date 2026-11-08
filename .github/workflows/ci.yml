@@ -91,10 +91,41 @@ jobs:
       - name: Run isolated mocked receptionist workflows
         run: npm run test:receptionist:mocked
 
+  inbox-performance:
+    name: Synthetic inbox regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      # Generation/install hooks receive only inert placeholders; the runner owns its database.
+      DATABASE_URL: postgresql://synthetic:synthetic@127.0.0.1:1/unused
+      DIRECT_URL: postgresql://synthetic:synthetic@127.0.0.1:1/unused
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Prisma types with dummy configuration
+        run: npx prisma generate
+      - name: Prepare the existing PostgreSQL image by immutable digest
+        run: |
+          docker pull postgres@sha256:3b0cda93be7c8dba2ed484d19393d93845dc3dafb88973e248ba8e6d99d784e1
+          docker tag postgres@sha256:3b0cda93be7c8dba2ed484d19393d93845dc3dafb88973e248ba8e6d99d784e1 postgres:17
+      - name: Run isolated synthetic inbox regressions
+        run: npm run test:inbox:performance
+
   migrate:
     name: Apply Prisma Migrations
     runs-on: ubuntu-latest
-    needs: [ci, receptionist-browser]
+    needs: [ci, receptionist-browser, inbox-performance]
     # Only run after a successful merge to main — never on PRs.
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: Production
@@ -125,13 +156,14 @@ jobs:
           PRODUCTION_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           CI_RESULT: ${{ needs.ci.result }}
           BROWSER_RESULT: ${{ needs.receptionist-browser.result }}
+          INBOX_PERFORMANCE_RESULT: ${{ needs.inbox-performance.result }}
         run: node scripts/production-release.mjs migrate
 
   release-ready:
     # A skipped PR job must never satisfy the production check for the same SHA.
     name: ${{ github.event_name == 'push' && 'Production release ready' || 'PR release not requested' }}
     runs-on: ubuntu-latest
-    needs: [ci, receptionist-browser, migrate]
+    needs: [ci, receptionist-browser, inbox-performance, migrate]
     if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
     timeout-minutes: 5
     steps:
@@ -148,6 +180,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CI_RESULT: ${{ needs.ci.result }}
           BROWSER_RESULT: ${{ needs.receptionist-browser.result }}
+          INBOX_PERFORMANCE_RESULT: ${{ needs.inbox-performance.result }}
           MIGRATE_RESULT: ${{ needs.migrate.result }}
         run: node scripts/production-release.mjs ready
 
