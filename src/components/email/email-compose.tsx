@@ -1,4 +1,5 @@
 'use client'
+import type {SendStatusMetadata} from '@/lib/follow-up-send-status'
 import {useSendResultRecovery,SendResultRecovery} from './send-result-recovery'
 
 import { useEffect, useId, useRef, useState, useTransition } from 'react'
@@ -48,6 +49,7 @@ export interface EmailComposeProps {
   followUpId?: string
   draftVersion?: string
   followUpContext?: FollowUpContext
+  onSendStateChange?: (status:SendStatusMetadata,busy:boolean)=>void
   sendResultRecovery?: boolean
   savedDraftRecovery?: boolean
   recoveryPaused?: boolean
@@ -124,6 +126,7 @@ export function EmailCompose({
   followUpContext,
   savedDraftRecovery = false,
   sendResultRecovery = false,
+  onSendStateChange,
   recoveryPaused = false,
   onAccessLost,
   replyToThreadId,
@@ -203,7 +206,7 @@ export function EmailCompose({
 
   const recovery = useComposeDraftRecovery({ enabled: savedDraftRecovery, id: followUpId, context: identity, binding: { leadId, recipientEmail: leadEmail ?? '', draftVersion: draftVersion ?? null, threadId: activeThreadId ?? null }, subject, body, paused: recoveryPaused || revoked || identityChanged || isPending || testStatus.kind === 'sending', onAccessLost: revokeAccess, onRestore: content => { setSubject(content.subject); setBody(content.body); setEditorKey(value => value + 1) } })
 
-  const sendRecovery = useSendResultRecovery({enabled:sendResultRecovery,id:followUpId,context:identity,paused:recoveryPaused||revoked||identityChanged,onAccessLost:revokeAccess})
+  const sendRecovery = useSendResultRecovery({enabled:sendResultRecovery,id:followUpId,context:identity,paused:recoveryPaused||revoked||identityChanged,onAccessLost:revokeAccess,onStatus:value=>onSendStateChange?.(value,false)})
 
   /**
    * Sends a preview of the current subject + body to the connected
@@ -316,6 +319,7 @@ export function EmailCompose({
 
     let operationId: string | undefined
     try { operationId = sendRecovery.start() } catch { return }
+    if(sendRecovery.enabled)onSendStateChange?.({state:'UNKNOWN',updatedAt:null},true)
     recovery.noteSend({ subject: subject.trim(), body: body.trim() })
     startTransition(async () => {
       try {
@@ -375,7 +379,8 @@ export function EmailCompose({
         const responseBody = await followUpData<{ messageId: string; threadId: string; attachmentCount: number }>(res, capturedIdentity.current)
         if (!valid.current) return
 
-        sendRecovery.confirmed(responseBody.sendResult,responseBody.data,operationId)
+        const confirmedResult=sendRecovery.confirmed(responseBody.sendResult,responseBody.data,operationId)
+        if(confirmedResult)onSendStateChange?.({state:confirmedResult.state,updatedAt:confirmedResult.updatedAt},false)
         if (hasAttachments) {
           setAttachments((prev) =>
             prev.map((a) => ({ ...a, status: 'uploaded' })),
@@ -393,6 +398,7 @@ export function EmailCompose({
         if (!valid.current) return
         sendRecovery.failed()
         if (followUpAccessLost(err)) { revokeAccess(); return }
+        if(sendRecovery.enabled)onSendStateChange?.({state:'UNKNOWN',updatedAt:null},false)
         setAttachments(previous => previous.map(attachment => ({ ...attachment, status: 'failed' })))
         setError(err instanceof Error ? err.message : 'Failed to send email.')
       }

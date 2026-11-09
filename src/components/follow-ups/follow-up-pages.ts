@@ -1,4 +1,5 @@
 'use client'
+import {FOLLOW_UP_SEND_STATUS_HEADER,sendStatusMetadataSchema} from '@/lib/follow-up-send-status'
 import {FOLLOW_UP_TASK_ORDER_HEADER,compareTaskDeadline} from '@/lib/follow-up-task-order'
 import {FOLLOW_UP_TASK_PROGRESS_HEADER,taskProgressSchema} from '@/lib/follow-up-task-progress'
 import {FOLLOW_UP_PAGE_HEADER,FOLLOW_UP_PROGRESS_HEADER,followUpPageMeta,type FollowUpPageMeta} from '@/lib/follow-up-page'
@@ -11,18 +12,26 @@ export async function readFollowUpPages<T extends {id:string;createdAt:string}>(
   if(input.retained.length>100)throw new Error('Finish or close some editors before loading more; up to 100 edited or selected follow-ups can be retained at once.')
   const items=new Map<string,T>(),seen=new Set<string>()
   let after:string|undefined,nextCursor:string|null=null,accessVersion:string|undefined,canWrite:boolean|undefined,pages=0
-  let taskProgress:boolean|undefined, taskOrder:boolean|undefined, orderVersion:string|undefined, inboxCounts=false, composeDrafts=false, sendResults=false
+  let taskProgress:boolean|undefined, taskOrder:boolean|undefined, orderVersion:string|undefined, inboxCounts=false, composeDrafts=false, sendResults=false, sendStatus:boolean|undefined
   let callbackCatchUp:FollowUpPageMeta['callbackCatchUp']=undefined
   for(let n=0;n<input.depth;n++) {
     input.signal.throwIfAborted()
     const query=followUpListQuery(input.status,input.filters)
     if(after)query.set('after',after)
     for(const id of input.retained)query.append('retain',id)
-    const result=await followUpData<T[]>(await fetch(`/api/follow-ups?${query}`,{method:'GET',cache:'no-store',headers:{...(input.context?followUpHeaders(input.context):{}),[FOLLOW_UP_PAGE_HEADER]:'1',[FOLLOW_UP_PROGRESS_HEADER]:'1',[FOLLOW_UP_TASK_PROGRESS_HEADER]:'1',[FOLLOW_UP_TASK_ORDER_HEADER]:'1'},signal:input.signal}),input.context)
+    const result=await followUpData<T[]>(await fetch(`/api/follow-ups?${query}`,{method:'GET',cache:'no-store',headers:{...(input.context?followUpHeaders(input.context):{}),[FOLLOW_UP_PAGE_HEADER]:'1',[FOLLOW_UP_PROGRESS_HEADER]:'1',[FOLLOW_UP_TASK_PROGRESS_HEADER]:'1',[FOLLOW_UP_TASK_ORDER_HEADER]:'1',[FOLLOW_UP_SEND_STATUS_HEADER]:'1'},signal:input.signal}),input.context)
     if(!Array.isArray(result.data)||result.data.some(row=>!row||typeof row.id!=='string'))throw new Error('Unexpected follow-up page. Refresh to try again.')
     if(input.filters.taskProgress&&!result.taskProgress)throw new Error('Task progress filters are unavailable. Reload or clear this filter.')
     if(n>0&&taskProgress!==Boolean(result.taskProgress))throw new FollowUpClientError('Task access changed while loading. Reload before continuing.',409,'FOLLOW_UP_CONTEXT_CHANGED')
     if(input.filters.taskOrder&&(!result.taskOrder||!result.taskProgress))throw new Error('Task deadline ordering is unavailable. Reload or choose Newest follow-ups.')
+    if((sendStatus===true||input.filters.needsChecking)&&result.canWrite!==true)throw new FollowUpClientError('Send access changed. Reload before continuing.',409,'FOLLOW_UP_CONTEXT_CHANGED')
+    if(input.filters.needsChecking&&!result.sendStatus)throw new Error('Send status filtering is unavailable. Keep your edits and reload to check support.')
+    if(sendStatus!==undefined&&sendStatus!==Boolean(result.sendStatus))throw new Error('Send status support changed while loading. Your edits are kept. Refresh to check again.')
+    sendStatus=Boolean(result.sendStatus)
+    if(sendStatus){
+      if(result.canWrite!==true)throw new FollowUpClientError('Send access changed. Reload before continuing.',409,'FOLLOW_UP_CONTEXT_CHANGED')
+      for(const row of result.data){const value=row as T&{sourceType?:unknown;sendStatus?:unknown};if(value.sourceType==='EMAIL')sendStatusMetadataSchema.parse(value.sendStatus);else if(value.sendStatus!==undefined)throw new Error('Unexpected send metadata. Keep your edits and refresh.')}
+    }
     inboxCounts=n===0?result.inboxCounts===true:inboxCounts&&result.inboxCounts===true
     sendResults=n===0?result.sendResults===true:sendResults&&result.sendResults===true
     composeDrafts=n===0?result.composeDrafts===true:composeDrafts&&result.composeDrafts===true
@@ -46,5 +55,5 @@ export async function readFollowUpPages<T extends {id:string;createdAt:string}>(
     if(seen.has(nextCursor))throw new Error('The follow-up cursor did not advance. Refresh to try again.')
     seen.add(nextCursor);after=nextCursor
   }
-  return {...(sendResults?{sendResults:true as const}:{}),...(composeDrafts?{composeDrafts:true as const}:{}),...(inboxCounts?{inboxCounts:true as const}:{}),...(taskOrder?{taskOrder:true as const}:{}),...(taskProgress?{taskProgress:true as const}:{}),callbackCatchUp,paged:accessVersion!==undefined,items:[...items.values()].sort(input.filters.taskOrder?compareTaskDeadline:(a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)||(a.id<b.id?-1:a.id>b.id?1:0)),nextCursor,canWrite,pages}
+  return {...(sendStatus?{sendStatus:true as const}:{}),...(sendResults?{sendResults:true as const}:{}),...(composeDrafts?{composeDrafts:true as const}:{}),...(inboxCounts?{inboxCounts:true as const}:{}),...(taskOrder?{taskOrder:true as const}:{}),...(taskProgress?{taskProgress:true as const}:{}),callbackCatchUp,paged:accessVersion!==undefined,items:[...items.values()].sort(input.filters.taskOrder?compareTaskDeadline:(a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)||(a.id<b.id?-1:a.id>b.id?1:0)),nextCursor,canWrite,pages}
 }

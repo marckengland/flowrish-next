@@ -17,10 +17,11 @@ export async function readFollowUpCounts(organizationId:string,userId:string,raw
  return safeFollowUp(()=>prisma.$transaction(async db=>{
   await lockFollowUpMember(db,organizationId,userId)
   const access=await currentFollowUpAccess(db,organizationId,userId),checkedAt=await snoozeClock(db)
+  if(filters.needsChecking&&!access.canWrite)throw new AppError('FORBIDDEN','Current send access is required.',403)
   const now=Prisma.sql`timezone('UTC',${checkedAt}::timestamptz)`
   const match=(status:string)=>followUpFilterSql(filtersForFollowUpTab(filters,status),now)
   const approved=Prisma.sql`status='APPROVED' AND (${match('APPROVED')})`
-  const rows=await db.$queryRaw<Array<Record<'PENDING'|'APPROVED'|'DISMISSED'|'SNOOZED'|'overdueTasks',bigint>>>`WITH eligible AS (${followUpEligibleSql(organizationId,userId,access,true)}) SELECT
+  const rows=await db.$queryRaw<Array<Record<'PENDING'|'APPROVED'|'DISMISSED'|'SNOOZED'|'overdueTasks',bigint>>>`WITH eligible AS (${followUpEligibleSql(organizationId,userId,access,true,Boolean(filters.needsChecking))}) SELECT
    COUNT(*) FILTER (WHERE status='PENDING' AND (until IS NULL OR until<=${now}) AND (${match('PENDING')})) AS "PENDING",
    COUNT(*) FILTER (WHERE ${approved}) AS "APPROVED",
    COUNT(*) FILTER (WHERE status='DISMISSED' AND (${match('DISMISSED')})) AS "DISMISSED",
@@ -30,7 +31,7 @@ export async function readFollowUpCounts(organizationId:string,userId:string,raw
   const row=rows[0],parsed=followUpCountsSchema.safeParse({counts:{PENDING:total(row.PENDING),APPROVED:total(row.APPROVED),DISMISSED:total(row.DISMISSED),SNOOZED:total(row.SNOOZED)},overdueTasks:total(row.overdueTasks),checkedAt:checkedAt.toISOString(),filters})
   if(!parsed.success)throw unavailable()
   const final=await currentFollowUpAccess(db,organizationId,userId)
-  if(JSON.stringify(final.filter)!==JSON.stringify(access.filter)||JSON.stringify(final.taskScope)!==JSON.stringify(access.taskScope))throw new AppError('FOLLOW_UP_CONTEXT_CHANGED','Access changed. Reload before continuing.',409)
+  if(filters.needsChecking&&!final.canWrite||JSON.stringify(final.filter)!==JSON.stringify(access.filter)||JSON.stringify(final.taskScope)!==JSON.stringify(access.taskScope))throw new AppError('FOLLOW_UP_CONTEXT_CHANGED','Access changed. Reload before continuing.',409)
   return {data:parsed.data,canWrite:final.canWrite}
  },{timeout:20000}))
 }

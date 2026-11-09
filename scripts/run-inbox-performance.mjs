@@ -62,8 +62,8 @@ export async function runInboxPerformance({run=spawnSync,sleep=ms=>new Promise(r
   if(readFileSync(guard,'utf8').trim())throw new Error('Synthetic inbox network/environment guard was triggered.')
   const results=parse(readFileSync(report,'utf8'))
   if(privateSuite){
-   if(JSON.stringify(results.checks)!==JSON.stringify(compose?['encrypted-scope','cas-races','rollback']:['dispatch-fences','privacy-retention','rollback']))throw new Error('Incomplete private recovery database drill.')
-   log(compose?'Saved draft database checks passed: scoped encryption, CAS races, and additive rollback.':'Send-result database checks passed: dispatch fences, privacy retention, and additive rollback.')
+   if(JSON.stringify(results.checks)!==JSON.stringify(compose?['encrypted-scope','cas-races','rollback']:['dispatch-fences','privacy-retention','rollback','status-inbox']))throw new Error('Incomplete private recovery database drill.')
+   log(compose?'Saved draft database checks passed: scoped encryption, CAS races, and additive rollback.':'Send-result database checks passed: dispatch fences, privacy retention, additive rollback, and inbox status filtering.')
    log('Database report: '+report)
    return {report,guard}
   }

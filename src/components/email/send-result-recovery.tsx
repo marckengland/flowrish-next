@@ -1,10 +1,11 @@
 'use client'
 import {useCallback,useEffect,useRef,useState} from 'react'
+import type {SendStatusMetadata} from '@/lib/follow-up-send-status'
 import {Button} from '@/components/ui/button'
 import {followUpHeaders,type FollowUpContext} from '@/lib/follow-up-access'
 import {followUpData,followUpAccessLost,FollowUpClientError} from '@/lib/follow-up-client'
 import {emailSendResult,type EmailSendReceipt,type EmailSendResult} from '@/lib/email-send-result'
-type Input={enabled:boolean;id?:string;context?:FollowUpContext;paused:boolean;onAccessLost:()=>void}
+type Input={enabled:boolean;id?:string;context?:FollowUpContext;paused:boolean;onAccessLost:()=>void;onStatus?:(value:SendStatusMetadata)=>void}
 type Model={phase:'checking'|'ready'|'error'|'sending';record:EmailSendResult|null}
 export function useSendResultRecovery(input:Input){
  const optedIn=useRef(input.enabled);optedIn.current ||= input.enabled
@@ -38,6 +39,7 @@ export function useSendResultRecovery(input:Input){
   window.addEventListener('offline',change);window.addEventListener('online',change)
   return()=>{window.removeEventListener('offline',change);window.removeEventListener('online',change)}
  },[enabled])
+ useEffect(()=>{if(enabled&&model.phase==='ready'&&model.record)latest.current.onStatus?.({state:model.record.state,updatedAt:model.record.updatedAt})},[enabled,model.phase,model.record])
  const blocked=enabled&&(offline||input.paused||model.phase!=='ready'||!model.record||!['NONE','FAILED'].includes(model.record.state))
  const start=()=>{
   if(!enabled)return undefined
@@ -49,7 +51,7 @@ export function useSendResultRecovery(input:Input){
   if(!enabled)return
   const attempt=pending.current,record=emailSendResult.parse(raw)
   if(!alive.current||offlineRef.current||!attempt||attempt.operationId!==operationId||attempt.version!==version.current||record.id!==id||record.operationId!==operationId||record.state!=='CONFIRMED'||JSON.stringify(record.result)!==JSON.stringify(result))throw new Error('The send confirmation could not be verified. Check send status.')
-  inFlight.current=false;pending.current=null;setModel({phase:'ready',record})
+  inFlight.current=false;pending.current=null;setModel({phase:'ready',record});return record
  }
  const failed=()=>{if(!enabled)return;inFlight.current=false;if(alive.current)setModel(previous=>({...previous,phase:'error'}))}
  return {enabled,blocked,offline,model,read:()=>void read(),start,confirmed,failed,checking:model.phase==='checking'||model.phase==='sending',paused:input.paused}
