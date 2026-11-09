@@ -1,0 +1,15 @@
+import {beforeEach,expect,it,vi} from 'vitest'
+import {AppError} from '@/lib/errors'
+const m=vi.hoisted(()=>({session:vi.fn(),permission:vi.fn(),read:vi.fn(),write:vi.fn()}))
+vi.mock('@/server/auth/session',()=>({requireSession:m.session}))
+vi.mock('@/server/auth/permissions',()=>({requirePermission:m.permission}))
+vi.mock('@/server/services/compose-drafts',()=>({readComposeDraft:m.read,writeComposeDraft:m.write}))
+import {GET,PUT} from './route'
+const context={params:Promise.resolve({id:'draft-id'})},scope={organizationId:'org',userId:'actor'},binding={leadId:'lead',recipientEmail:'lead@example.invalid',draftVersion:null,threadId:null},snapshot={id:'draft-id',sourceVersion:'a'.repeat(64),revision:0,operationId:null,updatedAt:null,outdated:false,content:null}
+const headers={'x-flowrish-workspace':'org','x-flowrish-follow-up-scope':JSON.stringify(['org','actor']),'x-flowrish-compose-binding':JSON.stringify(binding),'content-type':'application/json',origin:'https://example.invalid'}
+const request=(method='GET',values:Record<string,string>=headers,body?:string)=>new Request('https://example.invalid/api/follow-ups/draft-id/compose-draft',{method,headers:values,...(body?{body}:{})})
+beforeEach(()=>{vi.resetAllMocks();m.session.mockResolvedValue({organizationId:'org',dbUser:{id:'actor'}});m.read.mockResolvedValue(snapshot);m.write.mockResolvedValue({...snapshot,revision:1})})
+it('returns private no-store data only after current session and scope checks',async()=>{const r=await GET(request(),context);expect(r.status).toBe(200);expect(r.headers.get('cache-control')).toContain('no-store');expect(await r.json()).toMatchObject({scope,data:snapshot});expect(m.read).toHaveBeenCalledWith('org','actor','draft-id',binding)})
+it('denies anonymous and stale-account reads before accessing saved content',async()=>{m.session.mockRejectedValueOnce(new AppError('UNAUTHORIZED','Sign in.',401));expect((await GET(request(),context)).status).toBe(401);expect((await GET(request('GET',{...headers,'x-flowrish-follow-up-scope':'stale'}),context)).status).toBe(409);expect(m.read).not.toHaveBeenCalled()})
+it('requires same origin, bounded JSON and identity for writes',async()=>{const data=JSON.stringify({operationId:'11111111-1111-4111-8111-111111111111',expectedRevision:0,sourceVersion:'a'.repeat(64),binding,content:{subject:'Private',body:'Body'}});expect((await PUT(request('PUT',{...headers,origin:'https://other.invalid'},data),context)).status).toBe(403);expect((await PUT(request('PUT',{...headers,'content-length':'70000'},data),context)).status).toBe(413);expect(m.write).not.toHaveBeenCalled();expect((await PUT(request('PUT',headers,data),context)).status).toBe(200);expect(m.write).toHaveBeenCalledWith('org','actor','draft-id',JSON.parse(data))})
+it('rejects missing binding and query parameters without reading private contents',async()=>{expect((await GET(request('GET',{...headers,'x-flowrish-compose-binding':'invalid'}),context)).status).toBe(400);expect((await GET(new Request('https://example.invalid/api/follow-ups/draft-id/compose-draft?user=other',{headers}),context)).status).toBe(400);expect(m.read).not.toHaveBeenCalled()})

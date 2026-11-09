@@ -65,7 +65,7 @@ export async function runSmoke({ expectedSha, fetchImpl = globalThis.fetch, slee
 
   /** @type {SmokeResult[]} */
   const results = []
-  for (const pathname of ['/', '/login', '/dashboard', '/forecast', '/api/forecast', '/api/receptionist/home', '/api/admin/website-receptionist']) {
+  for (const pathname of ['/', '/login', '/dashboard', '/forecast', '/api/forecast', '/api/receptionist/home', '/api/admin/website-receptionist', '/api/follow-ups/11111111-1111-4111-8111-111111111111/compose-draft']) {
     try {
       const response = await request(fetchImpl, pathname)
       if (pathname === '/' || pathname === '/login') {

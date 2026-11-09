@@ -9,9 +9,11 @@ import {cleanEnvironment} from './rehearsal-safety.mjs'
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..')
 /**
  * Owns one local disposable database. No caller database, image or container is accepted.
- * @param {{run?: (file: string, args: string[], options: {env: NodeJS.ProcessEnv, cwd?: string, encoding?: BufferEncoding | null, timeout?: number, maxBuffer?: number, input?: string | Buffer}) => {status: number | null, stdout: string | Buffer, stderr: string | Buffer, error?: Error, signal?: string | null}, sleep?: (ms: number) => Promise<void>, log?: (message: string) => void, parentEnv?: NodeJS.ProcessEnv}} [options]
+ * @param {{run?: (file: string, args: string[], options: {env: NodeJS.ProcessEnv, cwd?: string, encoding?: BufferEncoding | null, timeout?: number, maxBuffer?: number, input?: string | Buffer}) => {status: number | null, stdout: string | Buffer, stderr: string | Buffer, error?: Error, signal?: string | null}, sleep?: (ms: number) => Promise<void>, log?: (message: string) => void, parentEnv?: NodeJS.ProcessEnv, suite?: 'performance' | 'compose-drafts'}} [options]
  */
-export async function runInboxPerformance({run=spawnSync,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),log=console.log,parentEnv=process.env}={}){
+export async function runInboxPerformance({run=spawnSync,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),log=console.log,parentEnv=process.env,suite='performance'}={}){
+ if(!['performance','compose-drafts'].includes(suite))throw new Error('Unknown synthetic inbox suite.')
+ const compose=suite==='compose-drafts'
  const env={...cleanEnvironment(parentEnv),NODE_ENV:'test'},nonce=randomUUID(),name='flowrish-inbox-performance-'+nonce
  const call=(file,args,extra={})=>run(file,args,{env,cwd:root,encoding:'utf8',timeout:120000,maxBuffer:32*1024*1024,...extra})
  const checked=(result,label)=>{if(result.status!==0||result.error||result.signal)throw new Error(label);return result.stdout}
@@ -44,15 +46,25 @@ export async function runInboxPerformance({run=spawnSync,sleep=ms=>new Promise(r
   writeFileSync(schemaConfig,`export default {schema:${JSON.stringify(join(temporary,'schema.prisma'))},engine:'classic',datasource:{url:process.env.DATABASE_URL,directUrl:process.env.DIRECT_URL}};`)
   const sql=checked(call(process.execPath,[join(root,'node_modules/prisma/build/index.js'),'migrate','diff','--from-empty','--to-schema-datamodel',join(temporary,'schema.prisma'),'--script','--config',schemaConfig],{cwd:temporary,env:{...env,DATABASE_URL:dummy,DIRECT_URL:dummy}}),'Offline copied-schema SQL generation failed.')
   checked(exec(['psql','--no-psqlrc','-U','postgres','-v','ON_ERROR_STOP=1'],{input:sql}),'Disposable schema setup failed.')
+  if(compose){
+   const migration=readFileSync(join(root,'prisma/migrations/20261109010000_add_follow_up_compose_drafts/migration.sql'),'utf8')
+   checked(exec(['psql','--no-psqlrc','-U','postgres','-v','ON_ERROR_STOP=1'],{input:'CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; DO $$ BEGIN IF EXISTS(SELECT 1 FROM \"FollowUpComposeDraft\") THEN RAISE EXCEPTION \'Synthetic draft table must be empty\'; END IF; END $$; DROP TABLE \"FollowUpComposeDraft\";\n'+migration}),'Reviewed draft migration setup failed.')
+  }
   checked(exec(['psql','--no-psqlrc','-U','postgres','-v','ON_ERROR_STOP=1'],{input:"ALTER ROLE postgres SET TIMEZONE TO 'Asia/Manila';"}),'Disposable timezone setup failed.')
-  const output=join(root,'test-results/inbox-performance',nonce);mkdirSync(output,{recursive:true})
+  const output=join(root,'test-results',compose?'compose-drafts':'inbox-performance',nonce);mkdirSync(output,{recursive:true})
   const guard=join(output,'violations.log'),report=join(output,'report.json');writeFileSync(guard,'')
-  writeFileSync(config,`import {defineConfig} from 'vitest/config';import path from 'node:path';export default defineConfig({test:{environment:'node',include:['scripts/inbox-performance.integration.test.ts'],testTimeout:120000},resolve:{alias:{'@':path.resolve('src'),'server-only':path.resolve('src/test-stubs/server-only.ts')}}});`,{flag:'wx'});configCreated=true
+  writeFileSync(config,`import {defineConfig} from 'vitest/config';import path from 'node:path';export default defineConfig({test:{environment:'node',include:[${JSON.stringify(compose?'scripts/compose-drafts.integration.test.ts':'scripts/inbox-performance.integration.test.ts')}],testTimeout:120000},resolve:{alias:{'@':path.resolve('src'),'server-only':path.resolve('src/test-stubs/server-only.ts')}}});`,{flag:'wx'});configCreated=true
   const result=call(process.execPath,[join(root,'node_modules/vitest/vitest.mjs'),'run','--config',config],{timeout:300000,env:{...env,INBOX_PERF_DATABASE_URL:`postgresql://postgres:mock-only@127.0.0.1:${port}/postgres`,INBOX_PERF_REPORT:report,REHEARSAL_ALLOWED_PORTS:port,REHEARSAL_GUARD_LOG:guard,NODE_OPTIONS:'--import='+join(root,'scripts/rehearsal-network-guard.mjs')}})
   writeFileSync(join(output,'run.log'),String(result.stdout??'')+String(result.stderr??''))
   checked(result,'Synthetic inbox performance checks failed; see '+join(output,'run.log'))
   if(readFileSync(guard,'utf8').trim())throw new Error('Synthetic inbox network/environment guard was triggered.')
   const results=parse(readFileSync(report,'utf8'))
+  if(compose){
+   if(JSON.stringify(results.checks)!==JSON.stringify(['encrypted-scope','cas-races','rollback']))throw new Error('Incomplete saved draft database drill.')
+   log('Saved draft database checks passed: scoped encryption, CAS races, and additive rollback.')
+   log('Database report: '+report)
+   return {report,guard}
+  }
   if(results.report?.length!==14||![1000,10000].every(size=>results.report.filter(r=>r.size===size).length===7))throw new Error('Incomplete synthetic performance report.')
   const summary=formatInboxPerformanceSummary(results)
   if(parentEnv.GITHUB_ACTIONS==='true'){

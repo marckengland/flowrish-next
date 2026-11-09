@@ -236,6 +236,7 @@ model FollowUpSuggestion {
   updatedAt      DateTime     @updatedAt
 
   snoozes FollowUpSnooze[]
+  composeDrafts FollowUpComposeDraft[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, sourceKey])
@@ -349,6 +350,7 @@ model OrganizationMember {
   followUpSnoozes FollowUpSnooze[]
   followUpTaskBatches FollowUpTaskBatch[]
   savedFollowUpViews SavedFollowUpView[]
+  composeDrafts FollowUpComposeDraft[]
   savedLeadViews        SavedLeadView[]
   bulkLeadUpdates       BulkLeadUpdate[]
   callbackNotifications CallbackNotification[]
@@ -1606,4 +1608,19 @@ model FollowUpTaskBatch {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
   @@index([userId, organizationId, createdAt(sort: Desc), id])
+}
+
+model FollowUpComposeDraft {
+  organizationId String
+  userId String
+  followUpId String
+  member OrganizationMember @relation(fields: [userId, organizationId], references: [userId, organizationId], onDelete: Cascade, onUpdate: Cascade, map: "FollowUpComposeDraft_member_fkey")
+  followUp FollowUpSuggestion @relation(fields: [organizationId, followUpId], references: [organizationId, id], onDelete: Cascade, onUpdate: Cascade, map: "FollowUpComposeDraft_followUp_fkey")
+  sourceVersion String
+  revision Int @default(1)
+  operationId String
+  requestHash String
+  ciphertext String?
+  updatedAt DateTime @default(now()) @updatedAt
+  @@id([organizationId, userId, followUpId])
 }

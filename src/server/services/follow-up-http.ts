@@ -10,14 +10,14 @@ import { WORKSPACE_HEADER } from '@/lib/workspace-context'
 export function assertFollowUpContext(request: Request, session: Awaited<ReturnType<typeof requireSession>>) {
   if (request.headers.get(FOLLOW_UP_SCOPE_HEADER) !== JSON.stringify([session.organizationId, session.dbUser.id]) || request.headers.get(WORKSPACE_HEADER) !== session.organizationId) throw new AppError('FOLLOW_UP_CONTEXT_CHANGED', 'The account or business changed. Reload before continuing.', 409)
 }
-export async function followUpHttp(request: Request, write: boolean, action: (session: Awaited<ReturnType<typeof requireSession>>) => Promise<{ data: unknown; canWrite: boolean; taskProgress?: boolean; taskOrder?: boolean; inboxCounts?: boolean; page?: FollowUpPageMeta }>) {
+export async function followUpHttp(request: Request, write: boolean, action: (session: Awaited<ReturnType<typeof requireSession>>) => Promise<{ data: unknown; canWrite: boolean; taskProgress?: boolean; taskOrder?: boolean; inboxCounts?: boolean; composeDrafts?: boolean; page?: FollowUpPageMeta }>) {
   try {
     const session = await requireSession()
     requirePermission(session.dbUser, 'leads:read')
     if (write) requirePermission(session.dbUser, 'leads:write')
     assertFollowUpContext(request, session)
     const result = await action(session)
-    return NextResponse.json({ data: result.data, ...(result.page ? { page: result.page } : {}), scope: { organizationId: session.organizationId, userId: session.dbUser.id }, capabilities: { canWrite: result.canWrite, ...(result.taskProgress ? { taskProgress: true } : {}), ...(result.taskOrder ? { taskOrder: true } : {}), ...(result.inboxCounts ? { inboxCounts: true } : {}) } }, { headers: { 'Cache-Control': 'private, no-store' } })
+    return NextResponse.json({ data: result.data, ...(result.page ? { page: result.page } : {}), scope: { organizationId: session.organizationId, userId: session.dbUser.id }, capabilities: { canWrite: result.canWrite, ...(result.taskProgress ? { taskProgress: true } : {}), ...(result.taskOrder ? { taskOrder: true } : {}), ...(result.inboxCounts ? { inboxCounts: true } : {}), ...(result.composeDrafts ? { composeDrafts: true } : {}) } }, { headers: { 'Cache-Control': 'private, no-store' } })
   } catch (error) {
     const safe = error instanceof AppError ? error : error instanceof ZodError ? new AppError('VALIDATION_ERROR', 'Send valid follow-up values.', 400) : new AppError('FOLLOW_UP_UNAVAILABLE', 'Follow-ups are unavailable. Refresh or retry the same action.', 503)
     const response = errorResponse(safe); response.headers.set('Cache-Control', 'private, no-store'); return response

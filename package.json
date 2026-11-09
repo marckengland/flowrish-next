@@ -15,6 +15,7 @@
     "test:watch": "vitest",
     "test:receptionist:integration": "vitest run --config vitest.receptionist.config.ts",
     "test:receptionist:mocked": "node scripts/run-receptionist-rehearsal.mjs",
+    "test:compose-drafts:synthetic": "node scripts/run-compose-drafts.mjs",
     "test:inbox:performance": "node scripts/run-inbox-performance.mjs",
     "test:recovery:synthetic": "node scripts/recovery-drill.mjs",
     "test:e2e": "playwright test",

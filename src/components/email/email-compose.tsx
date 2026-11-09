@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react'
 
+import { ComposeDraftRecovery, useComposeDraftRecovery } from './compose-draft-recovery'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/email/rich-text-editor'
 import { EmailGenerator } from '@/components/ai/email-generator'
@@ -46,6 +47,8 @@ export interface EmailComposeProps {
   followUpId?: string
   draftVersion?: string
   followUpContext?: FollowUpContext
+  savedDraftRecovery?: boolean
+  recoveryPaused?: boolean
   onAccessLost?: () => void
   /**
    * When provided, the email is sent as a reply on this Gmail thread.
@@ -117,6 +120,8 @@ export function EmailCompose({
   followUpId,
   draftVersion,
   followUpContext,
+  savedDraftRecovery = false,
+  recoveryPaused = false,
   onAccessLost,
   replyToThreadId,
   replySubject,
@@ -192,6 +197,8 @@ export function EmailCompose({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [identityChanged])
   useEffect(() => { valid.current = true; return () => { valid.current = false } }, [])
+
+  const recovery = useComposeDraftRecovery({ enabled: savedDraftRecovery, id: followUpId, context: identity, binding: { leadId, recipientEmail: leadEmail ?? '', draftVersion: draftVersion ?? null, threadId: activeThreadId ?? null }, subject, body, paused: recoveryPaused || revoked || identityChanged || isPending || testStatus.kind === 'sending', onAccessLost: revokeAccess, onRestore: content => { setSubject(content.subject); setBody(content.body); setEditorKey(value => value + 1) } })
 
   /**
    * Sends a preview of the current subject + body to the connected
@@ -285,7 +292,7 @@ export function EmailCompose({
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault()
-    if (!valid.current || revoked || identityChanged) return
+    if (!valid.current || revoked || identityChanged || recovery.blocked) return
     setError(null)
     setSuccess(null)
 
@@ -302,6 +309,7 @@ export function EmailCompose({
       return
     }
 
+    recovery.noteSend({ subject: subject.trim(), body: body.trim() })
     startTransition(async () => {
       try {
         // When attachments are present we POST `multipart/form-data`
@@ -369,6 +377,7 @@ export function EmailCompose({
             ? `Email sent with ${attachments.length} attachment${attachments.length === 1 ? '' : 's'}.`
             : 'Email sent successfully.',
         )
+        recovery.clearAfterSend()
         onSent?.(responseBody.data)
       } catch (err) {
         if (!valid.current) return
@@ -497,6 +506,8 @@ export function EmailCompose({
         )}
       </div>
 
+      <ComposeDraftRecovery state={recovery} />
+
       {/* Body */}
       <div>
         <span className="mb-1 block text-xs font-medium text-foreground">
@@ -504,7 +515,7 @@ export function EmailCompose({
         </span>
         <RichTextEditor
           key={editorKey}
-          defaultValue={defaultBody}
+          defaultValue={body}
           onChange={(html) => setBody(html)}
           onFilesDropped={appendFiles}
           placeholder="Write your email…"
@@ -643,7 +654,7 @@ export function EmailCompose({
             Cancel
           </Button>
         )}
-        <Button type="submit" size="sm" disabled={isPending || !leadEmail}>
+        <Button type="submit" size="sm" disabled={isPending || !leadEmail || recovery.blocked}>
           {isPending ? (
             <>
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
