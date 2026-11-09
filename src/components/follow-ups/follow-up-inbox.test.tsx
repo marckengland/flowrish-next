@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { FollowUpInbox } from './follow-up-inbox'
 
 vi.mock('@/components/email/email-compose', () => ({
@@ -42,7 +42,7 @@ describe('FollowUpInbox', () => {
     const request = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(ok([item])).mockResolvedValueOnce(ok({ ...item, status: 'DISMISSED' }))
     render(<FollowUpInbox canWrite />)
 fireEvent.click(await screen.findByRole('button', { name: 'Review follow-up' }));     fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('Follow-up dismissed')
+    expect(await within(screen.getByRole('article', { name: 'Follow-up for Jane Doe' })).findByRole('status')).toHaveTextContent('Follow-up dismissed')
     expect(JSON.parse(request.mock.calls[1][1]?.body as string)).toEqual({ action: 'dismiss' })
   })
 
@@ -117,7 +117,7 @@ fireEvent.click(await screen.findByRole('button', { name: 'Review follow-up' }))
     let resolve!: (response: Response) => void
     vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise<Response>((done) => { resolve = done }))
     render(<FollowUpInbox canWrite />)
-    expect(screen.getByRole('status')).toHaveTextContent('Loading follow-ups')
+    expect(within(screen.getByRole('tabpanel', { name: 'Pending' })).getByRole('status')).toHaveTextContent('Loading follow-ups')
     resolve(ok([]))
     await waitFor(() => expect(screen.getByText('No pending follow-ups')).toBeInTheDocument())
   })

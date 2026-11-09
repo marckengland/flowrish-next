@@ -49,6 +49,7 @@ it('shows a just-snoozed reminder target in Snoozed even with its originating de
   render(<FollowUpInbox canWrite emailMatchContext={context} initialReplyId={id} />)
 fireEvent.click(await screen.findByRole('button', { name: 'Review follow-up' }));   const snooze = await screen.findByRole('button', { name: 'Snooze until tomorrow' }); await waitFor(() => expect(snooze).toBeEnabled()); fireEvent.click(snooze)
   await screen.findByText('Follow-up snoozed. Find it in Snoozed.')
+  await waitFor(() => expect(screen.queryByRole('article', { name: 'Follow-up for Practice Clinic' })).toBeNull())
   fireEvent.click(screen.getByRole('tab', { name: /^Snoozed$/ }))
   expect(await screen.findByRole('article', { name: 'Follow-up for Practice Clinic' })).toHaveAttribute('id', `follow-up-${id}`)
   expect(fetcher.mock.calls.filter(([,init]) => init?.method === 'POST')).toHaveLength(1)
