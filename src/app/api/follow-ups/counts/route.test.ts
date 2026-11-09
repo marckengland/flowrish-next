@@ -13,3 +13,13 @@ it('returns scoped private no-store read-only counts using the authenticated ide
 it.each(['status=APPROVED','organizationId=other','retain=private','after=page','search=a&search=b','source=OTHER','dueOnly=1&taskProgress=OPEN'])('rejects unsupported/invalid query %s without reading counts',async query=>{const response=await GET(new NextRequest('https://example.invalid/api/follow-ups/counts?'+query,{headers}));expect(response.status).toBe(400);expect(mocks.counts).not.toHaveBeenCalled()})
 it.each([401,403])('denies unauthorized read %s without private data',async status=>{mocks.session.mockRejectedValue(new AppError(status===401?'UNAUTHORIZED':'FORBIDDEN','Denied',status));const response=await GET(new NextRequest('https://example.invalid/api/follow-ups/counts',{headers}));expect(response.status).toBe(status);expect(response.headers.get('cache-control')).toContain('no-store');expect(await response.json()).not.toHaveProperty('data');expect(mocks.counts).not.toHaveBeenCalled()})
 it('rejects stale workspace/account headers without a service call',async()=>{const response=await GET(new NextRequest('https://example.invalid/api/follow-ups/counts',{headers:{...headers,'x-flowrish-follow-up-scope':JSON.stringify(['org','other'])}}));expect(response.status).toBe(409);expect(mocks.counts).not.toHaveBeenCalled()})
+it('accepts opted-in Needs checking counts with authenticated identity and private no-store response',async()=>{
+ const response=await GET(new NextRequest('https://example.invalid/api/follow-ups/counts?needsChecking=1',{headers:{...headers,'x-flowrish-send-status':'1'}}))
+ expect(response.status).toBe(200);expect(response.headers.get('cache-control')).toContain('no-store');expect(mocks.counts).toHaveBeenCalledWith('org','actor',{search:'',source:'ALL',dueOnly:false,needsChecking:true})
+})
+it.each(['needsChecking=wrong','needsChecking=1&needsChecking=0'])('rejects invalid or duplicate send filters %s',async query=>{
+ expect((await GET(new NextRequest('https://example.invalid/api/follow-ups/counts?'+query,{headers:{...headers,'x-flowrish-send-status':'1'}}))).status).toBe(400);expect(mocks.counts).not.toHaveBeenCalled()
+})
+it('rejects a private send filter without send-status support',async()=>{
+ expect((await GET(new NextRequest('https://example.invalid/api/follow-ups/counts?needsChecking=1',{headers}))).status).toBe(400);expect(mocks.counts).not.toHaveBeenCalled()
+})

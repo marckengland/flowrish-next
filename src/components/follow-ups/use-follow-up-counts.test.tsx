@@ -15,3 +15,15 @@ it('hides old totals immediately when disabled or receipt revision changes',asyn
 
 it.each([undefined,{}, {canWrite:'false'}])('treats malformed permissions %j as unavailable without claiming identity loss',async capabilities=>{vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({data,scope:context,capabilities})));const lost=vi.fn(),ui=renderHook(()=>useFollowUpCounts({context,filters,enabled:true,revision:0,onAccessLost:lost}));await waitFor(()=>expect(ui.result.current.status).toBe('error'));expect(ui.result.current.data).toBeUndefined();expect(lost).not.toHaveBeenCalled()})
 it.each([401,403])('clears private state on HTTP %i even when its error body is malformed',async status=>{vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('not json',{status}));const lost=vi.fn(),ui=renderHook(()=>useFollowUpCounts({context,filters,enabled:true,revision:0,onAccessLost:lost}));await waitFor(()=>expect(lost).toHaveBeenCalledOnce());expect(ui.result.current.data).toBeUndefined()})
+it('opts in to send-status counts and accepts only current send access',async()=>{
+ const needed={...filters,needsChecking:true},fetcher=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({data:{...data,filters:needed},scope:context,capabilities:{canWrite:true}}))),lost=vi.fn()
+ const ui=renderHook(()=>useFollowUpCounts({context,filters:needed,enabled:true,revision:0,onAccessLost:lost}));await waitFor(()=>expect(ui.result.current.status).toBe('ready'))
+ expect(fetcher.mock.calls[0][0]).toBe('/api/follow-ups/counts?needsChecking=1');expect(fetcher.mock.calls[0][1]?.headers).toMatchObject({'x-flowrish-send-status':'1'});expect(ui.result.current.data?.counts.PENDING).toBe(121);expect(lost).not.toHaveBeenCalled()
+})
+it('never exposes send-filtered counts after write permission is revoked',async()=>{
+ const needed={...filters,needsChecking:true};vi.spyOn(globalThis,'fetch').mockResolvedValue(response({...data,filters:needed}));const lost=vi.fn(),ui=renderHook(()=>useFollowUpCounts({context,filters:needed,enabled:true,revision:0,onAccessLost:lost}))
+ await waitFor(()=>expect(lost).toHaveBeenCalledOnce());expect(ui.result.current.data).toBeUndefined();expect(ui.result.current.status).toBe('error')
+})
+it('makes a hung count read retryable after a bounded wait without another automatic request',async()=>{
+ vi.useFakeTimers();const fetcher=vi.spyOn(globalThis,'fetch').mockImplementation(()=>new Promise(()=>{})),lost=vi.fn(),ui=renderHook(()=>useFollowUpCounts({context,filters,enabled:true,revision:0,onAccessLost:lost}));await act(async()=>{await vi.advanceTimersByTimeAsync(15001)});expect(ui.result.current.status).toBe('error');expect(fetcher).toHaveBeenCalledOnce();expect(fetcher.mock.calls[0][1]?.signal?.aborted).toBe(true);expect(lost).not.toHaveBeenCalled();vi.useRealTimers()
+})

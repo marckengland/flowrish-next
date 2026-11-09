@@ -103,8 +103,9 @@ beforeEach(() => {
   mocks.lead.mockResolvedValue([])
   mocks.rhythm.mockResolvedValue(new Map())
   mocks.access.mockResolvedValue({ deletedAt: null, assignedUserId: 'member' })
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({scope:{organizationId:'org',userId:'member'},capabilities:{canWrite:true},data:{counts:{PENDING:0,APPROVED:0,DISMISSED:0,SNOOZED:0},overdueTasks:0,checkedAt:new Date().toISOString(),filters:{search:'',source:'ALL',dueOnly:false,needsChecking:true}}}))))
 })
-afterEach(cleanup)
+afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals()})
 it('denies dashboard data before any business query when leads read is absent', async () => {
   mocks.session.mockResolvedValue({ organizationId: 'org', dbUser: user([]) })
   render(await DashboardPage({}))
@@ -157,4 +158,10 @@ it('keeps authorized lead creation available', async () => {
     'href',
     '/leads/new',
   )
+  await screen.findByText('No email sends need checking.')
+})
+it('places a scoped Needs checking summary on the writable dashboard',async()=>{
+ mocks.session.mockResolvedValue({organizationId:'org',dbUser:user(['leads:read','leads:write'])})
+ const fetcher=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({scope:{organizationId:'org',userId:'member'},capabilities:{canWrite:true},data:{counts:{PENDING:4,APPROVED:0,DISMISSED:0,SNOOZED:0},overdueTasks:0,checkedAt:new Date().toISOString(),filters:{search:'',source:'ALL',dueOnly:false,needsChecking:true}}})))
+ render(await DashboardPage({}));await screen.findByText('4 email sends need checking');expect(screen.getByRole('link',{name:'Pending (4)'})).toHaveAttribute('href','/follow-ups?needsChecking=1&status=PENDING');expect(fetcher.mock.calls[0][1]?.headers).toMatchObject({'x-flowrish-workspace':'org','x-flowrish-follow-up-scope':'["org","member"]'});vi.restoreAllMocks()
 })

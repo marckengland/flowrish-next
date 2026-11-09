@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { NeedsCheckingSummary } from '@/components/dashboard/needs-checking-summary'
+import { coreIds } from '../../core-fixtures'
 import { cookies } from 'next/headers'
 import { WorkspaceFixture } from '../../components/workspace-fixture'
 import { PageHeader } from '@/components/layout/page-header'
@@ -23,6 +25,7 @@ export default async function Page() {
         <Link href="/tasks">Tasks</Link>
         <Link href="/follow-ups">Follow-ups</Link>
       </nav>
+      <NeedsCheckingSummary context={{organizationId:coreIds.organization,userId:coreIds.user}} canWrite />
       <DashboardTabs
         items={[
           {

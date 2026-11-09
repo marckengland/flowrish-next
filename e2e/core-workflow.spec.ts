@@ -30,6 +30,7 @@ async function mockCore(page: Page, baseURL: string) {
       return
     }
     if (path.startsWith('/api/')) {
+      if(path==='/api/follow-ups/counts'&&method==='GET'){await route.fulfill({json:{scope:{organizationId:coreIds.organization,userId:coreIds.user},capabilities:{canWrite:true},data:{counts:{PENDING:0,APPROVED:0,DISMISSED:0,SNOOZED:0},overdueTasks:0,checkedAt:new Date().toISOString(),filters:{search:'',source:'ALL',dueOnly:false,needsChecking:true}}}});return}
       if (path === '/api/lead-views' && method === 'GET') { await route.fulfill({ json: { data: [], scope: { organizationId: coreIds.organization, userId: coreIds.user } } }); return }
       if (method !== 'GET')
         state.writes.push({ path, body: req.postDataJSON() })

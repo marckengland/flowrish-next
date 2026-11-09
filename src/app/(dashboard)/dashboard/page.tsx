@@ -1,6 +1,7 @@
 import { forecastBasisStatus } from '@/lib/forecast-basis'
 import { forecastPeriod } from '@/lib/forecast-period'
 import Link from 'next/link'
+import { NeedsCheckingSummary } from '@/components/dashboard/needs-checking-summary'
 import { redirect } from 'next/navigation'
 import { Plus } from 'lucide-react'
 
@@ -418,6 +419,7 @@ export default async function DashboardPage({
           ) : undefined
         }
       />
+      <NeedsCheckingSummary context={{ organizationId: orgId, userId }} canWrite={canWrite} />
       <DashboardTabs items={items} defaultValue={activeTab} />
     </div>
   )

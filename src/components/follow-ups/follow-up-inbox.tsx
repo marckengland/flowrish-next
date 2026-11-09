@@ -45,7 +45,7 @@ import { followUpFilterSchema, hasFollowUpFilters, type FollowUpFilters } from '
 
 type FollowUpStatus = 'PENDING' | 'APPROVED' | 'DISMISSED'
 type FollowUpView = FollowUpStatus | 'SNOOZED'
-type Navigation = 'refresh' | FollowUpView | { replyId: string | undefined } | { filters: FollowUpFilters } | { settings: SavedFollowUpSettings }
+type Navigation = 'refresh' | FollowUpView | { replyId: string | undefined } | { filters: FollowUpFilters } | { settings: SavedFollowUpSettings; preserveFilterDraft?: boolean }
 const emptyFilters = followUpFilterSchema.parse({})
 
 export interface FollowUpItem {
@@ -103,11 +103,11 @@ async function responseData<T>(response: Response, context?: FollowUpContext): P
   return (await followUpData<T>(response, context)).data
 }
 
-type FollowUpInboxProps = { canWrite: boolean; children?: ReactNode; emailMatchContext?: EmailMatchContext; initialMessageId?: string; initialReplyId?: string }
+type FollowUpInboxProps = { canWrite: boolean; children?: ReactNode; emailMatchContext?: EmailMatchContext; initialMessageId?: string; initialReplyId?: string; initialSendStatusTab?: FollowUpView }
 export function FollowUpInbox(props: FollowUpInboxProps): React.JSX.Element {
   return <ScopedFollowUpInbox key={props.emailMatchContext ? `${props.emailMatchContext.organizationId}:${props.emailMatchContext.userId}` : 'legacy'} {...props} />
 }
-function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMessageId, initialReplyId }: FollowUpInboxProps): React.JSX.Element {
+function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMessageId, initialReplyId, initialSendStatusTab }: FollowUpInboxProps): React.JSX.Element {
   const emailOrganizationId = emailMatchContext?.organizationId, emailUserId = emailMatchContext?.userId
   const [writeAllowed, setWriteAllowed] = useState(canWrite)
   const taskProgressDescription = useId()
@@ -123,13 +123,15 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
   const [taskProgressSupported, setTaskProgressSupported] = useState(false)
   const [revoked, setRevoked] = useState(false)
   const revokedRef = useRef(false)
-  const [status, setStatus] = useState<FollowUpView>('PENDING')
+  const [status, setStatus] = useState<FollowUpView>(canWrite ? initialSendStatusTab ?? 'PENDING' : 'PENDING')
+  const lastSummaryEntry = useRef(initialSendStatusTab)
   const [viewsOpen, setViewsOpen] = useState(false)
-  const [filters, setFilters] = useState<FollowUpFilters>(emptyFilters)
-  const [countsFilters, setCountsFilters] = useState<FollowUpFilters>(emptyFilters)
-  const [filterDraft, setFilterDraft] = useState<FollowUpFilters>(emptyFilters)
+  const [filters, setFilters] = useState<FollowUpFilters>(() => canWrite && initialSendStatusTab ? { ...emptyFilters, needsChecking: true } : emptyFilters)
+  const [countsFilters, setCountsFilters] = useState<FollowUpFilters>(filters)
+  const [filterDraft, setFilterDraft] = useState<FollowUpFilters>(filters)
   const filterDraftRef = useRef(filterDraft); filterDraftRef.current = filterDraft
   const retainedOrderCommit = useRef<FollowUpFilters | null>(null), retryOrder = useRef<FollowUpFilters | undefined>(undefined)
+  const retryPreserveFilterDraft = useRef(false)
   const [filterError, setFilterError] = useState('')
   const [items, setItems] = useState<FollowUpItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -295,11 +297,11 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     if (bulkBusyRef.current || discard && activeCardRequests.current.size > 0) return false
     if (target === status) return true
     if (typeof target === 'object' && 'filters' in target && JSON.stringify(target.filters) === JSON.stringify(filters) && (!target.filters.dueOnly || status === 'PENDING') && (!target.filters.taskProgress || status === 'APPROVED')) { setNavigation(null); setFilterDraft(target.filters); return true }
-    if (typeof target === 'object' && 'settings' in target && target.settings.status === status && JSON.stringify(target.settings.filters) === JSON.stringify(filters)) { setNavigation(null); setFilterDraft(target.settings.filters); return true }
+    if (typeof target === 'object' && 'settings' in target && target.settings.status === status && JSON.stringify(target.settings.filters) === JSON.stringify(filters)) { setNavigation(null); if (!target.preserveFilterDraft) setFilterDraft(target.settings.filters); return true }
     const nextFilters = typeof target === 'object' ? 'settings' in target ? target.settings.status === status ? target.settings.filters : undefined : 'filters' in target ? target.filters : undefined : undefined
     if(nextFilters&&Boolean(nextFilters.needsChecking)!==Boolean(filters.needsChecking)){
       const withoutSendStatus=({needsChecking:_send,...rest}:FollowUpFilters)=>JSON.stringify(rest)
-      if(withoutSendStatus(nextFilters)===withoutSendStatus(filters)){setNavigation(null);void readLoadedPages(1,true,false,nextFilters);return true}
+      if(withoutSendStatus(nextFilters)===withoutSendStatus(filters)){setNavigation(null);void readLoadedPages(1,true,false,nextFilters,typeof target==='object'&&'settings' in target&&target.preserveFilterDraft===true);return true}
     }
     if (status === 'APPROVED' && nextFilters && nextFilters.taskOrder !== filters.taskOrder) {
       const withoutOrder = ({ taskOrder: _order, ...rest }: FollowUpFilters) => rest
@@ -337,6 +339,14 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialReplyId])
   useEffect(() => {
+    if (!initialSendStatusTab) { lastSummaryEntry.current = undefined; return }
+    if (!canWrite || revoked || loading || pageTask || bulkBusy || lastSummaryEntry.current === initialSendStatusTab) return
+    lastSummaryEntry.current = initialSendStatusTab
+    navigate({ settings: { status: initialSendStatusTab, filters: filtersForFollowUpTab({ ...filters, needsChecking: true }, initialSendStatusTab) }, preserveFilterDraft: true })
+    // Incoming summary links use the existing retained-filter or navigation guard.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSendStatusTab, canWrite, revoked, loading, pageTask, bulkBusy])
+  useEffect(() => {
     let current = true
     if (revokedRef.current) return
     if (retainedOrderCommit.current === filters) { retainedOrderCommit.current = null; return }
@@ -362,13 +372,14 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
     return () => { current = false; request.abort(); if (initialRequest.current === request) initialRequest.current = null }
   }, [status, filters, revision, focusedReplyId, emailOrganizationId, emailUserId, canWrite, invalidate, abortPages])
 
-  const readLoadedPages = useCallback(async function revalidatePages(depth: number, explicit: boolean, catchUp = false, orderFilters?: FollowUpFilters): Promise<void> {
+  const readLoadedPages = useCallback(async function revalidatePages(depth: number, explicit: boolean, catchUp = false, orderFilters?: FollowUpFilters, preserveFilterDraft = false): Promise<void> {
     if (offlineRef.current || loadingRef.current || revokedRef.current || bulkBusyRef.current || (!explicit && pageFailed.current)) return
     if (pageController.current) { if (!explicit) pendingRevalidation.current = true; return }
     const request = new AbortController(), epoch = readEpoch.current
     pageController.current = request; retryDepth.current = depth; pageFailed.current = false
     const draftAtStart = filterDraftRef.current
     retryOrder.current = orderFilters
+    retryPreserveFilterDraft.current = preserveFilterDraft
     retryCatchUp.current = catchUp
     setPageTask(catchUp ? 'catch-up' : depth > pagesLoaded.current ? 'more' : 'refresh'); setPageError('')
     const active = () => pageController.current === request && !request.signal.aborted
@@ -377,7 +388,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       const result = await readFollowUpPages<FollowUpItem>({ status, filters: orderFilters ?? filters, context: emailOrganizationId && emailUserId ? { organizationId: emailOrganizationId, userId: emailUserId } : undefined, depth, retained: [...retained], signal: request.signal })
       if (!active() || revokedRef.current) return
       if (epoch !== readEpoch.current) { setNeedsCheck(true); if (explicit) { pageFailed.current = true; setPageError('The list changed while loading. Retry to continue with your current drafts.') }; return }
-      if (orderFilters) { retainedOrderCommit.current = orderFilters; setFilters(orderFilters); setFilterDraft(current => current === draftAtStart ? orderFilters : current); retryOrder.current = undefined }
+      if (orderFilters) { retainedOrderCommit.current = orderFilters; setFilters(orderFilters); if (!preserveFilterDraft) setFilterDraft(current => current === draftAtStart ? orderFilters : current); retryOrder.current = undefined }
       setLastCheckedAt(Date.now()); setNeedsCheck(false); setError(null)
       setItems(result.items); setWriteAllowed(result.canWrite ?? canWrite); setTaskProgressSupported(result.taskProgress === true); setTaskOrderSupported(result.taskOrder === true); setCountsSupported(result.inboxCounts === true); setComposeDrafts(result.composeDrafts === true); setSendResults(result.sendResults === true); setSendStatusSupported(result.sendStatus === true); setCountsFilters(orderFilters ?? filters); setCountsRevision(value => value + 1); pagesLoaded.current = result.pages
       setNextCursor(result.nextCursor); setPageSupported(result.paged); setCallbackCatchUp(result.callbackCatchUp)
@@ -509,7 +520,7 @@ function ScopedFollowUpInbox({ canWrite, children, emailMatchContext, initialMes
       {!loading && !revoked && (pageSupported || pageError) && <section aria-label="Follow-up pagination" className="space-y-3">
         {pageTask && pageTask !== 'catch-up' && <p role="status" className="text-sm text-muted-foreground">{pageTask === 'more' ? 'Loading more follow-ups…' : 'Checking follow-ups…'}</p>}
         {pageError && !retryCatchUp.current && <p role="alert" className="text-sm text-destructive">{pageError}</p>}
-        <div className="flex flex-wrap gap-2">{nextCursor && <Button type="button" variant="outline" disabled={pageTask !== null || bulkBusy} onClick={() => void readLoadedPages(pagesLoaded.current + 1, true)}>Load more</Button>}{pageError && !retryCatchUp.current && <Button type="button" variant="outline" disabled={pageTask !== null || bulkBusy} onClick={() => void readLoadedPages(retryDepth.current, true, false, retryOrder.current)}>Retry loading</Button>}</div>
+        <div className="flex flex-wrap gap-2">{nextCursor && <Button type="button" variant="outline" disabled={pageTask !== null || bulkBusy} onClick={() => void readLoadedPages(pagesLoaded.current + 1, true)}>Load more</Button>}{pageError && !retryCatchUp.current && <Button type="button" variant="outline" disabled={pageTask !== null || bulkBusy} onClick={() => void readLoadedPages(retryDepth.current, true, false, retryOrder.current, retryPreserveFilterDraft.current)}>Retry loading</Button>}</div>
         {pageSupported && !nextCursor && !callbackCatchUp?.hasMore && !pageTask && !pageError && <p className="text-xs text-muted-foreground">All matching follow-ups are loaded.</p>}
       </section>}
       <p className="text-xs text-muted-foreground">{pageSupported ? `${items.length} loaded items assigned to you, including retained drafts and focused replies. Load more keeps your filters and unsent drafts.` : 'Showing up to 100 recent items assigned to you, plus open drafts and a focused reply.'} Email sources are previews, and draft text is a starting template. Approving a task does not send an email.</p>
