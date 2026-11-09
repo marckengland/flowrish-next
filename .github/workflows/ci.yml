@@ -123,6 +123,8 @@ jobs:
         run: npm run test:inbox:performance
       - name: Verify private saved draft storage and recovery
         run: npm run test:compose-drafts:synthetic
+      - name: Verify send-result duplicate protection and recovery
+        run: npm run test:send-results:synthetic
 
   migrate:
     name: Apply Prisma Migrations

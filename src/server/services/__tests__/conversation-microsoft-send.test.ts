@@ -19,3 +19,4 @@ describe('strict source-bound Outlook reply', () => {
     expect(request.mock.calls.some(([,options]) => options.method === 'POST')).toBe(false)
   })
 })
+it('fences the final Graph send after draft preparation and never sends if persistence fails',async()=>{request.mockResolvedValue({ok:true,json:async()=>({id:'draft',conversationId:'thread'})});const beforeDelivery=vi.fn(async()=>{throw new Error('Synthetic reservation failure')});await expect(deliverMicrosoftEmail({accessToken:'synthetic',to:'lead@example.invalid',subject:'Subject',htmlBody:'Body',attachments:[],beforeDelivery})).rejects.toThrow('Synthetic reservation failure');expect(beforeDelivery).toHaveBeenCalledOnce();expect(request.mock.calls.some(([url])=>String(url).endsWith('/send'))).toBe(false)})

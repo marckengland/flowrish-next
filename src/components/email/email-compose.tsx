@@ -1,4 +1,5 @@
 'use client'
+import {useSendResultRecovery,SendResultRecovery} from './send-result-recovery'
 
 import { useEffect, useId, useRef, useState, useTransition } from 'react'
 import {
@@ -47,6 +48,7 @@ export interface EmailComposeProps {
   followUpId?: string
   draftVersion?: string
   followUpContext?: FollowUpContext
+  sendResultRecovery?: boolean
   savedDraftRecovery?: boolean
   recoveryPaused?: boolean
   onAccessLost?: () => void
@@ -121,6 +123,7 @@ export function EmailCompose({
   draftVersion,
   followUpContext,
   savedDraftRecovery = false,
+  sendResultRecovery = false,
   recoveryPaused = false,
   onAccessLost,
   replyToThreadId,
@@ -199,6 +202,8 @@ export function EmailCompose({
   useEffect(() => { valid.current = true; return () => { valid.current = false } }, [])
 
   const recovery = useComposeDraftRecovery({ enabled: savedDraftRecovery, id: followUpId, context: identity, binding: { leadId, recipientEmail: leadEmail ?? '', draftVersion: draftVersion ?? null, threadId: activeThreadId ?? null }, subject, body, paused: recoveryPaused || revoked || identityChanged || isPending || testStatus.kind === 'sending', onAccessLost: revokeAccess, onRestore: content => { setSubject(content.subject); setBody(content.body); setEditorKey(value => value + 1) } })
+
+  const sendRecovery = useSendResultRecovery({enabled:sendResultRecovery,id:followUpId,context:identity,paused:recoveryPaused||revoked||identityChanged,onAccessLost:revokeAccess})
 
   /**
    * Sends a preview of the current subject + body to the connected
@@ -292,7 +297,7 @@ export function EmailCompose({
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault()
-    if (!valid.current || revoked || identityChanged || recovery.blocked) return
+    if (!valid.current || revoked || identityChanged || recovery.blocked || sendRecovery.blocked) return
     setError(null)
     setSuccess(null)
 
@@ -309,6 +314,8 @@ export function EmailCompose({
       return
     }
 
+    let operationId: string | undefined
+    try { operationId = sendRecovery.start() } catch { return }
     recovery.noteSend({ subject: subject.trim(), body: body.trim() })
     startTransition(async () => {
       try {
@@ -328,6 +335,7 @@ export function EmailCompose({
             'payload',
             JSON.stringify({
               leadId,
+              ...(operationId ? {operationId} : {}),
               subject: subject.trim(),
               body: body.trim(),
               ...(activeThreadId ? { threadId: activeThreadId } : {}),
@@ -354,6 +362,7 @@ export function EmailCompose({
             credentials: 'same-origin',
             body: JSON.stringify({
               leadId,
+              ...(operationId ? {operationId} : {}),
               subject: subject.trim(),
               body: body.trim(),
               ...(activeThreadId ? { threadId: activeThreadId } : {}),
@@ -366,6 +375,7 @@ export function EmailCompose({
         const responseBody = await followUpData<{ messageId: string; threadId: string; attachmentCount: number }>(res, capturedIdentity.current)
         if (!valid.current) return
 
+        sendRecovery.confirmed(responseBody.sendResult,responseBody.data,operationId)
         if (hasAttachments) {
           setAttachments((prev) =>
             prev.map((a) => ({ ...a, status: 'uploaded' })),
@@ -381,6 +391,7 @@ export function EmailCompose({
         onSent?.(responseBody.data)
       } catch (err) {
         if (!valid.current) return
+        sendRecovery.failed()
         if (followUpAccessLost(err)) { revokeAccess(); return }
         setAttachments(previous => previous.map(attachment => ({ ...attachment, status: 'failed' })))
         setError(err instanceof Error ? err.message : 'Failed to send email.')
@@ -596,6 +607,7 @@ export function EmailCompose({
         )}
       </div>
 
+      <SendResultRecovery state={sendRecovery} />
       {error ? (
         <p role="alert" className="text-sm text-danger-foreground">
           {error}
@@ -654,7 +666,7 @@ export function EmailCompose({
             Cancel
           </Button>
         )}
-        <Button type="submit" size="sm" disabled={isPending || !leadEmail || recovery.blocked}>
+        <Button type="submit" size="sm" disabled={isPending || !leadEmail || recovery.blocked || sendRecovery.blocked}>
           {isPending ? (
             <>
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />

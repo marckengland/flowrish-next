@@ -11,7 +11,7 @@ beforeEach(() => { vi.resetAllMocks(); m.session.mockResolvedValue({ organizatio
 it('requires explicit ordering support, progress and paging without write permission', async () => {
  const req = request('/api/follow-ups?status=APPROVED&taskOrder=DUE_ASC'); req.headers.set('x-flowrish-task-order','1'); req.headers.set('x-flowrish-follow-up-page','1')
  expect((await GET(req)).status).toBe(200); expect(m.list).toHaveBeenLastCalledWith('org','actor','APPROVED',[],{search:'',source:'ALL',dueOnly:false,taskOrder:'DUE_ASC'},{},true,true)
- const body = await (await GET(req)).json(); expect(body.capabilities).toEqual({canWrite:false,taskProgress:true,taskOrder:true,inboxCounts:true,composeDrafts:true}); expect(m.permission).not.toHaveBeenCalledWith(expect.anything(),'leads:write')
+ const body = await (await GET(req)).json(); expect(body.capabilities).toEqual({canWrite:false,taskProgress:true,taskOrder:true,inboxCounts:true,composeDrafts:true,sendResults:true}); expect(m.permission).not.toHaveBeenCalledWith(expect.anything(),'leads:write')
  for(const header of ['x-flowrish-task-order','x-flowrish-task-progress','x-flowrish-follow-up-page']) { const invalid = new Request(req); invalid.headers.delete(header); m.list.mockClear(); expect((await GET(invalid)).status).toBe(400); expect(m.list).not.toHaveBeenCalled() }
 })
 it('opts saved readers into order independently from older progress readers', async () => {

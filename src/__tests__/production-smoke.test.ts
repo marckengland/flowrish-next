@@ -27,6 +27,7 @@ it('checks the fixed production origin with anonymous GETs, no redirects, and co
     { path: '/api/forecast', status: 401 }, { path: '/api/receptionist/home', status: 401 },
     { path: '/api/admin/website-receptionist', status: 401 },
     { path: '/api/follow-ups/11111111-1111-4111-8111-111111111111/compose-draft', status: 401 },
+    { path: '/api/follow-ups/11111111-1111-4111-8111-111111111111/send-result', status: 401 },
   ])
   expect(fetchImpl.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual(['/release.json', ...results.map(r => r.path), '/release.json'])
   for (const [url, init] of fetchImpl.mock.calls) {
@@ -43,7 +44,7 @@ it('checks the fixed production origin with anonymous GETs, no redirects, and co
 
 it('accepts a same-origin absolute login redirect and explicit forbidden API responses', async () => {
   const fetchImpl = fixture(path => path === '/forecast' ? new Response(null, { status: 302, headers: { Location: origin + '/login' } }) : path.startsWith('/api/') ? new Response(null, { status: 403 }) : undefined)
-  expect(await runSmoke({ expectedSha: sha, fetchImpl, log: vi.fn() })).toHaveLength(8)
+  expect(await runSmoke({ expectedSha: sha, fetchImpl, log: vi.fn() })).toHaveLength(9)
 })
 
 it('waits through missing and old metadata with bounded retries before checking any protected route', async () => {

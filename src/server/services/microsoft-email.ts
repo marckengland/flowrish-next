@@ -198,6 +198,7 @@ export async function deliverMicrosoftEmail(params: {
   strictReply?: boolean
   /** Revalidate manual/contextual delivery immediately before provider writes. */
   authorize?: () => Promise<void>
+  beforeDelivery?: () => Promise<void>
 }): Promise<{ externalId: string; threadId: string }> {
   await params.authorize?.()
   const { accessToken, to, subject, htmlBody, attachments, replyToConversationId } = params
@@ -271,6 +272,7 @@ export async function deliverMicrosoftEmail(params: {
   }
 
   await params.authorize?.()
+  await params.beforeDelivery?.()
   const sendRes = await fetch(`${MS_GRAPH}/me/messages/${draft.id}/send`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },

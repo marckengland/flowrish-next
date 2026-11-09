@@ -237,6 +237,7 @@ model FollowUpSuggestion {
 
   snoozes FollowUpSnooze[]
   composeDrafts FollowUpComposeDraft[]
+  sendAttempt FollowUpSendAttempt?
 
   @@unique([organizationId, id])
   @@unique([organizationId, sourceKey])
@@ -1623,4 +1624,19 @@ model FollowUpComposeDraft {
   ciphertext String?
   updatedAt DateTime @default(now()) @updatedAt
   @@id([organizationId, userId, followUpId])
+}
+
+// Retained independently of membership so revocation cannot erase duplicate protection.
+model FollowUpSendAttempt {
+  organizationId String
+  followUpId String
+  followUp FollowUpSuggestion @relation(fields: [organizationId, followUpId], references: [organizationId, id], onDelete: Cascade, onUpdate: Cascade, map: "FollowUpSendAttempt_followUp_fkey")
+  userId String
+  operationId String
+  requestHash String
+  state String
+  result Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  @@id([organizationId, followUpId])
 }

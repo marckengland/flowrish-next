@@ -1,3 +1,4 @@
+import type {DeliveryHooks} from '@/lib/email-send-result'
 import { createTenantPrisma } from '@/server/db/middleware'
 import { tenantData } from '@/server/db/types'
 import { encrypt, decrypt } from '@/lib/encryption'
@@ -433,6 +434,7 @@ export interface SendEmailOptions {
   reviewedFollowUp?: { id: string; version: string }
   followUpTemplateId?: string
   manualActor?: boolean
+  deliveryHooks?: DeliveryHooks
 }
 
 export async function sendEmail(
@@ -535,6 +537,7 @@ export async function sendEmail(
       to: recipientEmail,
       ...(options.accountId && threadId ? { strictReply: true } : {}),
       authorize: verifyRecipient,
+      beforeDelivery: options.deliveryHooks?.beforeDelivery,
       subject: personalizedSubject,
       htmlBody,
       attachments,
@@ -579,6 +582,7 @@ export async function sendEmail(
           )
 
     await verifyRecipient()
+    await options.deliveryHooks?.beforeDelivery()
     const sendResponse = await fetch(`${GMAIL_API_BASE}/users/me/messages/send`, {
       method: 'POST',
       headers: {
@@ -601,6 +605,8 @@ export async function sendEmail(
     externalId = sendData.id
     resultThreadId = sendData.threadId
   }
+
+  await options.deliveryHooks?.accepted({messageId:externalId,threadId:resultThreadId,attachmentCount:attachments.length})
 
   // Create EmailMessage record
   // Note: organizationId is auto-injected by the tenant middleware at runtime
