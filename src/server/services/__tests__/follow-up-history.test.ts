@@ -64,3 +64,17 @@ it('retains projection validation and restore precedence without exposing wrong-
  const result=await listFollowUpHistory('org','actor',id,{kind:'approved'});expect(result.data.entries.map(entry=>entry.kind)).toEqual(['approved']);expect(result.data.current.state).toBe('pending');expect(JSON.stringify(result)).not.toMatch(/inputHash|version|restoredAt|private/)
  await expect(listFollowUpHistory('org','actor',id,{kind:'unknown'})).rejects.toBeDefined();await expect(listFollowUpHistory('org','actor',id,{kind:''})).rejects.toBeDefined();expect((await listFollowUpHistory('org','actor',id,{})).data).toMatchObject({kind:'all'})
 })
+it('uses stable scoped keysets instead of offsets and returns the exact request position',async()=>{
+ const rows=Array.from({length:21},(_,n)=>audit(n+1,'FollowUpSuggestion',{status:'APPROVED'}));m.db.auditEntry.findMany.mockResolvedValue(rows)
+ const first=await listFollowUpHistory('org','actor',id,{kind:'approved'},true);expect(first.data.paging?.cursor).toBeTruthy();expect(first.data.paging?.nextCursor).toBeTruthy();expect(m.db.auditEntry.findMany.mock.lastCall?.[0]).not.toHaveProperty('skip');expect(first.data.entries.map(entry=>entry.id)).toEqual(rows.slice(0,20).map(row=>row.id))
+ const next=await listFollowUpHistory('org','actor',id,{kind:'approved',page:2,cursor:first.data.paging!.nextCursor},true),query=m.db.auditEntry.findMany.mock.lastCall?.[0]
+ expect(next.data.paging?.cursor).toBe(first.data.paging!.nextCursor);expect(query).not.toHaveProperty('skip');expect(query.where).toMatchObject({organizationId:'org',userId:'actor',entityId:id,AND:[{entityType:'FollowUpSuggestion',changes:{path:['status'],equals:'APPROVED'}},{OR:[{createdAt:{lt:rows[0].createdAt}},{createdAt:rows[0].createdAt,id:{lte:rows[0].id}}]},{OR:[{createdAt:{lt:rows[19].createdAt}},{createdAt:rows[19].createdAt,id:{lt:rows[19].id}}]}]})
+ await expect(listFollowUpHistory('org','actor',id,{kind:'restored',page:2,cursor:first.data.paging!.nextCursor},true)).rejects.toMatchObject({statusCode:409})
+ await expect(listFollowUpHistory('org','actor',id,{page:2},true)).rejects.toMatchObject({statusCode:400});await expect(listFollowUpHistory('org','actor',id,{page:2,cursor:first.data.paging!.nextCursor})).rejects.toMatchObject({statusCode:400})
+ expect((await listFollowUpHistory('org','actor',id,{})).data).not.toHaveProperty('paging')
+})
+it('advances stable boundaries past malformed rows and freezes an empty first history',async()=>{
+ m.db.auditEntry.findMany.mockResolvedValue(Array.from({length:21},(_,n)=>audit(n+1,'FollowUpSuggestion',{status:'PENDING'})))
+ const first=await listFollowUpHistory('org','actor',id,{},true);expect(first.data.entries).toEqual([]);expect(first.data.hasMore).toBe(true);expect(first.data.paging?.nextCursor).toBeTruthy()
+ m.db.auditEntry.findMany.mockResolvedValue([]);const empty=await listFollowUpHistory('org','actor',id,{},true);expect(empty.data.hasMore).toBe(false);expect(empty.data.paging?.nextCursor).toBeNull();await listFollowUpHistory('org','actor',id,{cursor:empty.data.paging!.cursor},true);expect(m.db.auditEntry.findMany.mock.lastCall?.[0].where.AND).toContainEqual({id:{in:[]}})
+})

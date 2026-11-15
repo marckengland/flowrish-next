@@ -1,5 +1,7 @@
 import 'server-only'
 import { z } from 'zod'
+import {AppError} from '@/lib/errors'
+import {decodeHistoryCursor,encodeHistoryCursor} from './follow-up-history-cursor'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db/client'
 import { followUpHistoryData, followUpHistoryQuery, type FollowUpHistoryData } from '@/lib/follow-up-history'
@@ -9,8 +11,10 @@ const review = z.object({ status: z.enum(['APPROVED','DISMISSED']) })
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const restore = z.object({ restore: z.object({ inputHash: hash, version: hash, taskId: z.string().min(1).max(128).nullable(), restoredAt: z.string().datetime() }) })
 const snooze = z.discriminatedUnion('action', [z.object({ action: z.literal('snooze'), until: z.string().datetime(), timeZone: z.string().min(1).max(100) }),z.object({ action: z.literal('wake'), until: z.null(), timeZone: z.string().min(1).max(100) })])
-export async function listFollowUpHistory(organizationId: string, userId: string, id: string, raw: unknown) {
-  const input = followUpHistoryQuery.parse(raw)
+export async function listFollowUpHistory(organizationId: string, userId: string, id: string, raw: unknown, stable=false) {
+  const input = followUpHistoryQuery.parse(raw), scope={organizationId,userId,id,kind:input.kind}
+  if(input.cursor&&!stable||stable&&input.page>1&&!input.cursor)throw new AppError('VALIDATION_ERROR','Send a valid history position. Refresh activity to start again.',400)
+  const position=input.cursor?decodeHistoryCursor(scope,input.cursor,input.page):null
   return safeFollowUp(() => prisma.$transaction(async db => {
     await lockFollowUpMember(db,organizationId,userId)
     const authorized = async () => {
@@ -28,7 +32,15 @@ export async function listFollowUpHistory(organizationId: string, userId: string
       : input.kind==='approved'||input.kind==='dismissed'
         ? {entityType:'FollowUpSuggestion',changes:{path:['status'],equals:input.kind==='approved'?'APPROVED':'DISMISSED'}}
         : {entityType:'FollowUpSnooze',changes:{path:['action'],equals:input.kind==='snoozed'?'snooze':'wake'}}
-    const scanned = await db.auditEntry.findMany({ where: {organizationId,userId,entityId:id,action:'UPDATE',entityType:{in:['FollowUpSuggestion','FollowUpSnooze']},...(actionFilter?{AND:actionFilter}:{})},orderBy:[{createdAt:'desc'},{id:'desc'}],skip:(input.page-1)*20,take:21,select:{id:true,entityType:true,changes:true,createdAt:true} })
+    const ranges:Prisma.AuditEntryWhereInput[]=[]
+    if(position){
+      const top=position.through,last=position.after
+      ranges.push(top?{OR:[{createdAt:{lt:top.createdAt}},{createdAt:top.createdAt,id:{lte:top.id}}]}:{id:{in:[]}})
+      if(last)ranges.push({OR:[{createdAt:{lt:last.createdAt}},{createdAt:last.createdAt,id:{lt:last.id}}]})
+    }
+    const scanned = await db.auditEntry.findMany({ where: {organizationId,userId,entityId:id,action:'UPDATE',entityType:{in:['FollowUpSuggestion','FollowUpSnooze']},...(ranges.length?{AND:[...(actionFilter?[actionFilter]:[]),...ranges]}:actionFilter?{AND:actionFilter}:{})},orderBy:[{createdAt:'desc'},{id:'desc'}],...(!stable?{skip:(input.page-1)*20}:{}),take:21,select:{id:true,entityType:true,changes:true,createdAt:true} })
+    const through=position?position.through:scanned[0]??null
+    const paging=stable?{cursor:input.cursor??encodeHistoryCursor(scope,{page:input.page,through,after:null}),nextCursor:scanned.length>20&&input.page<10000?encodeHistoryCursor(scope,{page:input.page+1,through,after:scanned[19]}):null}:undefined
     const final = await authorized(), saved = await db.followUpSnooze.findUnique({where:key})
     if (snoozeView(before.row,oldSnooze).snoozeVersion !== snoozeView(final.row,saved).snoozeVersion) throw followUpChanged()
     const now = await snoozeClock(db), pending = final.row.status==='PENDING', until = pending ? saved?.until ?? null : null
@@ -43,6 +55,6 @@ export async function listFollowUpHistory(organizationId: string, userId: string
       if (snoozed?.success) return [{...base,kind:snoozed.data.action==='snooze'?'snoozed' as const:'woke' as const,until:snoozed.data.until,timeZone:snoozed.data.timeZone}]
       return []
     }).filter(entry=>input.kind==='all'||entry.kind===input.kind)
-    return { data:followUpHistoryData.parse({kind:input.kind,id,page:input.page,hasMore:scanned.length>20,entries,current:{state,until:until?.toISOString()??null,timeZone:until?saved!.timeZone:null,checkedAt:now.toISOString()}}),canWrite:final.access.canWrite }
+    return { data:followUpHistoryData.parse({...(paging?{paging}:{}),kind:input.kind,id,page:input.page,hasMore:paging?paging.nextCursor!==null:scanned.length>20,entries,current:{state,until:until?.toISOString()??null,timeZone:until?saved!.timeZone:null,checkedAt:now.toISOString()}}),canWrite:final.access.canWrite }
   },{timeout:20000}))
 }

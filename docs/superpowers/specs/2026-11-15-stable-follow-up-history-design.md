@@ -1,0 +1,13 @@
+# Stable follow-up history paging
+
+Replace the new history panel's offset paging with opt-in keyset pagination ordered by createdAt and id descending. Retain the old endpoint contract for clients without the new history-page header. Each cursor binds user, workspace, follow-up, selected kind and page; it includes the initial upper boundary and the last scanned row of the preceding page. It is a position, not an authorization token: all existing before/after ownership and permission checks remain mandatory.
+
+Older reads use strict less-than on (createdAt,id), never offset. Newer navigation reuses remembered request cursors. Reloading a page replaces its next cursor and discards later boundaries. Malformed audit rows remain omitted but still advance the scanned boundary, preventing stalls. Equal timestamps use id as tie-breaker. Cursor contents are versioned and bounded; invalid, wrong-kind, wrong-entity, wrong-user, wrong-workspace or wrong-page tokens fail safely. No raw audit proof is exposed.
+
+A native panel session keeps its selected kind and page during focus/timer/source-revision refresh. Explicit Refresh, changing kind, or reopening starts a fresh first page. Current-state metadata remains freshly authorized and read even when history is bounded. Abort and identity fences reject late responses. A read failure preserves its request cursor for explicit retry, plus the parent drafts, reviews and uncertain results. The user sees that Refresh loads newer actions. Historical inserts below existing boundaries are not a database-wide MVCC snapshot; recalculating next boundaries preserves sequential keyset navigation. Date-range filters and arbitrary page jumps are outside scope.
+
+## Approach
+
+Use the existing inbox's standard base64url, versioned, scope-hash cursor convention. Do not add storage, migrations, dependencies, signing credentials, or a materialized audit snapshot. A fixed offset plus a date bound still shifts under equal-date inserts; persistent snapshots would add retention, cleanup and production writes. Keysets are the smallest suitable read-only change. New action kinds continue to need coordinated decoder/query changes.
+
+Verify insert-between-pages, timestamp ties, backward navigation, explicit refresh, filter/revision/identity races, malformed rows, failure retry, and mounted draft/review/blocked-result retention. Use mocked providers and the existing disposable PostgreSQL drill only; no production data changes, widget enabling, DeepSeek or real emails. Run all project checks, one fresh branch review, then merge/push under standing authorization and verify CI/deployment read-only.
