@@ -3,7 +3,8 @@ import {createHash} from 'node:crypto'
 import {z} from 'zod'
 import {AppError} from '@/lib/errors'
 import {historyCursorToken,type FollowUpHistoryKind} from '@/lib/follow-up-history'
-type Scope={organizationId:string;userId:string;id:string;kind:FollowUpHistoryKind}
+import type {HistoryDateRange} from '@/lib/follow-up-history-dates'
+type Scope={organizationId:string;userId:string;id:string;kind:FollowUpHistoryKind;range?:HistoryDateRange|null}
 type Anchor={id:string;createdAt:Date}
 type Position={page:number;through:Anchor|null;after:Anchor|null}
 const anchor=z.object({id:z.string().uuid(),createdAt:z.string().datetime()}).strict()
@@ -12,7 +13,7 @@ const cursor=z.object({v:z.literal(1),binding:z.string().regex(/^[a-f0-9]{64}$/)
  if(value.page===1)return value.after===null
  return value.after!==null&&(value.after.createdAt<value.through.createdAt||value.after.createdAt===value.through.createdAt&&value.after.id<=value.through.id)
 })
-const binding=(scope:Scope)=>createHash('sha256').update(JSON.stringify([scope.organizationId,scope.userId,scope.id,scope.kind])).digest('hex')
+const binding=(scope:Scope)=>createHash('sha256').update(JSON.stringify([scope.organizationId,scope.userId,scope.id,scope.kind,...(scope.range?['dates',scope.range.from,scope.range.to,scope.range.timeZone,scope.range.start,scope.range.end]:[])])).digest('hex')
 const serialize=(value:Anchor|null)=>value?{id:value.id,createdAt:value.createdAt.toISOString()}:null
 /** Position only. Every request still requires fresh follow-up authorization. */
 export function encodeHistoryCursor(scope:Scope,position:Position){return Buffer.from(JSON.stringify(cursor.parse({v:1,binding:binding(scope),page:position.page,through:serialize(position.through),after:serialize(position.after)}))).toString('base64url')}

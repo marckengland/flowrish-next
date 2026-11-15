@@ -11,3 +11,8 @@ it('rejects cross-scope, cross-kind, cross-page and malformed or reversed positi
  for(const raw of ['invalid','a'.repeat(2049),'!!'])expect(()=>decodeHistoryCursor(scope,raw,2)).toThrow()
  const raw=JSON.parse(Buffer.from(token,'base64url').toString());for(const change of [{v:2},{page:1},{through:null},{after:null},{after:{...raw.after,createdAt:'2026-11-06T02:00:00.000Z'}}])expect(()=>decodeHistoryCursor(scope,Buffer.from(JSON.stringify({...raw,...change})).toString('base64url'),2)).toThrow()
 })
+it('binds canonical date windows without changing the no-range legacy cursor',()=>{
+ const range={from:'2026-11-01',to:'2026-11-02',timeZone:'Asia/Manila',start:'2026-10-31T16:00:00.000Z',end:'2026-11-02T16:00:00.000Z'},position={page:2,through,after},legacy=encodeHistoryCursor(scope,position),token=encodeHistoryCursor({...scope,range},position)
+ expect(encodeHistoryCursor({...scope,range:null},position)).toBe(legacy);expect(token).not.toBe(legacy);expect(decodeHistoryCursor({...scope,range},token,2)).toEqual(position)
+ for(const changed of [null,{...range,from:'2026-10-31'},{...range,timeZone:'UTC'},{...range,start:'2026-11-01T00:00:00.000Z'}])expect(()=>decodeHistoryCursor({...scope,range:changed},token,2)).toThrow(/Refresh/)
+})

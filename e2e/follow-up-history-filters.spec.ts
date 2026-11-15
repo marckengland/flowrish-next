@@ -13,7 +13,7 @@ async function mock(page:Page,baseURL:string,s:ReturnType<typeof state>){
  const origin=new URL(baseURL).origin
  await page.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url()),path=url.pathname,method=req.method()
-  const json=(data:unknown)=>{const row=data as {page?:number;kind?:string;hasMore?:boolean};const payload=path===`/api/follow-ups/${id}/history`&&row.page?{...row,paging:{cursor:url.searchParams.get('cursor')??`history_${row.kind??'all'}_${row.page}`,nextCursor:row.hasMore?`history_${row.kind??'all'}_${row.page+1}`:null}}:data;return route.fulfill({json:{data:payload,scope:s.stale?{...context,userId:'other'}:context,capabilities:{canWrite:true,sendResults:true,sendStatus:true}}})}
+  const json=(data:unknown)=>{const row=data as {page?:number;kind?:string;hasMore?:boolean};const payload=path===`/api/follow-ups/${id}/history`&&row.page?{...row,range:null,paging:{cursor:url.searchParams.get('cursor')??`history_${row.kind??'all'}_${row.page}`,nextCursor:row.hasMore?`history_${row.kind??'all'}_${row.page+1}`:null}}:data;return route.fulfill({json:{data:payload,scope:s.stale?{...context,userId:'other'}:context,capabilities:{canWrite:true,sendResults:true,sendStatus:true}}})}
   if(url.origin!==origin||/receptionist-widget/.test(path)||!['GET','HEAD'].includes(method)){s.unexpected.push(`${method} ${path}`);await route.abort();return}
   if(path.startsWith('/api/follow-ups')){
    expect(req.headers()['x-flowrish-workspace']).toBe(context.organizationId);expect(req.headers()['x-flowrish-follow-up-scope']).toBe(JSON.stringify([context.organizationId,context.userId]))

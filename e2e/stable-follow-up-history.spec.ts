@@ -29,7 +29,7 @@ async function mock(page:Page,baseURL:string,s:ReturnType<typeof state>){
     const rows=s.rows.filter(row=>kind==='all'||row.kind===kind).sort((a,b)=>compare(b,a)),position:Position=raw?JSON.parse(Buffer.from(raw,'base64url').toString()):{kind,page:n,through:rows[0]??null,after:null}
     expect(position.kind).toBe(kind);expect(position.page).toBe(n)
     const matching=rows.filter(row=>position.through&&compare(row,position.through)<=0&&(!position.after||compare(row,position.after)<0)),entries=matching.slice(0,20),cursor=raw??encode(position),nextCursor=matching.length>20?encode({...position,page:n+1,after:entries[19]}):null,bad=s.bad;s.bad=false
-    await json({id,kind,page:n,hasMore:nextCursor!==null,paging:{cursor:bad?'wrong_position':cursor,nextCursor},entries,current:{state:'pending',until:null,timeZone:null,checkedAt:new Date(Math.max(Date.parse(at),...s.rows.map(row=>Date.parse(row.occurredAt)))+1000).toISOString()}});return
+    await json({id,kind,range:null,page:n,hasMore:nextCursor!==null,paging:{cursor:bad?'wrong_position':cursor,nextCursor},entries,current:{state:'pending',until:null,timeZone:null,checkedAt:new Date(Math.max(Date.parse(at),...s.rows.map(row=>Date.parse(row.occurredAt)))+1000).toISOString()}});return
    }
    if(path===`/api/follow-ups/${reviewItem.id}/approval`){s.previews++;await json({id:reviewItem.id,version:'a'.repeat(64),sourceType:'EMAIL',assigneeId:context.userId,title:reviewItem.title,description:reviewItem.description,existingTask:null,leadName:'Review Clinic'});return}
    if(path===`/api/follow-ups/${id}/send-result`){await json({id,state:'UNKNOWN',operationId:'99999999-9999-4999-8999-999999999999',updatedAt:at,result:null});return}

@@ -78,3 +78,16 @@ it('advances stable boundaries past malformed rows and freezes an empty first hi
  const first=await listFollowUpHistory('org','actor',id,{},true);expect(first.data.entries).toEqual([]);expect(first.data.hasMore).toBe(true);expect(first.data.paging?.nextCursor).toBeTruthy()
  m.db.auditEntry.findMany.mockResolvedValue([]);const empty=await listFollowUpHistory('org','actor',id,{},true);expect(empty.data.hasMore).toBe(false);expect(empty.data.paging?.nextCursor).toBeNull();await listFollowUpHistory('org','actor',id,{cursor:empty.data.paging!.cursor},true);expect(m.db.auditEntry.findMany.mock.lastCall?.[0].where.AND).toContainEqual({id:{in:[]}})
 })
+const dateQuery={from:'2026-11-01',to:'2026-11-05',timeZone:'Asia/Manila'}
+it('filters full saved dates before stable pagination and echoes the exact canonical window',async()=>{
+ m.db.auditEntry.findMany.mockResolvedValue(Array.from({length:21},(_,n)=>audit(n+1,'FollowUpSuggestion',{status:'APPROVED'})))
+ const result=await listFollowUpHistory('org','actor',id,{...dateQuery,kind:'approved'},true,true)
+ expect(result.data.range).toEqual({...dateQuery,start:'2026-10-31T16:00:00.000Z',end:'2026-11-05T16:00:00.000Z'});expect(result.data.current.state).toBe('pending');expect(result.data.entries).toHaveLength(20)
+ expect(m.db.auditEntry.findMany.mock.lastCall?.[0]).toMatchObject({where:{organizationId:'org',userId:'actor',entityId:id,AND:[{entityType:'FollowUpSuggestion',changes:{path:['status'],equals:'APPROVED'}},{createdAt:{gte:new Date('2026-10-31T16:00:00.000Z'),lt:new Date('2026-11-05T16:00:00.000Z')}}]},take:21});expect(m.db.auditEntry.findMany.mock.lastCall?.[0]).not.toHaveProperty('skip')
+ await expect(listFollowUpHistory('org','actor',id,{...dateQuery,to:'2026-11-06',kind:'approved',page:2,cursor:result.data.paging!.nextCursor},true,true)).rejects.toMatchObject({statusCode:409})
+ expect((await listFollowUpHistory('org','actor',id,{},true,true)).data.range).toBeNull();expect((await listFollowUpHistory('org','actor',id,{},true)).data).not.toHaveProperty('range')
+})
+it('rejects invalid or unnegotiated date queries before reading private audit data',async()=>{
+ for(const raw of [{...dateQuery,to:'2026-10-31'},{...dateQuery,to:'2026-02-30'},{...dateQuery,timeZone:'Invalid/Zone'},{from:dateQuery.from},{...dateQuery,timeZone:'America/Havana',from:'2026-11-01',to:'2026-11-01'}])await expect(listFollowUpHistory('org','actor',id,raw,true,true)).rejects.toMatchObject({statusCode:400})
+ await expect(listFollowUpHistory('org','actor',id,dateQuery,true)).rejects.toMatchObject({statusCode:400});await expect(listFollowUpHistory('org','actor',id,dateQuery,false,true)).rejects.toMatchObject({statusCode:400});expect(m.db.auditEntry.findMany).not.toHaveBeenCalled()
+})
