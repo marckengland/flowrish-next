@@ -15,7 +15,7 @@ vi.mock('@/server/db/client',async()=>{
 })
 import {prisma} from '@/server/db/client'
 import {readFollowUpCounts} from '@/server/services/follow-up-counts'
-import {listFollowUps} from '@/server/services/follow-ups'
+import {listFollowUps,reviewFollowUp} from '@/server/services/follow-ups'
 const report:{size:number;scenario:string;medianMs:number;p95Ms:number;sqlMs:number;queries:number;taskRows:number;returned:number;plan?:unknown}[]=[]
 const stamp=new Date(),sampleBody='Synthetic business conversation. '.repeat(60)
 async function seed(size:number){
@@ -102,3 +102,38 @@ it('keeps bounded callback catch-up, reassignment, source deduplication and revi
  expect(await prisma.aiUsageDay.count()).toBe(0);expect(await prisma.activity.count()).toBe(0)
 },120000)
 afterAll(async()=>{if(process.env.INBOX_PERF_REPORT)writeFileSync(process.env.INBOX_PERF_REPORT,JSON.stringify({node:process.version,samples:5,warm:true,report},null,2));await prisma.$disconnect()})
+
+it('restores dismissed reviews atomically with exact replay, task/draft retention and rollback',async()=>{
+ const {previewFollowUpRestore,restoreFollowUp,readFollowUpRestore}=await import('@/server/services/follow-up-restore')
+ const data=await seed(1000),dismissed=await prisma.followUpSuggestion.findMany({where:{organizationId:data.org,status:'DISMISSED'},take:3})
+ const email=dismissed[0],callback=dismissed[1],rollback=dismissed[2],linked=await prisma.task.create({data:{organizationId:data.org,leadId:callback.leadId,assigneeId:data.actor,title:'Keep this existing callback task',description:'Keep original task details',dueDate:stamp}})
+ await prisma.followUpSuggestion.update({where:{id:callback.id},data:{sourceType:'CALL',taskId:linked.id}})
+ await prisma.followUpSnooze.create({data:{organizationId:data.org,userId:data.actor,followUpId:email.id,until:new Date(Date.now()+86400000),timeZone:'Asia/Manila'}})
+ const before=await prisma.followUpSuggestion.findUniqueOrThrow({where:{id:email.id}}),taskCount=await prisma.task.count({where:{organizationId:data.org}}),sendCount=await prisma.followUpSendAttempt.count(),activityCount=await prisma.activity.count()
+ const review=await previewFollowUpRestore(data.org,data.actor,email.id),input={requestId:randomUUID(),expectedVersion:review.version}
+ expect(review.clearsSnooze).toBe(true)
+ const results=await Promise.all([restoreFollowUp(data.org,data.actor,email.id,input),restoreFollowUp(data.org,data.actor,email.id,input)])
+ expect(results.every(result=>result.state==='confirmed')).toBe(true);expect(await prisma.auditEntry.count({where:{id:input.requestId}})).toBe(1)
+ expect(await prisma.followUpSuggestion.findUniqueOrThrow({where:{id:email.id}})).toEqual({...before,status:'PENDING',updatedAt:expect.any(Date)})
+ expect(await prisma.followUpSnooze.findUniqueOrThrow({where:{organizationId_userId_followUpId:{organizationId:data.org,userId:data.actor,followUpId:email.id}}})).toMatchObject({until:null,revision:2,timeZone:'Asia/Manila'})
+ expect((await readFollowUpRestore(data.org,data.actor,email.id,input.requestId)).state).toBe('confirmed')
+ const callbackInput={requestId:randomUUID(),expectedVersion:(await previewFollowUpRestore(data.org,data.actor,callback.id)).version}
+ await restoreFollowUp(data.org,data.actor,callback.id,callbackInput)
+ expect(await prisma.task.findUniqueOrThrow({where:{id:linked.id}})).toEqual(linked)
+ expect((await listFollowUps(data.org,data.actor,'PENDING',[email.id,callback.id],{},{},true)).items.filter(row=>[email.id,callback.id].includes(row.id))).toHaveLength(2)
+ expect(await prisma.task.count({where:{organizationId:data.org}})).toBe(taskCount);expect(await prisma.followUpSendAttempt.count()).toBe(sendCount);expect(await prisma.activity.count()).toBe(activityCount)
+ const approved=await reviewFollowUp(data.org,data.actor,email.id,{action:'approve',title:'Create one reviewed task'})
+ expect(approved.taskId).toBeTruthy();expect((await reviewFollowUp(data.org,data.actor,email.id,{action:'approve',title:'Create one reviewed task'})).taskId).toBe(approved.taskId)
+ expect(await prisma.task.count({where:{organizationId:data.org}})).toBe(taskCount+1)
+ await expect(restoreFollowUp(data.org,data.actor,email.id,{...input,requestId:randomUUID()})).rejects.toMatchObject({statusCode:409})
+ await expect(readFollowUpRestore(data.org,data.other,email.id,input.requestId)).rejects.toBeDefined()
+ await prisma.followUpSuggestion.update({where:{id:callback.id},data:{status:'DISMISSED'}});await prisma.task.update({where:{id:linked.id},data:{assigneeId:data.other}})
+ await expect(previewFollowUpRestore(data.org,data.actor,callback.id)).rejects.toMatchObject({statusCode:404})
+ const rollbackBefore=await prisma.followUpSuggestion.findUniqueOrThrow({where:{id:rollback.id}}),rollbackInput={requestId:randomUUID(),expectedVersion:(await previewFollowUpRestore(data.org,data.actor,rollback.id)).version}
+ await prisma.$executeRawUnsafe(`CREATE FUNCTION synthetic_restore_audit_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.changes ? 'restore' THEN RAISE EXCEPTION 'Synthetic audit rejection'; END IF; RETURN NEW; END $$`)
+ await prisma.$executeRawUnsafe('CREATE TRIGGER synthetic_restore_audit_failure BEFORE INSERT ON "AuditEntry" FOR EACH ROW EXECUTE FUNCTION synthetic_restore_audit_failure()')
+ try{await expect(restoreFollowUp(data.org,data.actor,rollback.id,rollbackInput)).rejects.toMatchObject({code:'FOLLOW_UP_UNAVAILABLE'});expect(await prisma.followUpSuggestion.findUniqueOrThrow({where:{id:rollback.id}})).toEqual(rollbackBefore);expect(await prisma.auditEntry.count({where:{id:rollbackInput.requestId}})).toBe(0)}
+ finally{await prisma.$executeRawUnsafe('DROP TRIGGER synthetic_restore_audit_failure ON "AuditEntry"');await prisma.$executeRawUnsafe('DROP FUNCTION synthetic_restore_audit_failure()')}
+ expect(await prisma.aiUsageDay.count()).toBe(0)
+ console.log('Restore database checks passed: exact concurrent replay, unchanged tasks/drafts/send records, snooze reset, ownership and atomic rollback.')
+},120000)
