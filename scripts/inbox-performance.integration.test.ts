@@ -15,6 +15,7 @@ vi.mock('@/server/db/client',async()=>{
 })
 import {prisma} from '@/server/db/client'
 import {readFollowUpCounts} from '@/server/services/follow-up-counts'
+import {listFollowUpHistory} from '@/server/services/follow-up-history'
 import {listFollowUps,reviewFollowUp} from '@/server/services/follow-ups'
 const report:{size:number;scenario:string;medianMs:number;p95Ms:number;sqlMs:number;queries:number;taskRows:number;returned:number;plan?:unknown}[]=[]
 const stamp=new Date(),sampleBody='Synthetic business conversation. '.repeat(60)
@@ -117,6 +118,10 @@ it('restores dismissed reviews atomically with exact replay, task/draft retentio
  expect(await prisma.followUpSuggestion.findUniqueOrThrow({where:{id:email.id}})).toEqual({...before,status:'PENDING',updatedAt:expect.any(Date)})
  expect(await prisma.followUpSnooze.findUniqueOrThrow({where:{organizationId_userId_followUpId:{organizationId:data.org,userId:data.actor,followUpId:email.id}}})).toMatchObject({until:null,revision:2,timeZone:'Asia/Manila'})
  expect((await readFollowUpRestore(data.org,data.actor,email.id,input.requestId)).state).toBe('confirmed')
+ const audit=await prisma.auditEntry.findUniqueOrThrow({where:{id:input.requestId}}),history=await listFollowUpHistory(data.org,data.actor,email.id,{})
+ expect(history.data.entries).toEqual([{id:input.requestId,kind:'restored',actor:'You',occurredAt:audit.createdAt.toISOString(),until:null,timeZone:null}])
+ expect(JSON.stringify(history)).not.toMatch(/inputHash|version|taskId|restoredAt|sourceText|draftBody/)
+
  const callbackInput={requestId:randomUUID(),expectedVersion:(await previewFollowUpRestore(data.org,data.actor,callback.id)).version}
  await restoreFollowUp(data.org,data.actor,callback.id,callbackInput)
  expect(await prisma.task.findUniqueOrThrow({where:{id:linked.id}})).toEqual(linked)
@@ -125,6 +130,9 @@ it('restores dismissed reviews atomically with exact replay, task/draft retentio
  const approved=await reviewFollowUp(data.org,data.actor,email.id,{action:'approve',title:'Create one reviewed task'})
  expect(approved.taskId).toBeTruthy();expect((await reviewFollowUp(data.org,data.actor,email.id,{action:'approve',title:'Create one reviewed task'})).taskId).toBe(approved.taskId)
  expect(await prisma.task.count({where:{organizationId:data.org}})).toBe(taskCount+1)
+ const laterHistory=await listFollowUpHistory(data.org,data.actor,email.id,{})
+ expect(laterHistory.data.current.state).toBe('approved');expect(laterHistory.data.entries.filter(entry=>entry.kind==='restored')).toEqual(history.data.entries)
+
  await expect(restoreFollowUp(data.org,data.actor,email.id,{...input,requestId:randomUUID()})).rejects.toMatchObject({statusCode:409})
  await expect(readFollowUpRestore(data.org,data.other,email.id,input.requestId)).rejects.toBeDefined()
  await prisma.followUpSuggestion.update({where:{id:callback.id},data:{status:'DISMISSED'}});await prisma.task.update({where:{id:linked.id},data:{assigneeId:data.other}})

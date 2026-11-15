@@ -33,3 +33,16 @@ it('rechecks ownership and permissions after the audit read before disclosing re
 it('rejects a source or personal snooze revision that changes during an audit read',async()=>{
  m.db.auditEntry.findMany.mockImplementation(async()=>{m.db.followUpSuggestion.findFirst.mockResolvedValue({...row,status:'DISMISSED'});return []});await expect(listFollowUpHistory('org','actor',id,{})).rejects.toMatchObject({statusCode:409});m.db.followUpSuggestion.findFirst.mockResolvedValue(row);m.db.auditEntry.findMany.mockImplementation(async()=>{m.db.followUpSnooze.findUnique.mockResolvedValue({until:new Date('2026-11-06T01:00:00Z'),timeZone:'Asia/Manila',revision:1});return []});await expect(listFollowUpHistory('org','actor',id,{})).rejects.toMatchObject({statusCode:409})
 })
+
+const restoreProof={restore:{inputHash:'a'.repeat(64),version:'b'.repeat(64),taskId:'private-linked-task',restoredAt:'2026-10-01T01:00:00.000Z'}}
+it('projects a restored action using audit time while keeping proof and linked task details private',async()=>{
+ const entry=audit(1,'FollowUpSuggestion',{...restoreProof,private:'secret-body'});m.db.auditEntry.findMany.mockResolvedValue([entry]);m.db.user.findUnique.mockResolvedValue(user(false));const result=await listFollowUpHistory('org','actor',id,{})
+ expect(result.data.entries).toEqual([{id:entry.id,kind:'restored',actor:'You',occurredAt:entry.createdAt.toISOString(),until:null,timeZone:null}]);expect(result.canWrite).toBe(false);expect(result.data.current.state).toBe('pending');expect(JSON.stringify(result)).not.toMatch(/private|secret|inputHash|version|taskId|restoredAt|organizationId|userId/);expect(m.db.auditEntry.findMany.mock.lastCall?.[0].where).toMatchObject({organizationId:'org',userId:'actor',entityId:id,entityType:{in:['FollowUpSuggestion','FollowUpSnooze']}})
+})
+it('does not invent a restoration or wake from incomplete legacy or wrong-entity records',async()=>{
+ const malformed=[{restore:{}},{restore:{...restoreProof.restore,inputHash:'bad'}},{restore:{...restoreProof.restore,version:'bad'}},{restore:{...restoreProof.restore,taskId:''}},{restore:{...restoreProof.restore,restoredAt:'invalid'}},{restore:{inputHash:'a'.repeat(64),version:'b'.repeat(64),restoredAt:now.toISOString()}},{status:'PENDING'}]
+ m.db.auditEntry.findMany.mockResolvedValue([...malformed.map((value,i)=>audit(i+1,'FollowUpSuggestion',value)),audit(19,'FollowUpSnooze',restoreProof),audit(20,'Lead',restoreProof)]);expect((await listFollowUpHistory('org','actor',id,{})).data.entries).toEqual([])
+})
+it('keeps restored history distinct from later current-state changes and bounded scanned pagination',async()=>{
+ m.db.followUpSuggestion.findFirst.mockResolvedValue({...row,status:'DISMISSED'});m.db.auditEntry.findMany.mockResolvedValue(Array.from({length:21},(_,n)=>audit(n+1,'FollowUpSuggestion',restoreProof)));const result=await listFollowUpHistory('org','actor',id,{page:2});expect(result.data.current.state).toBe('dismissed');expect(result.data.entries).toHaveLength(20);expect(result.data.entries.every(entry=>entry.kind==='restored'&&entry.until===null&&entry.timeZone===null)).toBe(true);expect(result.data.hasMore).toBe(true);expect(m.db.auditEntry.findMany.mock.lastCall?.[0]).toMatchObject({skip:20,take:21})
+})
