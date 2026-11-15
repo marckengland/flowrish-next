@@ -51,6 +51,7 @@ export function FollowUpBulkSendStatus(props: Props) {
   const contextChanged = identity.current.organizationId !== props.context.organizationId || identity.current.userId !== props.context.userId
   const [phase, setPhase] = useState<'select' | 'review' | 'running' | 'results' | 'revoked'>('select')
   const [targets, setTargets] = useState<Target[]>([]), [results, setResults] = useState<Result[]>([])
+  const [remainingReview, setRemainingReview] = useState(false)
   const [offline, setOffline] = useState(false), [notice, setNotice] = useState('')
   const alive = useRef(true), sequence = useRef(0), running = useRef(false), request = useRef<AbortController | null>(null)
 
@@ -84,20 +85,26 @@ export function FollowUpBulkSendStatus(props: Props) {
   const eligible = props.items.filter(canCheckSendStatus)
   const selected = props.selectedIds.map(id => eligible.find(row => row.id === id))
   const valid = selected.length > 0 && selected.length <= BULK_SEND_STATUS_LIMIT && selected.every(Boolean) && new Set(props.selectedIds).size === selected.length
+  const remaining = targets.filter(target => !results.some(row => row.id === target.id && row.state === 'ready'))
+  const completed = targets.length - remaining.length
+  const reviewTargets = remainingReview ? remaining : targets
   function review() {
     if (!valid || running.current || latest.current.disabled || latest.current.otherBusy || !navigator.onLine) return
     const reviewed = selected.map(row => ({ id: row!.id, name: `${row!.lead.firstName} ${row!.lead.lastName}`.trim() }))
-    setTargets(reviewed); setResults([]); setNotice(''); setPhase('review'); props.onHold(reviewed.map(row => row.id))
+    setTargets(reviewed); setResults([]); setRemainingReview(false); setNotice(''); setPhase('review'); props.onHold(reviewed.map(row => row.id))
   }
   function clear() {
     if (running.current) return
-    setTargets([]); setResults([]); setNotice(''); setPhase('select'); props.onHold([])
+    setTargets([]); setResults([]); setRemainingReview(false); setNotice(''); setPhase('select'); props.onHold([])
   }
   async function check() {
-    if (running.current || phase !== 'review' || props.disabled || props.otherBusy || !navigator.onLine || !targets.length) return
-    const current = ++sequence.current, context = { ...props.context }, reviewed = [...targets]
+    if (running.current || phase !== 'review' || props.disabled || props.otherBusy || !navigator.onLine || !reviewTargets.length) return
+    const current = ++sequence.current, context = { ...props.context }, reviewed = [...reviewTargets]
     const active = () => alive.current && sequence.current === current && !latest.current.disabled && latest.current.context.organizationId === context.organizationId && latest.current.context.userId === context.userId
-    running.current = true; setPhase('running'); setNotice(''); setResults(reviewed.map(row => ({ id: row.id, state: 'not-checked' }))); props.onBusyChange(true)
+    running.current = true; setPhase('running'); setNotice(''); setResults(currentResults => targets.map(target => {
+      const previous = currentResults.find(row => row.id === target.id)
+      return remainingReview && previous?.state === 'ready' ? previous : { id: target.id, state: 'not-checked' }
+    })); props.onBusyChange(true)
     try {
       for (const target of reviewed) {
         if (!active()) return
@@ -127,7 +134,7 @@ export function FollowUpBulkSendStatus(props: Props) {
     <p className="text-xs text-muted-foreground">Select up to 20 email follow-ups. These checks never send email or clear your draft.</p>
     {offline && <p role="status">Offline. Connect and review again to check statuses.</p>}
     {phase === 'select' && <><div className="max-h-64 space-y-1 overflow-y-auto">{eligible.map(item => <label key={item.id} className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={props.selectedIds.includes(item.id)} disabled={props.disabled || props.otherBusy || !props.selectedIds.includes(item.id) && props.selectedIds.length >= BULK_SEND_STATUS_LIMIT} onChange={event => props.onSelectionChange(event.target.checked ? [...props.selectedIds, item.id] : props.selectedIds.filter(id => id !== item.id))} />Check {`${item.lead.firstName} ${item.lead.lastName}`.trim()}</label>)}</div><Button type="button" disabled={!valid || props.disabled || props.otherBusy || offline} onClick={review}>Review selected checks</Button></>}
-    {phase === 'review' && <div role="group" aria-label="Send status review" className="space-y-3"><p>Review {targets.length} status {targets.length === 1 ? 'check' : 'checks'}. No email will be sent.</p><ul className="space-y-1 text-sm">{targets.map(row => <li key={row.id}>{row.name}</li>)}</ul><div className="flex flex-wrap gap-3"><Button type="button" disabled={props.disabled || props.otherBusy || offline} onClick={() => void check()}>Check reviewed statuses</Button><Button type="button" variant="outline" onClick={clear}>Cancel review</Button></div></div>}
-    {(phase === 'running' || phase === 'results') && <div className="space-y-3"><ul aria-label="Send status results" className="space-y-2 text-sm">{targets.map(target => <li key={target.id} className="flex flex-wrap justify-between gap-2"><span>{target.name}</span><span role="status">{resultLabel(results.find(row => row.id === target.id) ?? { id: target.id, state: 'not-checked' })}</span></li>)}</ul>{notice && <p role="status" className="text-sm">{notice}</p>}{phase === 'running' ? <Button type="button" variant="outline" onClick={stop}>Stop checks</Button> : <div className="flex flex-wrap gap-3"><Button type="button" disabled={props.disabled || props.otherBusy || offline} onClick={() => { setPhase('review'); setNotice('') }}>Review checks again</Button><Button type="button" variant="outline" onClick={clear}>Clear check results</Button></div>}</div>}
+    {phase === 'review' && <div role="group" aria-label={remainingReview ? 'Remaining send status review' : 'Send status review'} className="space-y-3"><p>Review {reviewTargets.length} {remainingReview ? 'remaining status' : 'status'} {reviewTargets.length === 1 ? 'check' : 'checks'}. No email will be sent.</p><ul className="space-y-1 text-sm">{reviewTargets.map(row => <li key={row.id}>{row.name}</li>)}</ul><div className="flex flex-wrap gap-3"><Button type="button" disabled={props.disabled || props.otherBusy || offline} onClick={() => void check()}>{remainingReview ? 'Check remaining statuses' : 'Check reviewed statuses'}</Button><Button type="button" variant="outline" onClick={() => { if (remainingReview) { setRemainingReview(false); setPhase('results') } else clear() }}>{remainingReview ? 'Cancel remaining review' : 'Cancel review'}</Button></div></div>}
+    {results.length > 0 && <div className="space-y-3"><p role="status" className="text-sm">{completed} of {targets.length} checks completed · {remaining.length} remaining.</p><ul aria-label="Send status results" className="space-y-2 text-sm">{targets.map(target => <li key={target.id} className="flex flex-wrap justify-between gap-2"><span>{target.name}</span><span role="status">{resultLabel(results.find(row => row.id === target.id) ?? { id: target.id, state: 'not-checked' })}</span></li>)}</ul>{notice && <p role="status" className="text-sm">{notice}</p>}{phase === 'running' && <Button type="button" variant="outline" onClick={stop}>Stop checks</Button>}{phase === 'results' && <div className="flex flex-wrap gap-3">{remaining.length > 0 && <Button type="button" disabled={props.disabled || props.otherBusy || offline} onClick={() => { setRemainingReview(true); setPhase('review'); setNotice('') }}>Review remaining status checks</Button>}<Button type="button" variant="outline" disabled={props.disabled || props.otherBusy || offline} onClick={() => { setRemainingReview(false); setPhase('review'); setNotice('') }}>Review checks again</Button><Button type="button" variant="outline" onClick={clear}>Clear check results</Button></div>}</div>}
   </section>
 }
