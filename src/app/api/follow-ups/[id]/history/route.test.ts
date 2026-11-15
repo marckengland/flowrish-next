@@ -18,3 +18,6 @@ it('rejects missing or stale captured identities before the history service exec
 it('does not leak internal audit diagnostics on failure',async()=>{
  m.history.mockRejectedValue(new Error('Private audit JSON and database diagnostic'));const result=await GET(new Request('https://flowrish.example.invalid/api/follow-ups/followup/history',{headers:followUpHeaders(scope)}),params);expect(result.status).toBe(503);expect(JSON.stringify(await result.json())).not.toContain('Private audit');expect(result.headers.get('cache-control')).toContain('no-store')
 })
+it('forwards the selected action and matching page through the scoped read-only route',async()=>{
+ const result=await GET(new Request('https://flowrish.example.invalid/api/follow-ups/followup/history?page=2&kind=restored',{headers:followUpHeaders(scope)}),params);expect(result.status).toBe(200);expect(result.headers.get('cache-control')).toContain('no-store');expect(m.history).toHaveBeenCalledWith('org','actor','followup',{page:'2',kind:'restored'});expect(m.permission).toHaveBeenCalledExactlyOnceWith({id:'actor'},'leads:read')
+})

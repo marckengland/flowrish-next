@@ -46,3 +46,21 @@ it('does not invent a restoration or wake from incomplete legacy or wrong-entity
 it('keeps restored history distinct from later current-state changes and bounded scanned pagination',async()=>{
  m.db.followUpSuggestion.findFirst.mockResolvedValue({...row,status:'DISMISSED'});m.db.auditEntry.findMany.mockResolvedValue(Array.from({length:21},(_,n)=>audit(n+1,'FollowUpSuggestion',restoreProof)));const result=await listFollowUpHistory('org','actor',id,{page:2});expect(result.data.current.state).toBe('dismissed');expect(result.data.entries).toHaveLength(20);expect(result.data.entries.every(entry=>entry.kind==='restored'&&entry.until===null&&entry.timeZone===null)).toBe(true);expect(result.data.hasMore).toBe(true);expect(m.db.auditEntry.findMany.mock.lastCall?.[0]).toMatchObject({skip:20,take:21})
 })
+
+it.each([
+ ['approved','FollowUpSuggestion',['status'],'APPROVED'],
+ ['dismissed','FollowUpSuggestion',['status'],'DISMISSED'],
+ ['snoozed','FollowUpSnooze',['action'],'snooze'],
+ ['woke','FollowUpSnooze',['action'],'wake'],
+ ['restored','FollowUpSuggestion',['restore','inputHash'],null],
+])('filters %s in the database before pagination with a scoped receipt',async(kind,entityType,path,value)=>{
+ const result=await listFollowUpHistory('org','actor',id,{kind,page:3})
+ expect(result.data).toMatchObject({kind,page:3,entries:[],hasMore:false})
+ expect(m.db.auditEntry.findMany).toHaveBeenCalledWith({where:{organizationId:'org',userId:'actor',entityId:id,action:'UPDATE',entityType:{in:['FollowUpSuggestion','FollowUpSnooze']},AND:{entityType,changes:{path,...(kind==='restored'?{string_starts_with:''}:{equals:value})}}},orderBy:[{createdAt:'desc'},{id:'desc'}],skip:40,take:21,select:{id:true,entityType:true,changes:true,createdAt:true}})
+ expect(m.db.followUpSuggestion.findFirst).toHaveBeenCalledTimes(2)
+})
+it('retains projection validation and restore precedence without exposing wrong-kind or malformed candidates',async()=>{
+ m.db.auditEntry.findMany.mockResolvedValue([audit(1,'FollowUpSuggestion',{...restoreProof,status:'APPROVED'}),audit(2,'FollowUpSuggestion',{status:'APPROVED'}),audit(3,'FollowUpSuggestion',{restore:{inputHash:'bad'}})])
+ const result=await listFollowUpHistory('org','actor',id,{kind:'approved'});expect(result.data.entries.map(entry=>entry.kind)).toEqual(['approved']);expect(result.data.current.state).toBe('pending');expect(JSON.stringify(result)).not.toMatch(/inputHash|version|restoredAt|private/)
+ await expect(listFollowUpHistory('org','actor',id,{kind:'unknown'})).rejects.toBeDefined();await expect(listFollowUpHistory('org','actor',id,{kind:''})).rejects.toBeDefined();expect((await listFollowUpHistory('org','actor',id,{})).data).toMatchObject({kind:'all'})
+})

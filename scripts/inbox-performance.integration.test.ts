@@ -145,3 +145,23 @@ it('restores dismissed reviews atomically with exact replay, task/draft retentio
  expect(await prisma.aiUsageDay.count()).toBe(0)
  console.log('Restore database checks passed: exact concurrent replay, unchanged tasks/drafts/send records, snooze reset, ownership and atomic rollback.')
 },120000)
+
+it('filters all saved history before paging without changing work or disclosing other actors',async()=>{
+ const data=await seed(1),id=data.ids[0],at=new Date('2026-11-05T02:00:00Z'),proof={restore:{inputHash:'a'.repeat(64),version:'b'.repeat(64),taskId:null,restoredAt:at.toISOString()}}
+ const make=(n:number,entityType:string,changes:import('@prisma/client').Prisma.InputJsonValue,userId=data.actor)=>({id:randomUUID(),organizationId:data.org,userId,entityId:id,entityType,action:'UPDATE' as const,changes,createdAt:new Date(at.getTime()-n*1000)})
+ const approvals=Array.from({length:45},(_,i)=>make(i,'FollowUpSuggestion',{status:'APPROVED',body:'private-body'})),restored=Array.from({length:25},(_,i)=>make(100+i,'FollowUpSuggestion',proof))
+ const dismissed=make(150,'FollowUpSuggestion',{status:'DISMISSED'}),snoozed=make(151,'FollowUpSnooze',{action:'snooze',until:'2026-11-06T01:00:00.000Z',timeZone:'Asia/Manila'}),woke=make(152,'FollowUpSnooze',{action:'wake',until:null,timeZone:'Asia/Manila'})
+ const hidden=[make(1,'FollowUpSuggestion',proof,data.other),{...make(1,'FollowUpSuggestion',proof),entityId:randomUUID()},{...make(1,'FollowUpSuggestion',proof),entityType:'Lead'}]
+ await prisma.auditEntry.createMany({data:[...approvals,...restored,dismissed,snoozed,woke,...hidden]})
+ const before=await prisma.followUpSuggestion.findUniqueOrThrow({where:{id}}),tasks=await prisma.task.findMany({where:{organizationId:data.org}}),audits=await prisma.auditEntry.count(),send=await prisma.followUpSendAttempt.count(),activity=await prisma.activity.count()
+ const all=await listFollowUpHistory(data.org,data.actor,id,{})
+ expect(all.data.entries.map(entry=>entry.kind)).toEqual(Array(20).fill('approved'));expect(all.data.hasMore).toBe(true)
+ const first=await listFollowUpHistory(data.org,data.actor,id,{kind:'restored'}),second=await listFollowUpHistory(data.org,data.actor,id,{kind:'restored',page:2})
+ expect(first.data.entries.map(entry=>entry.id)).toEqual(restored.slice(0,20).map(row=>row.id));expect(first.data.hasMore).toBe(true);expect(second.data.entries.map(entry=>entry.id)).toEqual(restored.slice(20).map(row=>row.id));expect(second.data.hasMore).toBe(false);expect(first.data.current.state).toBe('pending')
+ const approved=await listFollowUpHistory(data.org,data.actor,id,{kind:'approved',page:3});expect(approved.data.entries.map(entry=>entry.id)).toEqual(approvals.slice(40).map(row=>row.id));expect(approved.data.hasMore).toBe(false)
+ for(const [kind,event] of [['dismissed',dismissed],['snoozed',snoozed],['woke',woke]] as const){const result=await listFollowUpHistory(data.org,data.actor,id,{kind});expect(result.data.entries.map(entry=>entry.id)).toEqual([event.id]);expect(result.data.kind).toBe(kind);expect(result.data.hasMore).toBe(false);expect(JSON.stringify(result)).not.toMatch(/inputHash|version|taskId|restoredAt|private-body|organizationId|userId/)}
+ expect(JSON.stringify(first)).not.toMatch(/inputHash|version|taskId|restoredAt|private-body|organizationId|userId/)
+ await expect(listFollowUpHistory(data.org,data.other,id,{kind:'restored'})).rejects.toBeDefined()
+ expect(await prisma.followUpSuggestion.findUniqueOrThrow({where:{id}})).toEqual(before);expect(await prisma.task.findMany({where:{organizationId:data.org}})).toEqual(tasks);expect(await prisma.auditEntry.count()).toBe(audits);expect(await prisma.followUpSendAttempt.count()).toBe(send);expect(await prisma.activity.count()).toBe(activity);expect(await prisma.aiUsageDay.count()).toBe(0)
+ console.log('History filter database checks passed: older matching events across the full history, deterministic filtered pagination, all five kinds, actor/entity isolation, no mutations or provider calls.')
+},120000)

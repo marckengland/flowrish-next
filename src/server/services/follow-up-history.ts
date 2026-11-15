@@ -1,5 +1,6 @@
 import 'server-only'
 import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db/client'
 import { followUpHistoryData, followUpHistoryQuery, type FollowUpHistoryData } from '@/lib/follow-up-history'
 import { currentFollowUpAccess, followUpChanged, followUpLead, followUpUnavailable, lockFollowUpMember, safeFollowUp } from './follow-up-access'
@@ -22,7 +23,12 @@ export async function listFollowUpHistory(organizationId: string, userId: string
       return { row,access }
     }
     const before = await authorized(), key = { organizationId_userId_followUpId: {organizationId,userId,followUpId:id} }, oldSnooze = await db.followUpSnooze.findUnique({where:key})
-    const scanned = await db.auditEntry.findMany({ where: {organizationId,userId,entityId:id,action:'UPDATE',entityType:{in:['FollowUpSuggestion','FollowUpSnooze']}},orderBy:[{createdAt:'desc'},{id:'desc'}],skip:(input.page-1)*20,take:21,select:{id:true,entityType:true,changes:true,createdAt:true} })
+    const actionFilter: Prisma.AuditEntryWhereInput | undefined = input.kind==='all' ? undefined : input.kind==='restored'
+      ? {entityType:'FollowUpSuggestion',changes:{path:['restore','inputHash'],string_starts_with:''}}
+      : input.kind==='approved'||input.kind==='dismissed'
+        ? {entityType:'FollowUpSuggestion',changes:{path:['status'],equals:input.kind==='approved'?'APPROVED':'DISMISSED'}}
+        : {entityType:'FollowUpSnooze',changes:{path:['action'],equals:input.kind==='snoozed'?'snooze':'wake'}}
+    const scanned = await db.auditEntry.findMany({ where: {organizationId,userId,entityId:id,action:'UPDATE',entityType:{in:['FollowUpSuggestion','FollowUpSnooze']},...(actionFilter?{AND:actionFilter}:{})},orderBy:[{createdAt:'desc'},{id:'desc'}],skip:(input.page-1)*20,take:21,select:{id:true,entityType:true,changes:true,createdAt:true} })
     const final = await authorized(), saved = await db.followUpSnooze.findUnique({where:key})
     if (snoozeView(before.row,oldSnooze).snoozeVersion !== snoozeView(final.row,saved).snoozeVersion) throw followUpChanged()
     const now = await snoozeClock(db), pending = final.row.status==='PENDING', until = pending ? saved?.until ?? null : null
@@ -36,7 +42,7 @@ export async function listFollowUpHistory(organizationId: string, userId: string
       if (reviewed?.success) return [{...base,kind:reviewed.data.status==='APPROVED'?'approved' as const:'dismissed' as const,until:null,timeZone:null}]
       if (snoozed?.success) return [{...base,kind:snoozed.data.action==='snooze'?'snoozed' as const:'woke' as const,until:snoozed.data.until,timeZone:snoozed.data.timeZone}]
       return []
-    })
-    return { data:followUpHistoryData.parse({id,page:input.page,hasMore:scanned.length>20,entries,current:{state,until:until?.toISOString()??null,timeZone:until?saved!.timeZone:null,checkedAt:now.toISOString()}}),canWrite:final.access.canWrite }
+    }).filter(entry=>input.kind==='all'||entry.kind===input.kind)
+    return { data:followUpHistoryData.parse({kind:input.kind,id,page:input.page,hasMore:scanned.length>20,entries,current:{state,until:until?.toISOString()??null,timeZone:until?saved!.timeZone:null,checkedAt:now.toISOString()}}),canWrite:final.access.canWrite }
   },{timeout:20000}))
 }
