@@ -6,18 +6,31 @@ import {followUpData,followUpAccessLost,FollowUpClientError} from '@/lib/follow-
 import {emailSendResult} from '@/lib/email-send-result'
 import {sendStatusLabel,type SendStatusMetadata} from '@/lib/follow-up-send-status'
 export type SendStatusSignal={metadata:SendStatusMetadata;busy:boolean}
-type Props={id:string;initial?:SendStatusMetadata;signal?:SendStatusSignal;context:FollowUpContext;onAccessLost:(cause?:unknown)=>void;onHoldChange?:(hold:boolean)=>void;onChecked?:()=>void}
+type Props={id:string;initial?:SendStatusMetadata;checked?:SendStatusMetadata;signal?:SendStatusSignal;context:FollowUpContext;onAccessLost:(cause?:unknown)=>void;onHoldChange?:(hold:boolean)=>void;onChecked?:()=>void}
 export function FollowUpSendStatusCard(props:Props){
  const latest=useRef(props);latest.current=props
  const [snapshot,setSnapshot]=useState<SendStatusMetadata|undefined>(props.initial),[checking,setChecking]=useState(false),[error,setError]=useState(''),[offline,setOffline]=useState(false)
  const initialState=props.initial?.state,initialUpdatedAt=props.initial?.updatedAt
  const accepted=useRef(props.initial?.state==='CONFIRMED')
+ const seenBatch=useRef<SendStatusMetadata|undefined>(undefined)
  const protectedState=useRef(false),alive=useRef(true),version=useRef(0),request=useRef<AbortController|null>(null)
  useEffect(()=>{if(!protectedState.current&&(!accepted.current||initialState==='CONFIRMED')){accepted.current ||= initialState==='CONFIRMED';setSnapshot(initialState?{state:initialState,updatedAt:initialUpdatedAt??null}:undefined)}},[initialState,initialUpdatedAt])
  useEffect(()=>{
   if(!props.signal)return
   version.current++;request.current?.abort();request.current=null;setChecking(false);protectedState.current=props.signal.busy||['UNKNOWN','CONFIRMED'].includes(props.signal.metadata.state);if(!accepted.current||props.signal.metadata.state==='CONFIRMED')setSnapshot(props.signal.metadata);accepted.current ||= props.signal.metadata.state==='CONFIRMED';setError('');latest.current.onHoldChange?.(!accepted.current&&props.signal.metadata.state==='UNKNOWN'&&!props.signal.busy)
  },[props.signal])
+ useEffect(()=>{
+  const checked=props.checked
+  if(!checked||seenBatch.current===checked)return
+  seenBatch.current=checked
+  if(props.signal?.busy)return
+  if(props.signal?.metadata.state==='UNKNOWN'&&['NONE','FAILED'].includes(checked.state))return
+  version.current++;request.current?.abort();request.current=null;setChecking(false)
+  protectedState.current=true
+  if(!accepted.current||checked.state==='CONFIRMED')setSnapshot(checked)
+  accepted.current ||= checked.state==='CONFIRMED'
+  setError('');latest.current.onHoldChange?.(!accepted.current&&checked.state==='UNKNOWN')
+ },[props.checked,props.signal])
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;request.current?.abort()}},[])
  useEffect(()=>{
   setOffline(!navigator.onLine)

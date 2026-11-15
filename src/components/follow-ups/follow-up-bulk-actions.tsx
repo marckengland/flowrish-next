@@ -1,7 +1,7 @@
 'use client'
 import { useId } from 'react'
-export type FollowUpBulkAction = 'snooze' | 'approve' | 'complete' | 'reschedule'
-const labels: Record<FollowUpBulkAction,string> = { snooze:'Snooze follow-ups', approve:'Approve tasks', complete:'Complete tasks', reschedule:'Reschedule deadlines' }
+export type FollowUpBulkAction = 'snooze' | 'approve' | 'complete' | 'reschedule' | 'check-send-status'
+const labels: Record<FollowUpBulkAction,string> = { snooze:'Snooze follow-ups', approve:'Approve tasks', complete:'Complete tasks', reschedule:'Reschedule deadlines', 'check-send-status':'Check selected send statuses' }
 type Props = { action: FollowUpBulkAction | ''; available: FollowUpBulkAction[]; selectedCount: number; retained: boolean; disabled: boolean; onChange: (action: FollowUpBulkAction | '') => void }
 export function FollowUpBulkActions({ action, available, selectedCount, retained, disabled, onChange }: Props) {
  const id = useId()
