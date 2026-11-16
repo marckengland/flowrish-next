@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { ChatMessage } from '@/components/ai/chat-message'
 import { KnowledgeSources, type KnowledgeReference } from '@/components/ai/knowledge-sources'
 import { cn } from '@/lib/utils'
 import { useLayoutStore } from '@/stores/layout'
@@ -705,7 +706,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
           <div className="leading-tight">
             <p className="text-sm font-semibold">Airish</p>
             <p className="text-[11.5px] text-muted-foreground">
-              Ask anything or request an action
+              Help with your sales work
             </p>
           </div>
         </div>
@@ -756,6 +757,7 @@ export function ChatbotSidebar(): React.JSX.Element | null {
             <Turn
               key={turn.id}
               turn={turn}
+              streaming={sending && turn === turns.at(-1)}
               onConfirm={() => turn.action && executeAction(turn.id, turn.action)}
               onReject={() => rejectAction(turn.id)}
             />
@@ -930,8 +932,8 @@ function EmptyState({
           <Bot className="size-3.5" />
         </span>
         <div className="rounded-xl rounded-tl-[3px] bg-muted px-3 py-2.5 text-[13px] leading-relaxed text-foreground">
-          Hi there — I can pull up records, draft emails, or take actions like
-          creating leads and enrolling in cadences. What do you need?
+          I can compare figures you share, draft emails, and propose CRM changes.
+          What do you need help with?
         </div>
       </div>
       <div className="flex flex-col gap-1.5">
@@ -952,10 +954,12 @@ function EmptyState({
 
 function Turn({
   turn,
+  streaming,
   onConfirm,
   onReject,
 }: {
   turn: ChatTurn
+  streaming: boolean
   onConfirm: () => void
   onReject: () => void
 }): React.JSX.Element {
@@ -988,9 +992,9 @@ function Turn({
         >
           <Bot className="size-3.5" />
         </span>
-        <div className="flex-1 space-y-2">
+        <div className="min-w-0 flex-1 space-y-2">
           <div className="rounded-xl rounded-tl-[3px] bg-muted px-3 py-2.5 text-[13px] text-foreground">
-            <Markdown source={turn.content} />
+            <ChatMessage source={turn.content} streaming={streaming} />
           </div>
           <KnowledgeSources sources={turn.knowledgeSources ?? []} />
           {turn.action && turn.actionStatus === 'pending' && (
@@ -1144,156 +1148,4 @@ function statusFallback(status: NonNullable<ChatTurn['actionStatus']>): string {
     default:
       return 'Executing…'
   }
-}
-
-/**
- * Tiny markdown renderer covering the subset of formatting the assistant
- * realistically returns: headings, paragraphs, bullets, numbered lists,
- * fenced code blocks, inline code, bold, italics, and links. We avoid
- * pulling in `react-markdown` to keep the bundle thin —
- * `dangerouslySetInnerHTML` here only consumes a string we've fully
- * escaped and re-wrapped, so untrusted markup never reaches the DOM.
- */
-function Markdown({ source }: { source: string }): React.JSX.Element {
-  return (
-    <div
-      className="prose prose-sm max-w-none text-[13px] dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-1.5 prose-code:rounded prose-code:bg-background/50 prose-code:px-1"
-      dangerouslySetInnerHTML={{ __html: renderMarkdown(source) }}
-    />
-  )
-}
-
-function escapeHtml(input: string): string {
-  return input
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
-function renderInline(text: string): string {
-  // 1) escape everything, then 2) re-introduce a small allowed subset.
-  const escaped = escapeHtml(text)
-  return escaped
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
-    .replace(
-      /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
-    )
-}
-
-function renderMarkdown(source: string): string {
-  const lines = source.split(/\r?\n/)
-  const out: string[] = []
-  let inUl = false
-  let inOl = false
-  let inCode = false
-  let codeLines: string[] = []
-  let codeLang = ''
-
-  function closeLists(): void {
-    if (inUl) {
-      out.push('</ul>')
-      inUl = false
-    }
-    if (inOl) {
-      out.push('</ol>')
-      inOl = false
-    }
-  }
-
-  let paragraphLines: string[] = []
-  function flushParagraph(): void {
-    if (paragraphLines.length === 0) return
-    out.push(`<p>${renderInline(paragraphLines.join(' '))}</p>`)
-    paragraphLines = []
-  }
-
-  function flushCode(): void {
-    // Code block contents are escaped verbatim — never run through the
-    // inline pass — so markdown-like characters inside code render as
-    // typed and no markup can leak in.
-    const cls = codeLang ? ` class="language-${escapeHtml(codeLang)}"` : ''
-    out.push(
-      `<pre><code${cls}>${escapeHtml(codeLines.join('\n'))}</code></pre>`,
-    )
-    codeLines = []
-    codeLang = ''
-  }
-
-  for (const rawLine of lines) {
-    // Fenced code blocks take precedence over every other construct so
-    // that markdown syntax inside a block is preserved verbatim.
-    const fenceMatch = /^\s*```(.*)$/.exec(rawLine)
-    if (fenceMatch) {
-      if (inCode) {
-        flushCode()
-        inCode = false
-      } else {
-        flushParagraph()
-        closeLists()
-        inCode = true
-        codeLang = fenceMatch[1].trim()
-      }
-      continue
-    }
-    if (inCode) {
-      codeLines.push(rawLine)
-      continue
-    }
-
-    const line = rawLine.trimEnd()
-    if (line.trim() === '') {
-      flushParagraph()
-      closeLists()
-      continue
-    }
-    const headingMatch = /^\s*(#{1,6})\s+(.*)$/.exec(line)
-    if (headingMatch) {
-      flushParagraph()
-      closeLists()
-      const level = headingMatch[1].length
-      out.push(`<h${level}>${renderInline(headingMatch[2])}</h${level}>`)
-      continue
-    }
-    const ulMatch = /^\s*[-*]\s+(.*)$/.exec(line)
-    const olMatch = /^\s*\d+[.)]\s+(.*)$/.exec(line)
-    if (ulMatch) {
-      flushParagraph()
-      if (inOl) {
-        out.push('</ol>')
-        inOl = false
-      }
-      if (!inUl) {
-        out.push('<ul>')
-        inUl = true
-      }
-      out.push(`<li>${renderInline(ulMatch[1])}</li>`)
-      continue
-    }
-    if (olMatch) {
-      flushParagraph()
-      if (inUl) {
-        out.push('</ul>')
-        inUl = false
-      }
-      if (!inOl) {
-        out.push('<ol>')
-        inOl = true
-      }
-      out.push(`<li>${renderInline(olMatch[1])}</li>`)
-      continue
-    }
-    closeLists()
-    paragraphLines.push(line)
-  }
-  flushParagraph()
-  closeLists()
-  // Close an unterminated code fence gracefully (e.g. a streamed reply
-  // that opened ``` but hasn't emitted the closing fence yet).
-  if (inCode) flushCode()
-  return out.join('')
 }

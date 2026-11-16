@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { AIRISH_RESPONSE_STYLE } from '@/lib/ai-answer-format'
 import { WEBSITE_REPLY_INPUT_BYTES, WEBSITE_REPLY_OUTPUT_TOKENS } from '@/lib/website-receptionist'
 import type { EmailConversation } from '@/server/services/email-conversation'
 import { createTenantPrisma } from '@/server/db/middleware'
@@ -277,7 +278,8 @@ async function prepareAiRequest(organizationId: string | undefined, messages: Ar
   const requestedTokens = structuredOutput ? Math.max(maxTokens, 2048) : maxTokens
   const outputTokens = organization ? Math.min(requestedTokens, organization.maxOutputTokens) : requestedTokens
   const body = {
-    model: endpoint.model, messages, temperature, max_tokens: outputTokens,
+    model: endpoint.model, messages,
+    ...(hostname === 'api.openai.com' ? { max_completion_tokens: outputTokens } : { temperature, max_tokens: outputTokens }),
     ...(stream ? { stream: true } : {}),
     ...(structuredOutput ? { response_format: responseFormat, reasoning_effort: 'low' } : {}),
     ...(hostname === 'api.deepseek.com' ? { thinking: { type: 'disabled' }, ...(responseFormat ? { response_format: { type: 'json_object' } } : {}) } : {}),
@@ -551,6 +553,7 @@ const KNOWLEDGE_ANSWER_ROLE = [
   'Use only the supplied references for prices, services, policies, availability and business commitments. If the answer is absent, say you do not know.',
   'Cite business facts with [K1], [K2] matching the supplied references. Never invent sources, prices, or promises.',
   'This is an answer-only pass. You have no tools or action capabilities. Never output an ACTION or NAVIGATE block, propose record mutations, or claim completed CRM actions.',
+  AIRISH_RESPONSE_STYLE,
 ].join('\n')
 
 function actionPlanningHistory(history: ChatHistoryEntry[]) {
@@ -980,6 +983,7 @@ const CHATBOT_ROLE = [
   'YOUR TASK: answer the user\'s sales/CRM question or carry out an app action',
   'they request. Be concise and practical. Use light Markdown (short',
   'paragraphs, bullet lists, bold, inline code) only when it aids clarity.',
+  AIRISH_RESPONSE_STYLE,
 ].join('\n')
 
 const EMAIL_ROLE = [
