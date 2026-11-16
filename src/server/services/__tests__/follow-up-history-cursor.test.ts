@@ -16,3 +16,6 @@ it('binds canonical date windows without changing the no-range legacy cursor',()
  expect(encodeHistoryCursor({...scope,range:null},position)).toBe(legacy);expect(token).not.toBe(legacy);expect(decodeHistoryCursor({...scope,range},token,2)).toEqual(position)
  for(const changed of [null,{...range,from:'2026-10-31'},{...range,timeZone:'UTC'},{...range,start:'2026-11-01T00:00:00.000Z'}])expect(()=>decodeHistoryCursor({...scope,range:changed},token,2)).toThrow(/Refresh/)
 })
+it('separates larger CSV export positions from ordinary history cursor pages',()=>{
+ const position={page:2,through,after},token=encodeHistoryCursor({...scope,exporting:true},position);expect(token).not.toBe(encodeHistoryCursor(scope,position));expect(decodeHistoryCursor({...scope,exporting:true},token,2)).toEqual(position);expect(()=>decodeHistoryCursor(scope,token,2)).toThrow(/Refresh/);expect(()=>decodeHistoryCursor({...scope,exporting:true},encodeHistoryCursor(scope,position),2)).toThrow(/Refresh/)
+})

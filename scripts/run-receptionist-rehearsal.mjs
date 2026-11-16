@@ -132,13 +132,13 @@ try {
     readFileSync(path.join(output, 'results.json'), 'utf8'),
   )
   if (
-    results.stats.expected !== 328 ||
+    results.stats.expected !== 334 ||
     results.stats.unexpected ||
     results.stats.flaky ||
     results.stats.skipped
   )
     throw new Error(
-      'Exactly 328 passing, non-skipped, non-retried browser scenarios are required.',
+      'Exactly 334 passing, non-skipped, non-retried browser scenarios are required.',
     )
   if (readFileSync(log, 'utf8').trim())
     throw new Error(
@@ -158,5 +158,5 @@ try {
 }
 if (!process.exitCode)
   console.log(
-    '328 mocked receptionist browser scenarios passed with no guard violations.',
+    '334 mocked receptionist browser scenarios passed with no guard violations.',
   )

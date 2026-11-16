@@ -91,3 +91,13 @@ it('rejects invalid or unnegotiated date queries before reading private audit da
  for(const raw of [{...dateQuery,to:'2026-10-31'},{...dateQuery,to:'2026-02-30'},{...dateQuery,timeZone:'Invalid/Zone'},{from:dateQuery.from},{...dateQuery,timeZone:'America/Havana',from:'2026-11-01',to:'2026-11-01'}])await expect(listFollowUpHistory('org','actor',id,raw,true,true)).rejects.toMatchObject({statusCode:400})
  await expect(listFollowUpHistory('org','actor',id,dateQuery,true)).rejects.toMatchObject({statusCode:400});await expect(listFollowUpHistory('org','actor',id,dateQuery,false,true)).rejects.toMatchObject({statusCode:400});expect(m.db.auditEntry.findMany).not.toHaveBeenCalled()
 })
+it('exports larger safe batches with isolated cursors, unchanged scope and an explicit remaining-page signal',async()=>{
+ const values=Array.from({length:201},(_,n)=>audit(n+1,'FollowUpSuggestion',{status:'APPROVED',draftBody:'private'}));m.db.auditEntry.findMany.mockResolvedValue(values)
+ const result=await listFollowUpHistory('org','actor',id,{kind:'approved'},true,true,true);expect(result.data).toMatchObject({exportVersion:1,batchSize:200,hasMore:true,range:null});expect(result.data.entries).toHaveLength(200);expect(m.db.auditEntry.findMany.mock.lastCall?.[0]).toMatchObject({where:{organizationId:'org',userId:'actor',entityId:id},take:201});expect(m.db.auditEntry.findMany.mock.lastCall?.[0]).not.toHaveProperty('skip');expect(JSON.stringify(result)).not.toMatch(/draftBody|private|inputHash/)
+ await expect(listFollowUpHistory('org','actor',id,{kind:'approved',page:2,cursor:result.data.paging!.nextCursor},true,true)).rejects.toMatchObject({statusCode:409});const last=await listFollowUpHistory('org','actor',id,{page:1},true,true,true);expect(last.data.hasMore).toBe(true);await expect(listFollowUpHistory('org','actor',id,{page:101},true,true,true)).rejects.toMatchObject({statusCode:400})
+ expect((await listFollowUpHistory('org','actor',id,{})).data).not.toHaveProperty('exportVersion')
+})
+
+it('keeps a remaining-page signal at the export bound instead of silently returning a truncated file',async()=>{
+ const {encodeHistoryCursor}=await import('../follow-up-history-cursor'),values=Array.from({length:201},(_,n)=>audit(n+1,'FollowUpSuggestion',{status:'APPROVED'})),cursor=encodeHistoryCursor({organizationId:'org',userId:'actor',id,kind:'all',range:null,exporting:true},{page:100,through:values[0],after:values[19]});m.db.auditEntry.findMany.mockResolvedValue(values);const result=await listFollowUpHistory('org','actor',id,{page:100,cursor},true,true,true);expect(result.data.hasMore).toBe(true);expect(result.data.paging!.nextCursor).toBeTruthy();expect(result.data.entries).toHaveLength(200)
+})

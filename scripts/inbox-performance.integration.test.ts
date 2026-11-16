@@ -211,3 +211,30 @@ it('filters complete local calendar dates before stable history paging without c
  expect(await prisma.followUpSuggestion.findMany({where:{organizationId:data.org},orderBy:{id:'asc'}})).toEqual(before);expect(await prisma.task.findMany({where:{organizationId:data.org},orderBy:{id:'asc'}})).toEqual(tasks);expect(await prisma.auditEntry.count()).toBe(auditCount+1);expect(await prisma.followUpSendAttempt.count()).toBe(send);expect(await prisma.activity.count()).toBe(activity);expect(await prisma.aiUsageDay.count()).toBe(0)
  console.log('History date database checks passed: full-history calendar filtering, inclusive local boundaries, 23/25-hour days, stable pages, date/timezone cursor isolation and unchanged work.')
 },120000)
+
+it('exports every authorized filtered history batch without changing work and rechecks access before completion',async()=>{
+ const {buildHistoryCsv}=await import('@/lib/follow-up-history-export'),data=await seed(1),id=data.ids[0],from='2026-11-05',to=from,timeZone='Asia/Manila',start=new Date('2026-11-04T16:00:00.000Z'),end=new Date('2026-11-05T16:00:00.000Z')
+ const make=(createdAt:Date,changes:import('@prisma/client').Prisma.InputJsonValue={status:'APPROVED'},userId=data.actor,entityId=id)=>({id:randomUUID(),organizationId:data.org,userId,entityId,entityType:'FollowUpSuggestion',action:'UPDATE' as const,changes,createdAt})
+ const inside=Array.from({length:425},(_,i)=>make(new Date(i===424?end.getTime()-1:start.getTime()+i*60000),{status:'APPROVED',draftBody:'private synthetic export draft'})).sort((a,b)=>b.createdAt.getTime()-a.createdAt.getTime()||(a.id<b.id?1:-1))
+ const malformed=Array.from({length:15},(_,i)=>make(new Date(start.getTime()+i*60000+1),{status:'PENDING'})),newer=Array.from({length:45},(_,i)=>make(new Date(end.getTime()+i*1000)))
+ const controls=[make(new Date(start.getTime()-1)),make(end),make(start,{status:'APPROVED'},data.other),make(start,{status:'APPROVED'},data.actor,randomUUID())]
+ await prisma.auditEntry.createMany({data:[...inside,...malformed,...newer,...controls]})
+ const before=await prisma.followUpSuggestion.findMany({where:{organizationId:data.org},orderBy:{id:'asc'}}),tasks=await prisma.task.findMany({where:{organizationId:data.org},orderBy:{id:'asc'}}),auditCount=await prisma.auditEntry.count(),send=await prisma.followUpSendAttempt.count(),activity=await prisma.activity.count(),query={from,to,timeZone}
+ const ui=await listFollowUpHistory(data.org,data.actor,id,query,true,true),first=await listFollowUpHistory(data.org,data.actor,id,query,true,true,true)
+ expect(ui.data.entries).toHaveLength(20);expect(ui.data).not.toHaveProperty('exportVersion');expect(first.data).toMatchObject({exportVersion:1,batchSize:200,range:{from,to,timeZone,start:start.toISOString(),end:end.toISOString()}})
+ await expect(listFollowUpHistory(data.org,data.actor,id,{...query,cursor:ui.data.paging!.cursor},true,true,true)).rejects.toMatchObject({statusCode:409})
+ await expect(listFollowUpHistory(data.org,data.actor,id,{...query,cursor:first.data.paging!.cursor},true,true)).rejects.toMatchObject({statusCode:409})
+ const entries=[...first.data.entries];let current=first,page=1
+ while(current.data.hasMore){current=await listFollowUpHistory(data.org,data.actor,id,{...query,page:++page,cursor:current.data.paging!.nextCursor},true,true,true);expect(current.data.entries.length).toBeLessThanOrEqual(200);entries.push(...current.data.entries);expect(page).toBeLessThanOrEqual(3)}
+ expect(page).toBe(3);expect(entries.map(row=>row.id)).toEqual(inside.map(row=>row.id));expect(new Set(entries.map(row=>row.id)).size).toBe(425)
+ const final=await listFollowUpHistory(data.org,data.actor,id,{...query,cursor:first.data.paging!.cursor},true,true,true)
+ expect(final.data.entries).toEqual(first.data.entries);expect(final.data.paging!.nextCursor).toBe(first.data.paging!.nextCursor)
+ const csv=buildHistoryCsv(entries,{kind:'all',range:first.data.range!,displayTimeZone:timeZone},first.data.current.checkedAt,final.data.current.checkedAt)
+ expect(csv.split('\r\n').filter(row=>row.startsWith('"Action",'))).toHaveLength(425);expect(csv).toContain('2026-11-05 00:00:00.000');expect(csv).toContain('2026-11-05T15:59:59.999Z');expect(csv).not.toMatch(/private synthetic|draftBody|userId|organizationId|sourceText|inputHash/);expect(JSON.stringify(first)).not.toMatch(/private synthetic|draftBody|userId|organizationId|sourceText|inputHash/)
+ for(const control of controls)expect(csv).not.toContain(control.id)
+ const approved=await listFollowUpHistory(data.org,data.actor,id,{...query,kind:'approved'},true,true,true);expect(approved.data.entries).toHaveLength(200);expect(approved.data.entries.every(row=>row.kind==='approved')).toBe(true)
+ expect(await prisma.followUpSuggestion.findMany({where:{organizationId:data.org},orderBy:{id:'asc'}})).toEqual(before);expect(await prisma.task.findMany({where:{organizationId:data.org},orderBy:{id:'asc'}})).toEqual(tasks);expect(await prisma.auditEntry.count()).toBe(auditCount);expect(await prisma.followUpSendAttempt.count()).toBe(send);expect(await prisma.activity.count()).toBe(activity);expect(await prisma.aiUsageDay.count()).toBe(0)
+ await prisma.followUpSuggestion.update({where:{id},data:{assigneeId:data.other}})
+ await expect(listFollowUpHistory(data.org,data.actor,id,{...query,cursor:first.data.paging!.cursor},true,true,true)).rejects.toMatchObject({statusCode:404})
+ console.log('CSV export database checks passed: full filtered history, malformed-row progress, purpose-bound cursors, safe CSV, unchanged tasks/drafts/send records and final access denial.')
+},120000)

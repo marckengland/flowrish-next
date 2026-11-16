@@ -1,5 +1,6 @@
 'use client'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import {FollowUpHistoryExport} from './follow-up-history-export'
 import { Button } from '@/components/ui/button'
 import { followUpHeaders, type FollowUpContext } from '@/lib/follow-up-access'
 import { followUpAccessLost, followUpData } from '@/lib/follow-up-client'
@@ -73,6 +74,7 @@ function History({id,context,revision,onAccessLost}:Props) {
         <p className="break-words text-xs text-muted-foreground">{zone?`Dates use ${range?.timeZone??zone}, including both selected dates.`:'Timezone unavailable. Reload to use date filters.'}</p><p className="break-words text-xs text-muted-foreground">Applied date range: {range?`${range.from} – ${range.to} · ${range.timeZone}`:'All dates'}</p>
         {dateError&&<p role="alert" className="text-sm text-destructive">{dateError}</p>}
       </fieldset>
+      <FollowUpHistoryExport id={id} context={context} kind={kind} range={range} displayTimeZone={range?.timeZone??zone} revision={revision} disabled={blocked.current} onAccessLost={onAccessLost}/>
       {busy&&<p role="status" className="text-sm">Loading activity…</p>}{error&&<div><p role="alert" className="text-sm text-destructive">{error}</p><Button type="button" variant="outline" disabled={busy||blocked.current} onClick={()=>void load(lastAttempt.current)}>Retry activity</Button></div>}
       {data&&<><div className="space-y-1 text-sm"><p>{explanation}</p>{data.current.until&&<p>Snooze time: <time dateTime={data.current.until}>{dateLabel(data.current.until,data.current.timeZone)}</time> · {data.current.timeZone}</p>}<p className="text-xs text-muted-foreground">Checked <time dateTime={data.current.checkedAt}>{dateLabel(data.current.checkedAt,range?.timeZone)}</time></p></div>
         {data.entries.length?<ol aria-label="Recorded actions" className="divide-y">{data.entries.map(entry=><li key={entry.id} className="space-y-1 py-3 text-sm"><p><span className="font-medium">{entry.actor}</span> · <span>{followUpHistoryAction(entry.kind)}</span></p><time dateTime={entry.occurredAt} className="block text-xs text-muted-foreground">{dateLabel(entry.occurredAt,range?.timeZone)}</time>{entry.until&&<p className="break-words text-xs">Until <time dateTime={entry.until}>{dateLabel(entry.until,entry.timeZone)}</time> · {entry.timeZone}</p>}</li>)}</ol>:<p className="text-sm text-muted-foreground">No recorded actions on this page.</p>}

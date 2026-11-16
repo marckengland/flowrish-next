@@ -12,3 +12,7 @@ export const followUpHistoryEntry = z.object({ id: z.string().uuid(), kind: z.en
 export const followUpHistoryData = z.object({ range:historyDateRange.nullable().optional(), paging:z.object({cursor:historyCursorToken,nextCursor:historyCursorToken.nullable()}).strict().optional(), kind: followUpHistoryKind.default('all'), id: z.string().min(1).max(128), page: z.number().int().min(1).max(10000), hasMore: z.boolean(), entries: z.array(followUpHistoryEntry).max(20), current: z.object({ state: z.enum(['pending','snoozed','due','approved','dismissed']), until: z.string().datetime().nullable(), timeZone: z.string().min(1).max(100).nullable(), checkedAt: z.string().datetime() }).strict() }).strict()
 export type FollowUpHistoryData = z.infer<typeof followUpHistoryData>
 export const followUpHistoryAction = (kind: z.infer<typeof followUpHistoryEntry>['kind']) => ({ approved: 'Approved follow-up', dismissed: 'Dismissed follow-up', snoozed: 'Snoozed follow-up', woke: 'Woke follow-up', restored: 'Restored to Pending' })[kind]
+
+export const HISTORY_EXPORT_BATCH_SIZE=200
+export const MAX_HISTORY_EXPORT_BATCHES=100
+export const historyExportPageData=followUpHistoryData.extend({exportVersion:z.literal(1),batchSize:z.literal(HISTORY_EXPORT_BATCH_SIZE),entries:z.array(followUpHistoryEntry).max(HISTORY_EXPORT_BATCH_SIZE),range:historyDateRange.nullable(),paging:followUpHistoryData.shape.paging.unwrap()}).strict()
