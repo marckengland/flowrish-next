@@ -6,6 +6,15 @@ const chart = (value: unknown) => '```chart\n' + JSON.stringify(value) + '\n```'
 const sample = { type: 'bar', title: 'Provided pipeline', unit: 'deals', data: [{ label: 'Qualified', value: 12 }, { label: 'Won', value: 4 }] }
 
 describe('Airish answer presentation', () => {
+  it('shows the answer once when source references are displayed separately, retaining history provenance', () => {
+    const source = 'Our team will confirm pricing.\n\nKnowledge sources:\n[K1] Approved guidance (revision 1)'
+    const { rerender } = render(<ChatMessage source={source} hasSourceReferences />)
+    expect(screen.getByText('Our team will confirm pricing.')).toBeVisible()
+    expect(screen.queryByText(/Knowledge sources:/)).toBeNull()
+    rerender(<ChatMessage source={source} />)
+    expect(screen.getByText(/Knowledge sources:/)).toBeVisible()
+    expect(source).toContain('[K1] Approved guidance (revision 1)')
+  })
   it('retains headings, lists, safe links, inline formatting and escaped code', () => {
     const { container } = render(<ChatMessage source={'## Next step\n\n**Call** the `owner`.\n\n- One\n- Two\n\n1. Review\n2. Confirm\n\n[Guide](https://example.com)\n\n```text\n<script>alert(1)</script>\n```'} />)
     expect(screen.getByRole('heading', { name: 'Next step' })).toBeVisible()

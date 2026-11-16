@@ -994,7 +994,7 @@ function Turn({
         </span>
         <div className="min-w-0 flex-1 space-y-2">
           <div className="rounded-xl rounded-tl-[3px] bg-muted px-3 py-2.5 text-[13px] text-foreground">
-            <ChatMessage source={turn.content} streaming={streaming} />
+            <ChatMessage source={turn.content} streaming={streaming} hasSourceReferences={Boolean(turn.knowledgeSources?.length)} />
           </div>
           <KnowledgeSources sources={turn.knowledgeSources ?? []} />
           {turn.action && turn.actionStatus === 'pending' && (

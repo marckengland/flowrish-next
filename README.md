@@ -1,6 +1,8 @@
 # Flowrish CRM — Next.js + Supabase
 
-A modern, multi-tenant CRM built with Next.js 15 (App Router), Supabase Auth, Prisma v6, and deployed to Vercel.
+Flowrish is a CRM with separate workspaces, a follow-up approval inbox, and an AI assistant. It uses Next.js, Supabase Auth, and Prisma. AI and phone providers are optional integrations.
+
+[MIT license](LICENSE) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 ## Tech Stack
 
@@ -19,7 +21,7 @@ A modern, multi-tenant CRM built with Next.js 15 (App Router), Supabase Auth, Pr
 
 ```bash
 # Install dependencies
-npm install
+npm ci
 
 # Set up environment variables
 cp .env.example .env
@@ -28,8 +30,8 @@ cp .env.example .env
 # Generate Prisma client
 npx prisma generate
 
-# Create database tables
-npx prisma migrate dev --name init
+# Apply the existing migrations to your own development database
+npx prisma migrate deploy
 
 # Start development server
 npm run dev
@@ -45,6 +47,12 @@ start.bat
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+Use your own Supabase project and credentials. The Prisma configuration loads `.env` with override enabled; check its target before running any database command. Do not point a development checkout at a production database.
+
+For AI, owners can save an organization-specific provider, API key, model, and usage limits in **Settings → AI provider**. An account with the provider and an available API model are required. Saving settings makes no test request. Receptionist widgets start disabled.
+
+This repository remains `private: true` in npm metadata to prevent accidental npm publication; that flag does not control GitHub visibility. Production promotion scripts are scoped to the maintainer’s repository and deployment. Public forks run validation but skip those production jobs. Configure a separate deployment for your fork; see [open-source readiness](docs/OPEN_SOURCE_READINESS.md).
 
 ## Scripts
 

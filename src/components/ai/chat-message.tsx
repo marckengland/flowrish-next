@@ -1,6 +1,7 @@
 'use client'
 
 import { aiChartSchema } from '@/lib/ai-chart'
+import { KNOWLEDGE_HISTORY_MARKER } from '@/lib/knowledge-history'
 import { ChatChart } from './chat-chart'
 
 /**
@@ -11,9 +12,11 @@ import { ChatChart } from './chat-chart'
  * `dangerouslySetInnerHTML` here only consumes a string we've fully
  * escaped and re-wrapped, so untrusted markup never reaches the DOM.
  */
-export function ChatMessage({ source, streaming = false }: { source: string; streaming?: boolean }): React.JSX.Element {
+export function ChatMessage({ source, streaming = false, hasSourceReferences = false }: { source: string; streaming?: boolean; hasSourceReferences?: boolean }): React.JSX.Element {
+  const footer = source.lastIndexOf(KNOWLEDGE_HISTORY_MARKER)
+  const visible = hasSourceReferences && footer >= 0 ? source.slice(0, footer) : source
   return <div className="min-w-0 space-y-2 text-[13px] leading-relaxed [overflow-wrap:anywhere]">
-    {messageParts(source).map((part, index) => {
+    {messageParts(visible).map((part, index) => {
       if (part.kind === 'markdown') return <div key={index} className="space-y-2 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-background/50 [&_pre]:p-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_a]:underline [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold" dangerouslySetInnerHTML={{ __html: renderMarkdown(part.text) }} />
       if (!part.closed && streaming) return <p key={index} className="text-muted-foreground">Preparing chart…</p>
       let value: unknown

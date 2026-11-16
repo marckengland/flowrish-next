@@ -5,7 +5,7 @@ const id = '11111111-1111-4111-8111-111111111111'
 const chart = { type: 'bar', title: 'Provided pipeline', unit: 'deals', data: [{ label: 'Qualified', value: 12 }, { label: 'Won', value: 4 }] }
 const reply = 'Qualified leads are the largest group. Follow up with them first.\n\n| Stage | Deals |\n| --- | ---: |\n| Qualified | 12 |\n| Won | 4 |\n\n```chart\n' + JSON.stringify(chart) + '\n```'
 const frame = (data: unknown) => `data: ${JSON.stringify(data)}\n\n`
-async function mock(context: BrowserContext, baseURL: string, content = reply, options: { history?: boolean; interrupted?: boolean; action?: boolean } = {}) {
+async function mock(context: BrowserContext, baseURL: string, content = reply, options: { history?: boolean; interrupted?: boolean; action?: boolean; sources?: boolean } = {}) {
   const origin = new URL(baseURL).origin
   const state = { chats: 0, writes: [] as string[], unexpected: [] as string[] }
   await context.route('**/*', async route => {
@@ -16,8 +16,9 @@ async function mock(context: BrowserContext, baseURL: string, content = reply, o
       if ((path === '/api/conversations/latest' || path === `/api/conversations/${id}`) && method === 'GET') { await route.fulfill({ json: { data: options.history ? { id, title: 'Synthetic review', messages: [{ id: 'answer', role: 'assistant', content }] } : null } }); return }
       if (path === '/api/ai/chat' && method === 'POST') {
         state.chats++; expect(request.postDataJSON().message).toContain('provided')
+        const answer = options.sources ? content + '\n\nKnowledge sources:\n[K1] Supplied guide (revision 1)' : content
         const action = options.action ? { type: 'create_task', description: 'Propose a review task', params: { title: 'Review supplied figures' } } : null
-        const body = frame({ type: 'delta', text: content }) + (options.interrupted ? frame({ type: 'error', message: 'Synthetic connection interrupted.' }) : frame({ type: 'done', conversationId: id, message: content, action }))
+        const body = frame({ type: 'delta', text: answer }) + (options.interrupted ? frame({ type: 'error', message: 'Synthetic connection interrupted.' }) : frame({ type: 'done', conversationId: id, message: answer, action, ...(options.sources ? { knowledgeSources: [{ id, title: 'Supplied guide', revision: 1, category: 'FAQ' }] } : {}) }))
         await route.fulfill({ contentType: 'text/event-stream', body }); return
       }
       if (!['GET', 'HEAD'].includes(method)) state.writes.push(path)
@@ -40,9 +41,11 @@ async function ask(page: Page) {
 }
 for (const mobile of [false, true]) test(`airish quality presents useful tables and charts on ${mobile ? 'mobile' : 'desktop'}`, async ({ page, context, baseURL }, info) => {
   await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 })
-  const state = await mock(context, baseURL!); const panel = await open(page); await ask(page)
+  const state = await mock(context, baseURL!, reply, { sources: true }); const panel = await open(page); await ask(page)
   await expect(panel.getByRole('img', { name: 'Provided pipeline', exact: true })).toBeVisible()
   await expect(panel.getByRole('table')).toHaveCount(2)
+  await expect(panel.getByRole('list', { name: 'Knowledge references', exact: true })).toContainText('Supplied guide')
+  await expect(panel.getByText(/Knowledge sources:/)).toHaveCount(0)
   await expect(panel.getByText('Qualified leads are the largest group. Follow up with them first.', { exact: true })).toBeVisible()
   const region = panel.getByRole('region', { name: 'Provided pipeline data', exact: true }); await region.focus(); await expect(region).toBeFocused()
   expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true)

@@ -14,10 +14,14 @@
 ```bash
 git clone <your-repo-url> flowrish-next
 cd flowrish-next
-npm install
+npm ci
 ```
 
-All dependencies (including Tiptap rich text editor packages) are installed automatically via `npm install`. No additional setup is needed for the editor.
+All dependencies (including Tiptap rich text editor packages) are installed automatically via `npm ci`. No additional setup is needed for the editor.
+
+Use your own service accounts and database. The checked-in production release scripts deliberately reject other repositories and deployment targets. Forks must configure their own deployment workflow. Never reuse the hosted Flowrish application’s credentials or database.
+
+For organization AI, configure **Settings → AI provider** after signing in. No deployment-wide AI key is required when an organization key is saved.
 
 ## 2. Environment Variables
 
@@ -100,7 +104,7 @@ npx prisma generate
 ### Create Tables (First Time)
 
 ```bash
-npx prisma migrate dev --name init
+npx prisma migrate deploy
 ```
 
 ### Deploy Migrations (Production)
@@ -111,24 +115,17 @@ npx prisma migrate deploy
 
 ### Migration: Email Thread ID
 
-If you're upgrading from a version without email threading in cadences, run:
+The email-thread migration is already committed. Apply pending migrations to your own database rather than creating another migration:
 
 ```bash
-npx prisma migrate dev --name add_email_thread_id
+npx prisma migrate deploy
 ```
 
 This adds the `emailThreadId` field to the `CadenceEnrollment` model, enabling follow-up emails in cadences to be sent as replies in the same Gmail thread.
 
-### Migration: Rename Permissions (Production)
+### Legacy permission names
 
-If upgrading from the old permission names (`users:manage`, `settings:manage`) to the new names (`admin:users`, `admin:settings`), run this SQL directly against your production database:
-
-```sql
-UPDATE "RolePermission" SET key = 'admin:users' WHERE key = 'users:manage';
-UPDATE "RolePermission" SET key = 'admin:settings' WHERE key = 'settings:manage';
-```
-
-This ensures existing roles retain their permissions after the rename.
+If upgrading an older installation that stored `users:manage` or `settings:manage`, review the required permission-data migration before deploying code that uses `admin:users` and `admin:settings`. Verify role mappings and recovery in an isolated copy first. Do not run ad hoc update statements against production. New installations use the current onboarding roles.
 
 ## 4. Supabase Auth Configuration
 
@@ -271,10 +268,10 @@ Your `DATABASE_URL` is missing `?pgbouncer=true`. Add it.
 Remove `&connection_limit=1` from your `DATABASE_URL` if present.
 
 ### "Authentication failed" error
-Your database password has special characters that aren't URL-encoded. Reset to an alphanumeric password in Supabase.
+Check that the password component in the connection URL is percent-encoded. Keep the existing password strong; do not weaken it to avoid URL encoding.
 
 ### "Table does not exist" error
-You haven't run migrations. Run `npx prisma migrate dev --name init` (local) or `npx prisma migrate deploy` (production).
+Apply the existing migrations to the intended database with `npx prisma migrate deploy`. Check `.env` first; it overrides shell datasource variables.
 
 ### "Query Engine not found" error on Vercel
 The Prisma schema must use `provider = "prisma-client-js"` with `binaryTargets = ["native", "rhel-openssl-3.0.x"]`. Clear Vercel's build cache and redeploy.
@@ -289,7 +286,7 @@ Make sure `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is set in your environment. This is the
 The user has an account but no organization. Complete the onboarding form to create or join an org.
 
 ### Email threading not working in cadences
-Run the migration: `npx prisma migrate dev --name add_email_thread_id`. This adds the `emailThreadId` column to `CadenceEnrollment`.
+Apply the existing migrations with `npx prisma migrate deploy`; do not generate another email-thread migration. Then verify mailbox/thread matching in your own installation.
 
 ### Local `npm run test:e2e` fails at sign-in ("No Supabase auth cookie…")
 The `/auth/confirm` route is returning 500 because env validation failed —

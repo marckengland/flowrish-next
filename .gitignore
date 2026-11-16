@@ -62,3 +62,7 @@ next-env.d.ts
 
 # graphify generated knowledge-graph output (regenerable; embeds local paths)
 /graphify-out
+
+# Local agent state; keep it out of public source and artifacts.
+/.serena/
+/.spec-workflow/

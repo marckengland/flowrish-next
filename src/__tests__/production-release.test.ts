@@ -100,3 +100,15 @@ it('binds native promotion to the dedicated production-only GitHub check', () =>
   expect(workflow).toContain('environment: Production')
   expect(workflow).not.toContain('skip=true')
 })
+
+it('never starts hosted-production jobs in a public fork', () => {
+  const workflow = readFileSync('.github/workflows/ci.yml', 'utf8')
+  for (const job of ['migrate', 'release-ready', 'production-smoke']) {
+    const block = workflow.split(`\n  ${job}:\n`)[1]?.split(/\n  [a-z][a-z-]*:\n/)[0]
+    expect(block).toBeDefined()
+    const condition = block?.split('\n').find(line => line.trim().startsWith('if:'))
+    expect(condition).toContain("github.repository == 'marckengland/flowrish-next'")
+    expect(condition).toContain("github.ref == 'refs/heads/main'")
+    expect(condition).toContain("github.event_name == 'push'")
+  }
+})
