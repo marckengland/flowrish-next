@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {resolveHistoryDateRange} from '@/lib/follow-up-history-dates'
 import { FollowUpHistory } from './follow-up-history'
 const context={organizationId:'org',userId:'actor'},id='11111111-1111-4111-8111-111111111111',at='2026-11-05T02:00:00.000Z'
@@ -72,4 +72,13 @@ it('rejects wrong-date and out-of-window receipts and explicitly retries the sam
 })
 it('aborts an obsolete date selection and ignores its late receipt after applying a newer window',async()=>{
  const {fetcher,lost}=dateSetup();fireEvent.click(screen.getByRole('button',{name:'View activity'}));await screen.findByText('Activity · Page 1');let finish!:(response:Response)=>void;fetcher.mockReturnValueOnce(new Promise(resolve=>{finish=resolve}));fireEvent.change(screen.getByRole('combobox',{name:'Activity date range'}),{target:{value:'last7'}});fireEvent.click(screen.getByRole('button',{name:'Apply date range'}));await screen.findByText('Loading activity…');fireEvent.change(screen.getByRole('combobox',{name:'Activity date range'}),{target:{value:'last30'}});fireEvent.click(screen.getByRole('button',{name:'Apply date range'}));await screen.findByText(/2026-10-17.*2026-11-15.*Asia\/Manila/);expect(fetcher.mock.calls[1][1]?.signal?.aborted).toBe(true);finish(ok({...data,entries:[],range:resolveHistoryDateRange({from:'2026-11-09',to:'2026-11-15',timeZone:'Asia/Manila'})}));await waitFor(()=>expect(screen.getByRole('combobox',{name:'Activity date range'})).toHaveValue('last30'));expect(screen.queryByText(/Applied date range: 2026-11-09/)).toBeNull();expect(fetcher).toHaveBeenCalledTimes(3);expect(lost).not.toHaveBeenCalled()
+})
+
+it('blocks a queued refresh after a read error and restores healthy focus reads only after explicit retry',async()=>{
+ const add=vi.spyOn(window,'addEventListener'),fetcher=vi.fn<typeof fetch>().mockRejectedValueOnce(new Error('Synthetic queued failure')).mockImplementation(async()=>ok()),lost=vi.fn();vi.stubGlobal('fetch',fetcher)
+ render(<FollowUpHistory id={id} context={context} revision="one" onAccessLost={lost}/>);fireEvent.click(screen.getByRole('button',{name:'View activity'}));await screen.findByText('Synthetic queued failure')
+ // A browser event may already be queued when React removes the failed read's effect listener.
+ const queued=add.mock.calls.filter(([type])=>type==='focus').at(-1)?.[1];if(typeof queued!=='function')throw new Error('Expected an installed focus listener')
+ act(()=>queued.call(window,new Event('focus')));expect(fetcher).toHaveBeenCalledOnce();expect(screen.getByRole('button',{name:'Retry activity'})).toBeEnabled()
+ fireEvent.click(screen.getByRole('button',{name:'Retry activity'}));await screen.findByText('Snoozed follow-up');expect(fetcher).toHaveBeenCalledTimes(2);fireEvent.focus(window);await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(3));expect(lost).not.toHaveBeenCalled();expect(fetcher.mock.calls.every(([,init])=>init?.method==='GET')).toBe(true)
 })

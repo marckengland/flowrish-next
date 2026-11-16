@@ -14,7 +14,7 @@ function History({id,context,revision,onAccessLost}:Props) {
   const [open,setOpen]=useState(false),[data,setData]=useState<FollowUpHistoryData|null>(null),[page,setPage]=useState(1),[busy,setBusy]=useState(false),[error,setError]=useState(''),[kind,setKind]=useState<FollowUpHistoryKind>('all')
   const [period,setPeriod]=useState<'all'|'last7'|'last30'|'custom'>('all'),[from,setFrom]=useState(''),[to,setTo]=useState(''),[zone,setZone]=useState(''),[range,setRange]=useState<HistoryDateRange|null>(null),[preset,setPreset]=useState<'last7'|'last30'|null>(null),[dateError,setDateError]=useState('')
   useEffect(()=>{try{setZone(Intl.DateTimeFormat().resolvedOptions().timeZone)}catch{setZone('')}},[])
-  const live=useRef(true),controller=useRef<AbortController|null>(null),blocked=useRef(false)
+  const live=useRef(true),controller=useRef<AbortController|null>(null),blocked=useRef(false),readFailed=useRef(false)
   const positions=useRef(new Map<number,string>()),currentPage=useRef(1),lastAttempt=useRef(1)
   const reset=()=>{positions.current.clear();currentPage.current=1;setPage(1)}
   const cancel=useCallback(()=>{controller.current?.abort();controller.current=null},[])
@@ -22,7 +22,7 @@ function History({id,context,revision,onAccessLost}:Props) {
     if (!live.current || blocked.current) return
     if(restart){positions.current.clear();currentPage.current=1;setPage(1)}
     const cursor=positions.current.get(nextPage);currentPage.current=nextPage;lastAttempt.current=nextPage
-    cancel();const request=new AbortController();controller.current=request;setBusy(true);setData(null);setError('')
+    cancel();const request=new AbortController();controller.current=request;readFailed.current=false;setBusy(true);setData(null);setError('')
     const active=()=>live.current&&!request.signal.aborted&&controller.current===request
     try {
       if(nextPage>1&&!cursor)throw new Error('Unexpected activity response. Refresh to try again.')
@@ -33,14 +33,14 @@ function History({id,context,revision,onAccessLost}:Props) {
     } catch(cause) {
       if (!active()) return
       if (followUpAccessLost(cause)) {blocked.current=true;setData(null);onAccessLost(cause,id);return}
-      setError(cause instanceof Error?cause.message:'Activity is unavailable. Refresh to try again.')
+      readFailed.current=true;setError(cause instanceof Error?cause.message:'Activity is unavailable. Refresh to try again.')
     } finally {if (active()) {controller.current=null;setBusy(false)}}
   },[cancel,id,organizationId,userId,onAccessLost,kind,range])
   useEffect(()=>{live.current=true;return()=>{live.current=false;cancel()}},[cancel])
   useEffect(()=>{if(open) void load(currentPage.current);return cancel},[open,revision,load,cancel])
   useEffect(()=>{
     if (!open || error) return
-    const refresh=()=>{if(document.visibilityState==='visible'&&!controller.current) void load(page)}
+    const refresh=()=>{if(document.visibilityState==='visible'&&!controller.current&&!readFailed.current) void load(page)}
     const timer=window.setInterval(refresh,60000);window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh)
     return()=>{window.clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh)}
   },[open,page,load,error])
