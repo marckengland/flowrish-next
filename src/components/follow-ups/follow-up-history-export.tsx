@@ -34,6 +34,6 @@ function Export(props:Props){
  return <section ref={region} aria-label="Activity CSV export" aria-busy={busy} className="space-y-2 rounded-md border p-2">
   <div className="flex flex-wrap items-center gap-2"><Button type="button" variant="outline" disabled={busy||props.disabled||blocked.current||!props.displayTimeZone} onClick={()=>void start()}>Export activity CSV</Button>{busy&&<Button type="button" variant="outline" onClick={cancel}>Cancel export</Button>}</div>
   <p className="text-xs text-muted-foreground">Exports all matching recorded actions using the applied filters. Your page and edits stay open. Up to 20,000 scanned records per file; narrow the filters for larger histories.</p>
-  {busy&&<p role="status" className="text-sm">{progress.checking?'Rechecking export access…':`Exporting ${progress.actions} actions…`}</p>}{error&&<p role="alert" className="text-sm text-destructive">{error}</p>}{notice&&<p role="status" className="text-sm">{notice}</p>}
+  {busy&&<p role="status" className="text-sm">{progress.checking?'Rechecking export access · ':'Exporting '}{progress.actions} {progress.actions===1?'action':'actions'} · {progress.batches} {progress.batches===1?'batch':'batches'} checked…</p>}{error&&<p role="alert" className="text-sm text-destructive">{error}</p>}{notice&&<p role="status" className="text-sm">{notice}</p>}
  </section>
 }
