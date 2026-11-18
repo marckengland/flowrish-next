@@ -37,7 +37,8 @@ function launch({ version = 'v22.0.0', environment = true, installed = true, fai
     }
     const env = { PATH: `${bin}${path.delimiter}${windows ? path.join(process.env.SystemRoot, 'System32') : '/usr/bin:/bin'}`, STARTUP_TEST_LOG: log, STARTUP_TEST_FAIL: fail }
     for (const key of ['SystemRoot', 'ComSpec', 'PATHEXT', 'TEMP', 'TMP']) if (process.env[key]) env[key] = process.env[key]
-    const result = spawnSync(windows ? process.env.ComSpec : '/bin/bash', windows ? ['/d', '/c', `call "${path.join(fixture, script)}"`] : [path.join(fixture, script)], { cwd: otherDirectory ? directory : fixture, env, encoding: 'utf8', timeout: 15000 })
+    // Match Node's cmd.exe shell invocation; Windows uses different quoting from argv escaping.
+    const result = spawnSync(windows ? process.env.ComSpec : '/bin/bash', windows ? ['/d', '/s', '/c', `"call "${path.join(fixture, script)}""`] : [path.join(fixture, script)], { cwd: otherDirectory ? directory : fixture, env, encoding: 'utf8', timeout: 15000, windowsVerbatimArguments: windows })
     assert.ifError(result.error)
     return { ...result, commands: existsSync(log) ? readFileSync(log, 'utf8').trim().split(/\r?\n/) : [], environmentCreated: existsSync(path.join(fixture, '.env')) }
   } finally { rmSync(directory, { recursive: true, force: true }) }
@@ -46,6 +47,7 @@ function launch({ version = 'v22.0.0', environment = true, installed = true, fai
 for (const version of ['v20.0.0', 'v24.0.0']) test(`rejects unsupported Node ${version} before dependency or database commands`, () => {
   const result = launch({ version })
   assert.notEqual(result.status, 0); assert.deepEqual(result.commands, [])
+  assert.match(result.stderr, /Node\.js 22 is required/)
 })
 test('copies a missing environment template and stops before installing or migrating', () => {
   const result = launch({ environment: false, installed: false })
