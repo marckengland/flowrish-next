@@ -1,46 +1,69 @@
 # Flowrish documentation
 
-Start with the [setup guide](SETUP_GUIDE.md), [contributor guide](../CONTRIBUTING.md), and [testing guide](TESTING.md). Use your own services and development data.
+Choose a guide by what you need to do. The main guides introduce the app; the linked feature guides explain its detailed rules.
 
-## Architecture and integrations
+## Start here
 
-- [Architecture and workspace isolation](ARCHITECTURE.md)
-- [User manual](USER_MANUAL.md)
-- [Email, calling, and migration integrations](INTEGRATIONS.md)
-- [Organization AI providers and usage limits](AI_PROVIDER_SETTINGS.md)
-- [Automatic mailbox synchronization](AUTOMATIC_MAILBOX_SYNC.md)
+| Your goal | Main guide | Read next |
+|-----------|------------|-----------|
+| Understand what Flowrish does | [Project overview](../README.md) | [User guide](USER_MANUAL.md) |
+| Run an installation you control | [Setup](SETUP_GUIDE.md) | [Integrations](INTEGRATIONS.md), [testing](TESTING.md) |
+| Use the CRM | [User guide](USER_MANUAL.md) | The workflow guides below |
+| Understand or change the code | [Architecture](ARCHITECTURE.md) | [Data flows](DATA_FLOWS.md), [contributing](../CONTRIBUTING.md) |
+| Connect mail, AI, or calling | [Integrations](INTEGRATIONS.md) | [AI provider settings](AI_PROVIDER_SETTINGS.md) |
+| Release or recover an installation | [Operations index](ops/README.md) | The runbook for the affected feature |
+
+```mermaid
+flowchart TD
+    overview["Project overview"] --> setup["Setup"]
+    overview --> user["User guide"]
+    overview --> architecture["Architecture"]
+    setup --> integrations["Integrations"]
+    setup --> testing["Testing"]
+    user --> workflows["Detailed workflow guides"]
+    architecture --> flows["Data flows and source links"]
+    testing --> operations["Release and recovery runbooks"]
+```
 
 ## Sales workflows
 
-- [Follow-up approval inbox](FOLLOW_UP_INBOX.md)
-- [Conversation-based email drafts](CONVERSATION_DRAFTS.md)
-- [Saved lead views](SAVED_LEAD_VIEWS.md)
-- [Reviewed bulk lead updates](bulk-lead-updates.md)
-- [Reviewed duplicate merges](safe-lead-merges.md)
-- [Merge-aware reply detection](merge-aware-replies.md)
-- [Do-not-contact controls](contact-preferences.md)
-- [Business switching](workspace-switcher.md)
-- [Follow-up access rules](follow-up-access.md)
-- [Email notifications](email-notifications.md)
+| Topic | Guide |
+|-------|-------|
+| Review incoming replies and callbacks | [Follow-up inbox](FOLLOW_UP_INBOX.md) |
+| Draft a reply from its email conversation | [Conversation drafts](CONVERSATION_DRAFTS.md) |
+| Preserve unsent text and check uncertain delivery | [Saved drafts](ops/saved-compose-drafts.md), [send recovery](ops/send-result-recovery.md) |
+| Save personal lead filters across devices | [Saved lead views](SAVED_LEAD_VIEWS.md) |
+| Review bulk owner or status changes | [Bulk lead updates](bulk-lead-updates.md) |
+| Review and merge duplicate prospects | [Lead merges](safe-lead-merges.md) |
+| Resolve replies involving merged addresses | [Merge-aware replies](merge-aware-replies.md) |
+| Block email outreach to an address | [Do-not-contact controls](contact-preferences.md) |
+| Switch businesses or recover stale access | [Business switching](workspace-switcher.md), [follow-up access](follow-up-access.md) |
+| Review mailbox health and attention alerts | [Mailbox sync](AUTOMATIC_MAILBOX_SYNC.md), [email notifications](email-notifications.md) |
 
-## Receptionist and business knowledge
+## AI and receptionist workflows
 
-- [Business knowledge library](BUSINESS_KNOWLEDGE.md)
-- [Browser preview and microphone testing](RECEPTIONIST_PREVIEW.md)
-- [Website receptionist, callbacks, and calendar rules](WEBSITE_RECEPTIONIST.md)
-- [Optional phone receptionist](AI_RECEPTIONIST.md)
-- [Staff waitlist](STAFF_WAITLIST.md)
-- [Private pilot onboarding](approved-pilot-onboarding.md)
+| Topic | Guide |
+|-------|-------|
+| Chat with Airish and review proposed actions | [Airish](AIRISH.md) |
+| Configure an organization's model, key, and allowance | [AI provider settings](AI_PROVIDER_SETTINGS.md) |
+| Publish services, pricing, and FAQs | [Business knowledge](BUSINESS_KNOWLEDGE.md) |
+| Test saved receptionist settings with typing or dictation | [Browser preview](RECEPTIONIST_PREVIEW.md) |
+| Configure a business website and review callbacks | [Website receptionist](WEBSITE_RECEPTIONIST.md) |
+| Connect an incoming phone number | [Phone receptionist](AI_RECEPTIONIST.md) |
+| Review prospects and private pilot access | [Staff waitlist](STAFF_WAITLIST.md), [pilot onboarding](approved-pilot-onboarding.md) |
 
-Website and phone reception start disabled and require separate activation. Scripted demonstrations and mocked tests do not establish live AI or phone quality.
+Website and phone reception require separate activation. Demo mode is scripted. Browser preview can call the configured AI provider but creates no CRM work. See [which mode to use](USER_MANUAL.md#choose-a-receptionist-test-mode).
 
-## Releases and recovery
+## Contributor and operator references
 
-- [Public source and release policy](OPEN_SOURCE_READINESS.md)
-- [Production deployment gates](ops/production-deployment.md)
-- [Deployment recovery](ops/production-deployment-rollback.md)
-- [Synthetic backup and restore drill](ops/backup-recovery.md)
-- [Security reporting](../SECURITY.md)
-- [Third-party notices](../THIRD_PARTY_NOTICES.md)
+| Topic | Reference |
+|-------|-----------|
+| Development rules and checks | [Contributing](../CONTRIBUTING.md), [repository instructions](../AGENTS.md), [testing](TESTING.md) |
+| Runtime requests, stored data, and approvals | [Architecture](ARCHITECTURE.md), [data flows](DATA_FLOWS.md) |
+| Release gates and feature recovery | [Operations index](ops/README.md) |
+| Public-source boundaries | [Release policy](OPEN_SOURCE_READINESS.md) |
+| Vulnerability reporting and credentials | [Security policy](../SECURITY.md) |
+| Licensing and attribution | [MIT license](../LICENSE), [third-party notices](../THIRD_PARTY_NOTICES.md) |
+| Dated product research | [Receptionist comparison](RECEPTIONIST_COMPETITORS.md); check its research date before relying on vendor claims |
 
-Feature-specific runbooks remain in `docs/ops` and `docs/recovery`. Keep the schema compatibility and duplicate-protection requirements when adapting a recovery procedure. Private plans, personal editor state, and operational evidence belong outside this repository. Public identifiers in deployment guards are not credentials; forks need their own services and release policy.
+Internal specifications, implementation plans, personal editor state, and private operational evidence are kept outside this repository. The public guides describe application behavior, not the configuration or customer data of the hosted installation.

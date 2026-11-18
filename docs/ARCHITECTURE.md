@@ -1,461 +1,151 @@
-# Architecture
+# Flowrish architecture
 
-## Overview
+Flowrish is one Next.js application with server-side CRM services. PostgreSQL stores workspace data; Supabase handles sign-in and attachment storage. Optional integrations provide AI, mailbox access, background jobs, and calling.
 
-Flowrish CRM is a single Next.js 15 application using the App Router pattern. All business logic lives in server-side services, accessed through API route handlers and Server Actions. The frontend uses Server Components for initial data loading and TanStack Query for client-side cache management.
+This guide explains the boundaries. The [data-flow guide](DATA_FLOWS.md) follows individual workflows, and the [setup guide](SETUP_GUIDE.md) explains configuration.
 
-## Multi-Tenancy
+## System overview
 
-Workspace-owned records use organization identifiers and, where applicable, composite foreign keys. User identities are shared across memberships. The current models and constraints are defined in `prisma/schema.prisma`; avoid assuming that a new model is automatically scoped.
+```mermaid
+flowchart LR
+    browser["Browser"]
+    auth["Supabase Auth"]
+    app["Next.js pages and API routes"]
+    services["CRM and integration services"]
+    db[("PostgreSQL")]
+    storage["Supabase Storage"]
+    jobs["Inngest"]
+    redis["Upstash Redis"]
+    providers["Configured AI, mail, and voice providers"]
 
-### Tenant Isolation Middleware
-
-```
-src/server/db/middleware.ts → createTenantPrisma(organizationId)
-```
-
-This creates a Prisma client extension that automatically:
-- **Injects `organizationId`** into all `create` operations
-- **Filters by `organizationId`** on all `find`, `update`, `delete`, `count`, and `aggregate` operations
-
-This extension scopes only the models listed in `TENANT_SCOPED_MODELS`. Services also use explicit organization filters, permission checks, and transaction-bound guards. Direct Prisma queries and raw SQL must enforce the current workspace themselves; the extension is not an authorization boundary for every query.
-
-### Organization ID Resolution
-
-The server validates the Supabase user and loads current organization memberships. A browser selection identifies a requested business, which must still belong to that user. Without a selection, the session uses a retained default membership or the first retained membership. A revoked selection requires workspace recovery rather than silently redirecting a write to another business.
-
-```
-Authenticated user → requested/default retained membership → current organizationId
-```
-
-## Authentication Flow
-
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  Login Page │────▶│ Supabase Auth│────▶│ /auth/callback   │
-│  (Magic/OAuth)    │  (hosted)    │     │ or /auth/confirm │
-└─────────────┘     └──────────────┘     └────────┬────────┘
-                                                   │
-                                          ┌────────▼────────┐
-                                          │ Check User record│
-                                          │ in app database  │
-                                          └────────┬────────┘
-                                                   │
-                                    ┌──────────────┼──────────────┐
-                                    │ New User     │ Existing User │
-                                    ▼              ▼               │
-                           ┌────────────┐  ┌──────────────┐       │
-                           │ Onboarding │  │  Dashboard   │       │
-                           │ (create org │  │  (or onboard │       │
-                           │  or join)   │  │  if no org)  │       │
-                           └────────────┘  └──────────────┘       │
+    browser --> app
+    app --> auth
+    app --> redis
+    app --> services
+    services --> db
+    services --> storage
+    services --> providers
+    services --> jobs
+    jobs --> services
 ```
 
-### Session Structure
+Arrows show calls or data movement, not unrestricted access. Server services check identity, workspace, permissions, and workflow state before returning private data or applying changes. Public receptionist routes use their own session, origin, quota, and consent rules.
 
-```typescript
-interface Session {
-  authUser: SupabaseUser       // From Supabase auth.getUser()
-  dbUser: SessionUser          // App User with team memberships + role permissions
-  organizationId: string       // Current membership validated server-side
-}
+| Part | Responsibility | Source |
+|------|----------------|--------|
+| Pages and API routes | Render screens, validate requests, and call services | [App routes](../src/app/) |
+| Client components | Forms, review controls, streaming replies, and recovery state | [Components](../src/components/) |
+| Session and access | Validate identity, current membership, roles, and record visibility | [Session](../src/server/auth/session.ts), [lead access](../src/server/services/access.ts) |
+| Business services | CRM operations, transactions, integration calls, and receipts | [Services](../src/server/services/) |
+| Database schema | Records, relations, indexes, and constraints | [Prisma schema](../prisma/schema.prisma), [migrations](../prisma/migrations/) |
+| Background functions | Resume durable work and run scheduled checks | [Registration](../src/app/api/inngest/route.ts), [functions](../src/server/inngest/) |
+| Client state | Server-data cache and local interface state | [Hooks](../src/hooks/), [stores](../src/stores/) |
+
+## Identity and workspace access
+
+Supabase identity and application membership are separate. A signed-in person may belong to several businesses. Selecting a business requests a workspace; it does not grant membership.
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant App as Next.js server
+    participant Auth as Supabase Auth
+    participant DB as PostgreSQL
+    Browser->>App: Request with expected workspace
+    App->>Auth: Validate signed-in user
+    Auth-->>App: Identity
+    App->>DB: Load current memberships and roles
+    App->>App: Compare selected workspace and request context
+    alt Missing access or stale workspace
+        App-->>Browser: Sign-in, recovery, or access error
+    else Current access
+        App->>DB: Scoped service query or transaction
+        DB-->>App: Permitted result
+        App-->>Browser: Response and operation receipt when applicable
+    end
 ```
 
-### Edge Cases Handled
+Without a browser selection, the session uses a retained default membership or the first retained membership. Revoked selections require recovery instead of silently redirecting a write to another business. Sensitive workflow routes also compare the captured account and workspace with the current session.
 
-- User authenticated but no org → redirected to `/onboarding`
-- User on `/onboarding` but already has org → redirected to `/`
-- Incomplete onboarding (org exists but no team membership) → auto-repaired in dashboard layout
-- Requests from stale business tabs are rejected when their expected workspace differs from the current session. Membership and permissions are rechecked at sensitive workflow boundaries.
+Permissions come from the union of the user's team-role permissions. Role hierarchy controls lead visibility separately:
 
-## Organization & Team Model
+| Default role | Lead visibility | Permission defaults |
+|--------------|-----------------|---------------------|
+| Owner | All active leads in the workspace | All defined permissions |
+| Admin | All active leads in the workspace | Administrative and CRM permissions, excluding billing management |
+| Manager | Leads assigned to accessible teams and sub-teams | CRM, cadence, and forecast permissions |
+| Member | Their assigned leads | Lead/contact read and write, cadence read, forecast read |
 
-### Creation Flow
+These are defaults, not fixed promises. Administrators can change role permissions, and custom roles use the same permission checks. See the [permission definitions](../src/types/permissions.ts), [permission resolver](../src/server/auth/permissions.ts), and [business-switching guide](workspace-switcher.md).
 
-When a user creates an organization (sequential operations, PgBouncer-compatible):
+## Data isolation and storage
 
-1. **Organization** record is created (name, slug)
-2. **Default "General" team** is created under the org
-3. **4 system roles** are created: OWNER (hierarchy 0), ADMIN (1), MANAGER (2), MEMBER (3)
-4. Each role gets its predefined set of permissions (RolePermission records)
-5. User is added as **OrganizationMember** (isDefault: true)
-6. User is added as **TeamMember** on the General team with the OWNER role
+The Prisma extension injects and filters `organizationId` only for models in its registry. Direct Prisma queries, transactions, and raw SQL still need explicit workspace scoping. Record visibility, current permissions, and version checks belong in the service.
 
-### Invite Flow
+Composite keys and database constraints protect selected cross-record relationships. Row-level security and grants vary by table and migration; server access checks remain necessary. A new model does not become safe merely because it has an organization field.
 
-1. Inviter's privilege is checked (cannot invite with a higher-privilege role)
-2. **OrganizationInvite** is created with 7-day expiration
-3. On acceptance: email match verified, OrganizationMember + TeamMember created
+| Data | Storage | Boundary |
+|------|---------|----------|
+| CRM records and activity | PostgreSQL | Workspace plus current record access |
+| Saved views and follow-up snoozes | PostgreSQL | Workspace and user |
+| Published knowledge and approved snapshots | PostgreSQL and full-text indexes | Workspace, publication state, and public approval |
+| Follow-up compose recovery | Encrypted database records | Workspace, user, source binding, and revision |
+| Attachment bytes | Private Supabase Storage bucket | Authorized upload and signed access |
+| Attachment metadata | PostgreSQL | Workspace and related-record access |
+| Mailbox OAuth tokens | `EmailAccount` | Connected user and workspace |
+| Organization AI and voice credentials | `AiProviderConfig` and `VoiceConfig` | Workspace and administrator access |
 
-### Team Hierarchy
+Mailbox and voice secrets use the existing AES-256-CBC helper. Organization AI keys and saved follow-up drafts use separate AES-256-GCM formats with context binding. They derive from the server's encryption configuration. Do not replace that key casually: retained encrypted rows need their matching key.
 
-Teams support parent-child relationships via `parentTeamId`. A manager of a parent team has access to all sub-teams (recursive BFS traversal).
+Source: [tenant extension](../src/server/db/middleware.ts), [legacy encryption](../src/lib/encryption.ts), [AI-key encryption](../src/server/services/org-ai-secret.ts), and [saved draft storage](ops/saved-compose-drafts.md).
 
-### Transfer Ownership
+## Writes, approvals, and retries
 
-The OWNER can transfer ownership to another org member via `POST /api/admin/members/transfer-ownership`:
-- Only the current OWNER can initiate
-- Target must be an existing org member
-- Current OWNER is downgraded to ADMIN after transfer
-- Target user's role is upgraded to OWNER across all team memberships
+A review shows what an operation is about to change. Confirmation rechecks current permissions, records, and versions; the displayed preview is not continuing authorization.
 
-### Leave Organization
+| Workflow | Confirmation boundary | Recovery |
+|----------|-----------------------|----------|
+| Duplicate merge | Review retained/archive records and blockers | Same review ID retrieves the stored receipt |
+| Callback CRM handoff | Review destination, owner, and deadline | Durable handoff receipt prevents duplicate work |
+| Follow-up task action | Review approval, completion, or deadline change | Confirmed results and uncertain requests remain distinct |
+| Follow-up email | Separate Send action with current source and recipient proof | Unknown results block blind retries |
+| Airish CRM action | Confirm action card, unless Autopilot was enabled | Server still checks current access |
+| Cadence email step | Earlier activation and enrollment authorize scheduled work | Worker rechecks status and outreach restrictions |
 
-Any member can leave via `POST /api/admin/members/leave`:
-- Removes OrganizationMember and all TeamMember records
-- Cannot leave if you're the last OWNER (must transfer ownership first)
+The table describes different contracts. It does not mean every background email waits for a new inbox approval. See [workflow data flows](DATA_FLOWS.md), [lead merges](safe-lead-merges.md), [callback handoff](WEBSITE_RECEPTIONIST.md), and [send-result recovery](ops/send-result-recovery.md).
 
-## RBAC (Role-Based Access Control)
+## AI and business knowledge
 
-### Custom Role System
+Airish retrieves published Library passages. Receptionist callers receive only documents approved for their current published revision. Phone/admin preview can also use the saved receptionist FAQ text; the website assistant does not expose those private phone notes.
 
-The application supports both **system roles** and **custom roles**:
+Knowledge retrieval uses PostgreSQL full-text search, not embeddings. Publishing a new revision clears public receptionist approval. Retrieved text is treated as answer context rather than authority to execute CRM actions.
 
-**System Roles** (created automatically with each org):
-- OWNER (hierarchy 0), ADMIN (1), MANAGER (2), MEMBER (3)
-- Cannot be deleted or renamed
-- Permissions CAN be modified by the OWNER
+Organization AI settings choose the provider and enforce request/token reservations. A configured but paused or exhausted provider fails visibly rather than silently switching to a shared key. Internal AI features can use a deployment fallback when no organization provider is configured; the public website assistant requires its own organization configuration.
 
-**Custom Roles** (created via Admin → Roles & Permissions):
-- Created with `POST /api/admin/roles` — name, hierarchy level, and permission set
-- Fully editable (name, hierarchy, permissions) via `PATCH /api/admin/roles/[id]`
-- Deletable via `DELETE /api/admin/roles/[id]` (only if no members assigned)
-- Privilege escalation prevention: cannot create a role more powerful than your own
+See [Airish](AIRISH.md), [knowledge publication](BUSINESS_KNOWLEDGE.md), [provider limits](AI_PROVIDER_SETTINGS.md), and the [knowledge data flow](DATA_FLOWS.md#business-knowledge-and-ai-answers).
 
-### Permission System
-
-Permissions are string keys assigned to roles. A user's effective permissions are the **union** of all permissions from all their team memberships.
+## Background work
 
-Current permission keys:
-
-| Permission | Description |
-|-----------|-------------|
-| `leads:read` | View leads |
-| `leads:write` | Create/edit leads |
-| `leads:delete` | Delete leads directly |
-| `contacts:read` | View contacts |
-| `contacts:write` | Create/edit contacts |
-| `cadences:manage` | Create/edit/delete cadences |
-| `cadences:read` | View cadences |
-| `users:invite` | Invite new users |
-| `admin:users` | Manage users, roles, teams |
-| `admin:settings` | Manage org settings, approve deletions |
-| `billing:manage` | Manage billing (OWNER only) |
-| `audit:read` | View audit log |
-| `forecast:read` | View forecasts |
-| `forecast:submit` | Submit forecast commits |
+The registration file is the authoritative list. It currently registers these functions:
 
-### Role Hierarchy
-
-| Role | Hierarchy | Lead Access | Key Permissions |
-|------|-----------|-------------|-----------------|
-| OWNER | 0 | All org leads | All 14 permissions |
-| ADMIN | 1 | All org leads | All except billing:manage |
-| MANAGER | 2 | Leads in their teams + sub-teams | Leads, cadences, forecast |
-| MEMBER | 3 | Only their own assigned leads | Read leads, contacts, cadences |
-| Custom | N | Depends on permissions assigned | Configurable |
+| Function ID | Trigger | Work |
+|-------------|---------|------|
+| `cadence-step-execution` | Event | Execute a configured sequence step |
+| `email-sync` | Event | Read a connected mailbox and process pages |
+| `mailbox-sync-schedule` | Every five minutes | Queue eligible mailbox checks |
+| `score-decay` | Daily | Reduce scores for configured inactivity |
+| `task-reminder` | Hourly | Check approaching task deadlines |
+| `forecast-snapshot` | Daily | Save forecast metrics |
+| `website-receptionist-cleanup` | Daily | Clean up expired website session/feedback data |
+| `callback-notifications` | Every five minutes | Update callback attention notifications |
+| `callback-response-targets` | Every five minutes | Reconcile response targets and escalation |
 
-### Access Filter
+Registration and valid deployment keys are required for hosted jobs to run. A configuration indicator is not proof of a successful scheduler run. Durable execution and retries do not replace current access, status, and duplicate checks at each effect.
 
-`getLeadAccessFilter(user, organizationId)` returns a Prisma `where` clause:
-- OWNER/ADMIN: `{ deletedAt: null }` (all leads)
-- MANAGER: `{ deletedAt: null, assignedUserId: { in: [team member IDs] } }`
-- MEMBER: `{ deletedAt: null, assignedUserId: userId }`
+## Deployment and recovery
 
-### Security Guards
-
-- Privilege escalation prevention: cannot invite/create with a role higher than your own
-- Org membership required before team membership
-- organizationId always server-derived, never from client
-
-## Rich Text Email Editor
-
-### Architecture
-
-```
-┌──────────────────────┐     ┌─────────────────┐     ┌──────────────┐
-│  Tiptap Editor       │────▶│  HTML Output     │────▶│  Gmail API   │
-│  (Client Component)  │     │  (rich content)  │     │  (send)      │
-└──────────────────────┘     └─────────────────┘     └──────────────┘
-```
-
-**Component:** `src/components/email/rich-text-editor.tsx`
-
-**Tiptap Extensions Used:**
-- `@tiptap/starter-kit` — Bold, italic, headings, lists, blockquotes, code
-- `@tiptap/extension-underline` — Underline formatting
-- `@tiptap/extension-link` — Clickable links with URL editing
-- `@tiptap/extension-color` — Text color picker
-- `@tiptap/extension-text-style` — Base for color/font extensions
-- `@tiptap/extension-font-family` — Font family selection
-
-**Data Flow:**
-1. User composes email in Tiptap editor (WYSIWYG)
-2. Editor outputs clean HTML string via `onChange` callback
-3. HTML is passed to `POST /api/email/send` as the `body` field
-4. Server replaces personalization tags (`{{FirstName}}`, etc.) in the HTML
-5. Server wraps HTML in a full email document template (`wrapHtmlEmail()`)
-6. Encoded as RFC 2822 MIME message with `Content-Type: text/html; charset=utf-8`
-7. Sent via Gmail API (`POST gmail.googleapis.com/gmail/v1/users/me/messages/send`)
-
-**File Attachments:**
-- Uploaded via `POST /api/upload` (max 25 MB)
-- Attached to the email compose UI
-- Sent as part of the email payload
-
-## Email Threading in Cadences
-
-### Architecture
-
-```
-┌─────────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
-│  CadenceEnrollment  │     │  Cadence Step Exec   │     │  Gmail API      │
-│  emailThreadId: ?   │────▶│  (Inngest function)  │────▶│  (threaded send)│
-└─────────────────────┘     └──────────────────────┘     └─────────────────┘
-```
-
-**How it works:**
-
-1. When a lead is enrolled in a cadence, `emailThreadId` on `CadenceEnrollment` starts as `null`
-2. When the first EMAIL step executes, the email is sent as a new message
-3. The Gmail API returns a `threadId` — this is stored on the enrollment's `emailThreadId` field
-4. Subsequent EMAIL steps in the same cadence check for `emailThreadId`:
-   - If present: subject is prefixed with `Re:` and sent as a reply in the same thread
-   - If absent: sent as a new thread (first email)
-5. This ensures all cadence emails to a lead appear as a single conversation in Gmail
-
-**Schema:**
-```prisma
-model CadenceEnrollment {
-  // ...
-  emailThreadId    String?  // Gmail thread ID for email threading across steps
-  // ...
-}
-```
-
-## Duplicate Detection & Merge
-
-### Detection
-
-`POST /api/duplicates/check` accepts `{ contactEmail?, companyName? }` and returns potential duplicate leads matching by:
-- Case-insensitive email match
-- Fuzzy company name match
-
-### Merge
-
-`POST /api/leads/[id]/merge` with `{ secondaryLeadId }`:
-- The `[id]` param is the **primary** lead (retains its data)
-- The secondary lead's activities and contacts are transferred to the primary
-- Duplicate contacts (same email) are skipped during transfer
-- The secondary lead is soft-deleted after merge
-
-## Deletion Request Workflow
-
-For users without `leads:delete` permission (typically MEMBER role):
-
-```
-┌──────────────┐     ┌─────────────────────┐     ┌──────────────────┐
-│  User submits│────▶│  DeletionRequest     │────▶│  Admin approves  │
-│  request     │     │  (status: PENDING)   │     │  or rejects      │
-└──────────────┘     └─────────────────────┘     └──────────────────┘
-```
-
-**API Routes:**
-- `POST /api/deletion-requests` — Create request (any user)
-- `GET /api/deletion-requests` — List requests (filtered by role)
-- `PATCH /api/deletion-requests/[id]/approve` — Approve and execute deletion (requires `admin:settings`)
-- `PATCH /api/deletion-requests/[id]/reject` — Reject request (requires `admin:settings`)
-
-**Behavior:**
-- Duplicate pending requests for the same entity are rejected
-- Approved: soft-delete for leads, hard delete for contacts/tasks
-- Rejected: request marked as rejected, no deletion occurs
-
-## Admin API Routes
-
-All routes under `/api/admin/` are protected by permission checks:
-
-| Route | Methods | Permission | Description |
-|-------|---------|-----------|-------------|
-| `/api/admin/roles` | GET, POST | `admin:users` | List all roles; create custom role |
-| `/api/admin/roles/[id]` | PATCH, DELETE | `admin:users` | Update/delete custom role |
-| `/api/admin/members` | GET | `admin:users` | List org members |
-| `/api/admin/members/[id]` | PATCH, DELETE | `admin:users` | Update role / remove member |
-| `/api/admin/members/transfer-ownership` | POST | (OWNER only) | Transfer OWNER role |
-| `/api/admin/members/leave` | POST | (any member) | Leave organization |
-| `/api/admin/invite` | POST | `users:invite` | Send invite |
-| `/api/admin/teams` | GET, POST | `admin:users` | List/create teams |
-| `/api/admin/teams/hierarchy` | GET | `admin:users` | Team tree |
-| `/api/admin/audit` | GET | `audit:read` | Query audit log |
-| `/api/admin/assignment-rules` | GET, POST | `admin:settings` | Assignment rules |
-| `/api/admin/assignment-rules/[id]` | PATCH, DELETE | `admin:settings` | Manage rules |
-| `/api/admin/scoring-rules` | GET, POST | `admin:settings` | Scoring rules |
-| `/api/admin/scoring-rules/[id]` | PATCH, DELETE | `admin:settings` | Manage rules |
-| `/api/admin/score-decay` | GET, POST | `admin:settings` | Score decay config |
-| `/api/admin/score-decay/[id]` | PATCH, DELETE | `admin:settings` | Manage decay |
-| `/api/admin/ai-prompts` | GET, POST | `admin:settings` | AI prompt templates |
-| `/api/admin/ai-prompts/[id]` | PATCH, DELETE | `admin:settings` | Manage prompts |
-
-## Feature Interconnections
-
-These features are automatically triggered by other features:
-
-| Trigger | Effect |
-|---------|--------|
-| Lead created (no assignee) | Assignment rules evaluated automatically |
-| Activity logged on a lead | Lead score recalculated, lastActivityAt updated |
-| Email sent to a lead | EMAIL activity created on timeline, lastActivityAt updated |
-| Task completed | NOTE activity created on lead timeline |
-| Lead moved to terminal stage | isClosed + closeDate set |
-| Lead converted to contact | Contact created, cadence enrollments exited |
-| Cadence step executed (EMAIL) | Email sent in thread, activity created on lead |
-| Cadence step executed (CALL/LINKEDIN/TASK) | Task created for the rep |
-| Score decay (daily cron) | Inactive lead scores reduced, ScoreHistory entries created |
-| Forecast snapshot (daily cron) | Pipeline metrics calculated and stored |
-| Deletion request approved | Entity soft-deleted (leads) or hard-deleted (contacts/tasks) |
-
-## Data Flow
-
-### Server Components (Initial Load)
-
-```
-Page (Server Component)
-  → requireSession()
-  → service.getData(orgId)  // Uses tenant-scoped Prisma
-  → Render HTML with data
-```
-
-### Client Mutations
-
-```
-Client Component
-  → Server Action (or API route)
-    → requireSession()
-    → requirePermission()
-    → Zod validation
-    → service.mutate()
-    → revalidatePath()
-```
-
-### Rich Text Email Send
-
-```
-Tiptap Editor (client)
-  → HTML string
-  → POST /api/email/send { leadId, subject, body }
-    → requireSession()
-    → requirePermission('leads:write')
-    → replacePersonalizationTags(body, lead)
-    → wrapHtmlEmail(personalizedBody)
-    → buildRawEmail(to, subject, htmlBody)  // RFC 2822 + base64url
-    → Gmail API send
-    → Create EmailMessage record
-    → Create EMAIL activity on lead
-```
-
-### Background Jobs (Inngest)
-
-5 registered functions:
-- **cadence-step-execution** — Executes cadence steps (creates tasks/activities, sends threaded emails)
-- **email-sync** — Syncs Gmail inbox on demand
-- **score-decay** — Daily lead score decay for inactive leads
-- **task-reminder** — Hourly check for tasks due within 24 hours
-- **forecast-snapshot** — Daily pipeline metrics snapshot
-
-## Security
-
-### Rate Limiting (Upstash Redis)
-
-Three tiers enforced in Next.js middleware:
-- **General:** 100 requests/minute per IP
-- **Auth:** 10 requests/minute per IP
-- **Write:** 30 requests/minute per IP
-
-Scope: rate limiting is applied **only to `/api/*` requests** — page navigation
-and static assets are never limited (so normal browsing can't return
-`RATE_LIMITED`). It is also **skipped entirely outside production** (`getRateLimiters()`
-returns `null` when `NODE_ENV !== 'production'`), so local dev and the e2e suite
-don't hit the limiter.
-
-### Brute-Force Protection
-
-5 failed login attempts in 15 minutes → account lockout for full duration.
-
-### Input Validation
-
-All inputs validated with Zod schemas including null byte stripping, path traversal detection, and prototype pollution key rejection.
-
-### Security Headers
-
-Set via middleware: X-Content-Type-Options, X-Frame-Options, HSTS, Referrer-Policy, Permissions-Policy.
-
-## Database Considerations
-
-### PgBouncer Compatibility
-
-Supabase uses PgBouncer in transaction mode. This means:
-- **No interactive transactions** (`$transaction(async (tx) => {...})`) — use sequential operations instead
-- **`?pgbouncer=true`** required on DATABASE_URL to disable prepared statements
-- Connection pooling is handled by PgBouncer, not Prisma
-
-### Prisma Configuration
-
-```prisma
-generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "rhel-openssl-3.0.x"]
-}
-```
-
-- `prisma-client-js` (not `prisma-client`) for Vercel compatibility
-- `rhel-openssl-3.0.x` binary target for Vercel's Linux runtime
-- Default output path (`node_modules/.prisma/client`) for reliable bundling
-
-### Type Safety
-
-The `tenantData()` helper (`src/server/db/types.ts`) provides type-safe Prisma create operations without `as any` casts. It bridges the gap between Prisma's types (which require organizationId) and the tenant middleware (which injects it automatically).
-
-
----
-
-## Telephony & email providers (bring-your-own)
-
-### Routing
-
-The `(marketing)` route group serves the public landing at `/`; the
-authenticated app lives in `(dashboard)` under `/dashboard`. Middleware allows
-`/`, the `/auth/*` handlers, static assets, and the Twilio TwiML webhook to be
-reached without a session; everything else redirects to `/login`.
-
-### Calling (per-org, encrypted)
-
-- `Organization.voiceProvider` stores the org's selected provider.
-- `VoiceConfig` (one row per org) stores Twilio credentials — the **API Key
-  Secret** and **Auth Token** are AES-256-CBC encrypted (same
-  `EMAIL_ENCRYPTION_KEY` used for email tokens). Non-secret fields (Account SID,
-  API Key SID, TwiML App SID, Caller ID) are stored plain.
-- `/api/voice/token` mints a Twilio access token from the requesting org's own
-  credentials (never shared across tenants). `/api/voice/twiml` is the public
-  webhook Twilio calls; it verifies `X-Twilio-Signature` with the org's Auth
-  Token when present and dials from the org's caller ID (resolved via the
-  `OrgId` the browser dialer tags on the call).
-- Click-to-call and logged calls write CALL activities, so Rhythm, deal health,
-  and conversation intelligence pick them up like any other activity.
-
-### Email (provider-agnostic)
-
-- `EmailAccount.provider` distinguishes `gmail` vs `microsoft`; access/refresh
-  tokens are encrypted at rest for both.
-- The send pipeline (`sendEmail` / `sendTestEmail`) resolves the user's
-  connected mailbox and branches by provider — Gmail builds a raw MIME message;
-  Microsoft uses Microsoft Graph (draft → attach → send, threading via
-  `createReply`). `refreshTokenIfNeeded` refreshes against the correct provider.
-- The Inngest `email-sync` worker branches by provider (Gmail messages.list vs
-  Graph `/me/messages`); both dedupe by external id and link messages to leads.
-- Because cadence email steps call the same `sendEmail`, they work with either
-  provider with no cadence-specific code.
-
-### Secret encryption summary
-
-All provider secrets (Twilio API Key Secret + Auth Token; Gmail + Microsoft
-OAuth tokens) are encrypted with `EMAIL_ENCRYPTION_KEY` via `src/lib/encryption.ts`.
+Runtime queries and migrations can use different database connections. `prisma.config.ts` loads this checkout's `.env` with override enabled. Temporary shell datasource values do not make that checkout safe for disposable database setup.
+
+The maintainer's release gate waits for tests and reviewed migrations before assigning the production domain. Forks need their own services and release policy. A code revert does not undo data changes or provider acceptance.
+
+Continue with [setup](SETUP_GUIDE.md), [testing](TESTING.md), [deployment gates](ops/production-deployment.md), or the [operations index](ops/README.md).

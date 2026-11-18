@@ -14,4 +14,4 @@ Use disposable legacy-row fixtures to verify the additive migration preserves ex
 
 To prepare a recovery commit, revert the application release without committing, restore `prisma/schema.prisma` and `prisma/migrations/20261103080000_add_preferred_callback_time/` from that release, then review and commit the retained-schema revert. Recovery takes one normal deployment cycle; it cannot retract any callback already performed by staff.
 
-Weekly opening hours do not model holidays, staff capacity, overnight shifts, or an external appointment calendar. A requested time requires staff confirmation and does not reserve an appointment.
+Weekly opening hours provide the baseline. Saved date-specific closures and hours override that baseline, including holidays entered by an administrator. See [calendar exceptions](business-calendar-exceptions-rollback.md). The calendar does not model staff capacity, overnight shifts, or an external appointment calendar. A requested time requires staff confirmation and does not reserve an appointment.

@@ -1,179 +1,109 @@
-# Flowrish Integrations Guide — Calling, Email & Migration
+# Connect Flowrish to other services
 
-This manual covers the bring-your-own integrations each organization sets up
-inside Flowrish: **calling** (Twilio), **email** (Gmail + Microsoft 365 /
-Outlook), and **data migration** from another CRM. It explains both how to set
-them up and how they work under the hood.
+Deployment operators configure shared service applications. Workspace administrators configure business-owned AI and voice accounts. Each teammate connects their own mailbox.
 
-> **Model:** Flowrish is multi-tenant. Telephony credentials are **per
-> organization** — each org brings its own provider account, and secrets are
-> **encrypted at rest** (AES-256-CBC, `EMAIL_ENCRYPTION_KEY`). The platform
-> never ships shared calling keys. Email uses one platform-registered OAuth app
-> per provider; each user connects their own mailbox.
+| Integration | Deployment setup | Workspace or user setup |
+|-------------|------------------|-------------------------|
+| Supabase | Auth, database, storage, and server credentials | Membership and role assignments |
+| Google mail | OAuth application and allowed URLs | Each user connects Gmail |
+| Microsoft mail | Optional OAuth application and allowed URLs | Each user connects Outlook |
+| AI | Optional deployment fallback | Administrator saves organization provider, model, key, and limits |
+| Voice | No shared telephony credentials required by the app | Administrator configures that business's Twilio account |
+| Background jobs | Inngest keys and registered endpoint | Job eligibility follows current settings and access |
+| CSV import | No external CRM API connector | User exports and reviews CSV data |
 
----
+Start with [setup](SETUP_GUIDE.md). This guide covers the connection boundaries, not current vendor prices or account eligibility.
 
-## 1. Calling
+## Connect a mailbox
 
-Flowrish has two calling modes, chosen automatically per lead:
+App sign-in and mailbox authorization are separate. Use **Settings** to connect Gmail or Outlook in the intended business. Finish the consent flow in the same signed-in account and workspace where it began. Switching business invalidates that attempt.
 
-1. **Click-to-call (free, always on)** — the **Call** button on a lead uses a
-   `tel:` link to launch the rep's device dialer / softphone. No provider, no
-   per-minute cost. A live timer runs and the outcome + duration are logged as
-   a **CALL activity** on the lead timeline.
-2. **In-browser calling (Twilio)** — when the org selects **Twilio** and has
-   entered credentials, the same **Call** button places the call inside the
-   browser (with an in-app *End call* button). Falls back to `tel:` if Twilio
-   isn't available.
+| Provider | Deployment configuration | Requested mail access |
+|----------|--------------------------|-----------------------|
+| Gmail | Google client ID/secret, public client ID, authorized app origin, and `/api/email/callback` | Gmail send and read-only scopes |
+| Outlook | Microsoft client ID/secret, public client ID, and `/api/email/microsoft/callback` | `offline_access`, `openid`, `profile`, `User.Read`, `Mail.Read`, `Mail.Send` |
 
-### 1.1 Choosing a provider
+The source lists the exact scopes: [Gmail connection](../src/components/email/gmail-connect.tsx) and [Microsoft adapter](../src/server/services/microsoft-email.ts). Configure provider consent according to the account and tenant policies for your installation. Flowrish's requested scopes do not guarantee an account will be allowed to connect.
 
-Go to **Settings → Calling & voice**. You'll see a comparison of providers
-(Twilio *Recommended*, plus Telnyx, SignalWire, Plivo, Bandwidth) with
-indicative rates and pros/cons. Selecting one stores your org-wide preference.
-Every card has a **How to connect** panel with deep links to each provider's
-console. Today, **Twilio** is wired for in-browser calling end-to-end; the
-others record your preference and show setup instructions.
-
-### 1.2 Connecting Twilio (self-serve)
-
-In **Settings → Calling & voice**, pick **Twilio**, then fill the *Connect your
-Twilio account* form. Gather these from the [Twilio Console](https://console.twilio.com):
-
-| Field | Where to get it |
-|-------|-----------------|
-| **Caller ID** | Buy a voice-enabled number → [Phone Numbers](https://console.twilio.com/us1/develop/phone-numbers/manage/search). E.164 (e.g. `+14155551234`). |
-| **Account SID** | Console dashboard (starts `AC…`). |
-| **API Key SID** + **API Key Secret** | [API keys](https://console.twilio.com/us1/account/keys-credentials/api-keys) (secret shown once; `SK…`). |
-| **TwiML App SID** | [TwiML Apps](https://console.twilio.com/us1/develop/voice/manage/twiml-apps) → create one. Set its **Voice Request URL** to the webhook URL shown in the form (`https://<your-domain>/api/voice/twiml`). SID starts `AP…`. |
-| **Auth Token** *(recommended)* | Console dashboard. Enables webhook signature verification (see 1.4). |
-
-Secrets (API Key Secret, Auth Token) are encrypted before storage and are
-never returned to the browser — the form shows a masked "saved" placeholder.
-Sensitive fields have a show/hide **eye** toggle.
-
-### 1.3 How in-browser calling works
-
-```
-Browser (lead page)                 Flowrish server                 Twilio
-   │  click "Call"                        │                            │
-   │ ── GET /api/voice/token ───────────► │  mint short-lived JWT       │
-   │                                      │  from the ORG's creds       │
-   │ ◄── { token, orgId, callerId } ───── │                            │
-   │  Device.connect({To, OrgId}) ───────────────────────────────────► │
-   │                                      │ ◄── POST /api/voice/twiml ──│  (Twilio calls us)
-   │                                      │  verify X-Twilio-Signature  │
-   │                                      │  look up org caller ID      │
-   │                                      │ ── <Dial callerId>…</Dial> ►│
-   │ ◄════════════════ audio (WebRTC) ════════════════════════════════ │  bridged to the number
+```mermaid
+sequenceDiagram
+    participant User
+    participant App as Flowrish
+    participant Mail as Mail provider
+    User->>App: Connect mailbox in current business
+    App-->>User: Bound OAuth state and consent URL
+    User->>Mail: Review and grant consent
+    Mail->>App: Authorization callback
+    App->>App: Recheck state, account, and business
+    App->>Mail: Exchange code
+    App->>App: Encrypt and store mailbox tokens
+    App-->>User: Connection result
 ```
 
-- The access token is minted server-side from the **org's own** Twilio
-  credentials (`/api/voice/token`), never shared across tenants.
-- The dialer tags each call with `OrgId`; the TwiML webhook uses it to look up
-  that org's caller ID.
-- On hang-up the rep logs the outcome + duration as a CALL activity.
+Mail sync stores mailbox-scoped message identities and related activity. A safe inbound reply can stop a matching cadence and create follow-up work. Ambiguous matches need owner review. Sync health and checkpoints are described in [automatic mailbox sync](AUTOMATIC_MAILBOX_SYNC.md).
 
-### 1.4 Security — TwiML webhook signature
+Manual follow-up emails require an explicit Send action. Cadences can send their configured steps after activation and enrollment. Neither provider can recall a message already accepted merely because Flowrish later loses access or rolls back code.
 
-`/api/voice/twiml` must be publicly reachable (Twilio calls it directly), so it
-can't sit behind login. To stop anyone who guesses the URL from placing billable
-calls on your account, Flowrish verifies Twilio's `X-Twilio-Signature` using
-your **Auth Token**. When an Auth Token is saved, unsigned/forged requests are
-rejected (`403`). If you skip the Auth Token, calling still works but the webhook
-is unverified (a warning is logged) — **we strongly recommend setting it.**
+See [conversation drafts](CONVERSATION_DRAFTS.md), [merge-aware replies](merge-aware-replies.md), and [send recovery](ops/send-result-recovery.md).
 
----
+## Configure AI for a business
 
-## 2. Email (Gmail & Microsoft 365 / Outlook)
+Open **Settings → AI provider** as an administrator. Choose a supported organization provider, enter a model available to that provider account, save its key, and set usage limits.
 
-Both providers write into the same **Activity / EmailMessage** tables, so
-synced mail flows into the timeline, Rhythm/deal-health signals, conversation
-intelligence, and dashboards regardless of provider. Sending is provider-aware:
-the send pipeline resolves the user's connected mailbox (Gmail *or* Outlook) and
-delivers accordingly. **Cadence email steps use the same pipeline, so they work
-with either provider automatically.**
+Managed organization settings support OpenAI, Gemini, and DeepSeek. Deployment fallback settings can select presets or an OpenAI-compatible endpoint. A preset name is not proof that every provider/model combination works; verify the actual endpoint and model with an explicitly authorized check.
 
-### 2.1 Gmail
+| Action | Provider request? |
+|--------|-------------------|
+| Save or pause AI settings | No |
+| Explicit connection test | Yes; counts against allowance |
+| Ask Airish or generate an AI draft | Yes, when the feature reaches generation |
+| Scripted Demo mode | No |
+| Regular receptionist browser conversation | Can call the configured provider |
+| Confirm a completed browser callback readback | Deterministic; no additional generation |
 
-Set the platform Google OAuth app env vars (`GOOGLE_CLIENT_ID`,
-`GOOGLE_CLIENT_SECRET`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`). Users connect in
-**Settings → Email → Gmail → Connect Gmail** (OAuth popup). Tokens are encrypted
-at rest. Scopes: `gmail.send`, `gmail.readonly`.
+Keys stay on the server. A configured but paused, invalid, or exhausted organization provider fails visibly instead of silently spending a shared fallback key. Public website reception requires the organization's own configuration.
 
-### 2.2 Microsoft 365 / Outlook (Microsoft Graph)
+Read [provider settings and reservations](AI_PROVIDER_SETTINGS.md), [Airish](AIRISH.md), and [business knowledge](BUSINESS_KNOWLEDGE.md). Application token reservations are not a currency billing cap.
 
-**Operator setup (once per deployment):**
+## Configure calling
 
-1. In the [Microsoft Entra admin center](https://entra.microsoft.com) →
-   **App registrations → New registration**.
-2. Add a **Web redirect URI**: `https://<your-domain>/api/email/microsoft/callback`.
-3. **API permissions** → add delegated Microsoft Graph scopes and grant admin
-   consent: `offline_access`, `User.Read`, `Mail.Read`, `Mail.Send`.
-4. **Certificates & secrets** → create a client secret.
-5. Set env vars and redeploy:
-   - `MICROSOFT_CLIENT_ID` — Application (client) ID
-   - `MICROSOFT_CLIENT_SECRET` — the client secret
-   - `NEXT_PUBLIC_MICROSOFT_CLIENT_ID` — same client id (browser authorize URL)
+| Mode | What it does | Requirements |
+|------|--------------|--------------|
+| Device dialer | Opens a `tel:` link; the rep logs the call | A compatible device or softphone; carrier charges can still apply |
+| Browser calling | Uses the business's Twilio credentials for an outbound call | Configured voice account and browser audio permission |
+| Phone receptionist | Answers the configured incoming Twilio number | Business settings, callback owner/stage, approved information, Auth Token, routing, and explicit activation |
 
-Until these are set, the Outlook card in **Settings → Email** shows these exact
-instructions instead of a connect button.
+Other voice-provider cards store preferences and setup information; they are not interchangeable working browser-call adapters.
 
-**Per-user:** once configured, each teammate clicks **Connect Outlook** and
-authorizes their mailbox. Access + refresh tokens are encrypted at rest.
+For Twilio browser calling, configure the Account SID, caller ID, API key SID/secret, and TwiML App in **Settings → Calling & voice**. Its outgoing Voice Request URL is the app's `/api/voice/twiml` endpoint. Include the Auth Token so the outgoing webhook can verify Twilio signatures. The legacy outbound route permits setup without it and cannot verify those requests.
 
-**How it works:**
-- **Send** — via Graph: create a draft (`/me/messages`), attach files, then
-  `/me/messages/{id}/send`. Replies thread into the existing conversation using
-  `createReply` when a prior message exists (so cadence follow-ups nest in one
-  Outlook conversation).
-- **Sync** — the Inngest `email-sync` worker branches by provider; for Outlook
-  it pulls recent messages via `GET /me/messages`, dedupes by message id, and
-  links them to leads by email address, creating EMAIL activities.
-- **Token refresh** — handled transparently before each send/sync.
+Incoming receptionist routing uses a separate `/api/voice/receptionist/ORGANIZATION_ID` endpoint. Enabling it requires the Auth Token and business callback references. Incoming requests validate the Twilio signature, account, and destination before generating an answer.
 
----
+A browser transcript, read-aloud reply, or mocked webhook test is not a successful telephone call. Use the [phone guide](AI_RECEPTIONIST.md) for explicit activation and real-call verification. Website reception has its own [setup guide](WEBSITE_RECEPTIONIST.md) and switch.
 
-## 3. Migrating from another CRM (Salesforce, HubSpot, Pipedrive, …)
+## Import data from another CRM
 
-**Import & Migrate** (sidebar → *Import / Export*) provides self-serve, no-ticket
-migration built on the CSV importer, which auto-detects the standard column
-names those tools export.
+CSV import is a reviewed data transfer, not a live two-way integration.
 
-1. Pick your current CRM in the **Migrating from another CRM?** card for
-   step-by-step export instructions (with a column-mapping cheat sheet).
-2. Export your Leads/Contacts as CSV from that tool.
-3. Upload it in the importer (Upload → Map columns → Preview → Result).
+1. Export the supported records from the source CRM.
+2. Open Flowrish's import/export page.
+3. Review the detected columns and field mapping.
+4. Check the preview and duplicate/error results before using the imported records.
 
-What happens on import: companies are auto-created from the Company/Account
-column, a contact is linked when an email is present, and duplicate rows
-(matching an existing email) are skipped — so re-running an import is safe.
+The importer can create related company/contact records according to mapped fields. Do not assume that an import recreates source-system permissions, attachments, workflows, or provider credentials. Keep exported customer files out of Git and public artifacts.
 
----
+## Know where credentials live
 
-## 4. Where credentials live (encryption summary)
+| Credential | Storage and scope | Protection |
+|------------|-------------------|------------|
+| Supabase, Redis, Inngest, deployment OAuth secrets | Hosting/local private configuration | Server-only secret handling |
+| Gmail/Outlook access and refresh tokens | `EmailAccount`, per connected user and business | AES-256-CBC helper |
+| Twilio API secret and Auth Token | `VoiceConfig`, per business | AES-256-CBC helper |
+| Organization AI key | `AiProviderConfig`, per business/provider | AES-256-GCM with organization/provider binding |
+| Saved follow-up draft text | Private per-user/workspace/source record | AES-256-GCM with context and revision binding |
 
-| Credential | Storage | Encrypted |
-|-----------|---------|-----------|
-| Twilio API Key Secret, Auth Token | `VoiceConfig` (per org) | ✅ AES-256-CBC |
-| Gmail access/refresh tokens | `EmailAccount` (per user) | ✅ AES-256-CBC |
-| Microsoft access/refresh tokens | `EmailAccount` (per user) | ✅ AES-256-CBC |
-| Selected voice provider | `Organization.voiceProvider` | n/a (not sensitive) |
+The encryption formats depend on `EMAIL_ENCRYPTION_KEY`. Rotating or losing it can make retained ciphertext unusable. Plan migration or reconnection before changing it. A database restore alone does not restore external accounts, attachment bytes, or the encryption key.
 
-All use the `EMAIL_ENCRYPTION_KEY` (32-byte hex). Rotating that key invalidates
-stored secrets — reconnect after rotating.
+## Related guides
 
----
-
-## 5. Database migrations
-
-These features add tables/columns. Apply migrations before use:
-
-```bash
-npx prisma migrate deploy   # production
-# or during development:
-npx prisma migrate dev
-```
-
-Relevant migrations: `add_voice_provider`, `add_voice_config`,
-`add_twilio_auth_token`.
+[Setup](SETUP_GUIDE.md) · [Architecture](ARCHITECTURE.md) · [Data flows](DATA_FLOWS.md) · [Testing](TESTING.md) · [Recovery](ops/README.md) · [Documentation index](README.md)

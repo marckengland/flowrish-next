@@ -1,200 +1,96 @@
-# Flowrish CRM — Next.js + Supabase
+# Flowrish CRM
 
-Flowrish is a CRM with separate workspaces, a follow-up approval inbox, and an AI assistant. It uses Next.js, Supabase Auth, and Prisma. AI and phone providers are optional integrations.
+Flowrish helps sales teams manage leads, follow-ups, and callback requests in separate business workspaces. Airish, the in-app AI assistant, can answer questions, draft text, and propose CRM actions. Optional website and phone reception use each business's own settings and approved knowledge.
 
-[MIT license](LICENSE) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
+[Documentation](docs/README.md) · [Setup](docs/SETUP_GUIDE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT license](LICENSE)
 
-## Tech Stack
+## What you can do
 
-- **Framework:** Next.js 15 (App Router, Server Components, Server Actions)
-- **Auth:** Supabase Auth (Magic Link + Google OAuth)
-- **Database:** PostgreSQL via Supabase + Prisma v6 ORM
-- **Background Jobs:** Inngest (durable functions, cron schedules)
-- **Rate Limiting:** Upstash Redis
-- **UI:** Tailwind CSS v4, Shadcn/ui, Lucide icons
-- **Rich Text Editor:** Tiptap v3 (email composition with formatting, links, colors)
-- **State:** TanStack Query v5 (server), Zustand v5 (client)
-- **Testing:** Vitest v3, fast-check v3 (property-based), Testing Library (unit); Playwright (end-to-end)
-- **Deployment:** Vercel + Supabase Cloud
+| Work | Features | Guide |
+|------|----------|-------|
+| Manage prospects | Leads, contacts, companies, pipeline stages, saved views, reviewed bulk updates and merges | [User guide](docs/USER_MANUAL.md) |
+| Review follow-ups | Reply detection, callback suggestions, task approval, snoozing, search, saved views, and bulk actions | [Follow-up inbox](docs/FOLLOW_UP_INBOX.md) |
+| Prepare email replies | Full-conversation drafts, rich-text editing, private draft recovery, and explicit sending | [Conversation drafts](docs/CONVERSATION_DRAFTS.md) |
+| Use AI with business context | Published knowledge, source references, tables, and bar/line charts | [Airish](docs/AIRISH.md) |
+| Handle enquiries | Business onboarding, approved answers, callback review, CRM handoff, and outcome tracking | [Website receptionist](docs/WEBSITE_RECEPTIONIST.md) |
+| Plan sales work | Cadences, priority-ranked daily tasks, lead scoring, and forecasts | [User guide](docs/USER_MANUAL.md) |
+| Control access and usage | Workspace membership, roles, outreach restrictions, encrypted provider keys, and AI allowances | [Architecture](docs/ARCHITECTURE.md) |
 
-## Quick Start
+## How the pieces connect
 
-```bash
-# Install dependencies
+```mermaid
+flowchart LR
+    team["Sales team"] --> crm["Flowrish workspace"]
+    crm --> work["Leads, tasks, and follow-up reviews"]
+    crm --> airish["Airish"]
+    library["Published business knowledge"] --> airish
+    approved["Receptionist-approved knowledge"] --> reception["Optional receptionist"]
+    visitor["Website visitor or caller"] --> reception
+    reception --> callback["Confirmed callback request"]
+    callback --> work
+```
+
+Website callbacks need a staff-approved CRM handoff. A configured phone receptionist can create CRM callback work after the caller confirms. Drafting a follow-up does not send it; the email composer requires a separate Send action. Activated cadences can send their configured email steps automatically.
+
+Website and phone reception start disabled. Scripted demos and mocked rehearsals do not prove live AI or telephone quality.
+
+## Run your own installation
+
+Use Node.js 22 and your own Supabase, Redis, background-job, and OAuth configuration. The [setup guide](docs/SETUP_GUIDE.md) explains the required values and connection steps.
+
+```sh
+git clone https://github.com/marckengland/flowrish-next.git
+cd flowrish-next
 npm ci
-
-# Set up environment variables
 cp .env.example .env
-# Fill in your Supabase, Upstash, Inngest, Google, and AI API credentials
+```
 
-# Generate Prisma client
+Fill in your private development configuration before continuing:
+
+```sh
 npx prisma generate
-
-# Apply the existing migrations to your own development database
 npx prisma migrate deploy
-
-# Start development server
 npm run dev
 ```
 
-Or use the start script:
-```bash
-# Linux/macOS
-chmod +x start.sh && ./start.sh
+Prisma loads this checkout's `.env` with override enabled. Check the database target before a migration; shell datasource variables do not override that file. Never use the hosted Flowrish database for local tests.
 
-# Windows
-start.bat
-```
+The helper launchers, `bash start.sh` and Windows `start.bat`, require Node 22 and stop on installation, generation, or migration failure. They apply migrations to the configured database. See [startup behavior](docs/SETUP_GUIDE.md#start-the-app).
 
-Open [http://localhost:3000](http://localhost:3000).
+## Verify a change
 
-Use your own Supabase project and credentials. The Prisma configuration loads `.env` with override enabled; check its target before running any database command. Do not point a development checkout at a production database.
+| Check | Command |
+|-------|---------|
+| Startup failure handling | `npm run test:startup` |
+| Public files and documentation | `npm run test:public-repository` |
+| Unit and property tests | `npm test` |
+| Lint | `npm run lint` |
+| Isolated browser workflows | `npm run test:receptionist:mocked` |
+| Production build | `npm run build` |
+| Types, after both builds | `npx tsc --noEmit`, then `npm run typecheck:fast` |
 
-For AI, owners can save an organization-specific provider, API key, model, and usage limits in **Settings → AI provider**. An account with the provider and an available API model are required. Saving settings makes no test request. Receptionist widgets start disabled.
+The [testing guide](docs/TESTING.md) separates mocked checks, disposable database drills, and authenticated E2E tests. Normal verification must not spend AI allowance, send email, place calls, or enable reception.
 
-This repository remains `private: true` in npm metadata to prevent accidental npm publication; that flag does not control GitHub visibility. Production promotion scripts are scoped to the maintainer’s repository and deployment. Public forks run validation but skip those production jobs. Configure a separate deployment for your fork; see [open-source readiness](docs/OPEN_SOURCE_READINESS.md).
+## Tech stack
 
-## Scripts
+| Part | Tools |
+|------|-------|
+| Application | Next.js 15, React 19, TypeScript |
+| Authentication and data | Supabase Auth, PostgreSQL, Prisma |
+| Background work and rate limits | Inngest, Upstash Redis |
+| Interface | Tailwind CSS, shadcn/ui, Tiptap |
+| Client state | TanStack Query, Zustand |
+| Tests | Vitest, fast-check, Testing Library, Playwright |
+| Hosting | Vercel and independently configured services |
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start Next.js dev server (`:3000`) |
-| `npm run build` | Production build |
-| `npm run start` | Serve the production build |
-| `npm run lint` | ESLint check |
-| `npm run typecheck:fast` | Type-check with no emit (`tsgo --noEmit`) |
-| `npm run test` | Run the unit/integration suite once |
-| `npm run test:watch` | Unit tests in watch mode |
-| `npm run test:startup` | Test startup failure handling with synthetic commands; no services or dependencies required |
-| `npm run test:public-repository` | Check public file boundaries, Markdown links, license wording, and documented npm commands |
-| `npm run test:receptionist:integration` | Receptionist migration, concurrency, and rollback checks on disposable PostgreSQL (Docker required) |
-| `npm run test:e2e` | Playwright e2e against a local dev server (auto-started on `:3100`) |
-| `npm run test:e2e:ui` | Playwright e2e in interactive UI mode |
-| `npm run test:e2e:prod` | Playwright e2e against a deployed URL (read-only smoke) |
-| `npm run test:e2e:install` | Install the Chromium browser Playwright needs (first-time) |
-| `npm run seed:demo` | Seed demo data for the test org (`seed:demo:clean` to reset first) |
-| `npm run setup:storage` | Provision the Supabase storage bucket for attachments |
+See the [architecture](docs/ARCHITECTURE.md) for component boundaries and the [data-flow guide](docs/DATA_FLOWS.md) for requests, knowledge, replies, and callbacks.
 
-See **[docs/TESTING.md](docs/TESTING.md)** for how the unit and e2e layers work, including `test:e2e` vs `test:e2e:prod`.
+## Contribute or deploy
 
-## Project Structure
+Start with [CONTRIBUTING.md](CONTRIBUTING.md). Keep internal plans, personal editor automation, private evidence, credentials, and customer exports outside the public repository.
 
-```
-src/
-├── app/                    # Next.js App Router pages and API routes
-│   ├── (auth)/             # Auth pages (login, onboarding)
-│   ├── (dashboard)/        # Authenticated dashboard pages
-│   ├── api/                # REST API route handlers
-│   │   ├── admin/          # Admin-only routes (roles, members, teams, etc.)
-│   │   ├── cadences/       # Cadence CRUD + enrollments
-│   │   ├── deletion-requests/ # Deletion request workflow
-│   │   ├── duplicates/     # Duplicate detection
-│   │   ├── email/          # Gmail connect, send, callback
-│   │   └── ...             # leads, contacts, tasks, forecast, etc.
-│   └── auth/               # OAuth callback and magic link confirm
-├── components/             # React components (Shadcn/ui based)
-│   ├── email/              # Rich text editor (Tiptap), email compose
-│   └── ...
-├── hooks/                  # TanStack Query hooks
-├── lib/                    # Shared utilities
-│   ├── supabase/           # Supabase client factories (server, browser, middleware)
-│   ├── upstash/            # Redis + rate limiting
-│   └── validators/         # Zod schemas for all entities
-├── server/                 # Server-only code
-│   ├── actions/            # Server Actions (form mutations)
-│   ├── auth/               # Session + RBAC permissions
-│   ├── db/                 # Prisma client + tenant isolation middleware
-│   ├── inngest/            # Background job functions
-│   └── services/           # Business logic services
-├── stores/                 # Zustand stores (layout, filters, kanban)
-└── types/                  # TypeScript type definitions
-prisma/
-├── schema.prisma           # Database schema and workspace relationships
-└── seed.ts                 # Seed script
-```
-
-## Key Features
-
-- **Multi-tenancy** — Complete data isolation between organizations via tenant middleware
-- **Custom Role Management** — Create, edit, and delete custom roles with granular permission toggles; 4 system roles (Owner, Admin, Manager, Member) with editable permissions
-- **Rich Text Email Editor** — Tiptap-powered editor with bold, italic, underline, font families, text colors, links, and file attachments
-- **Email Threading** — Cadence follow-up emails are sent as replies in the same conversation (Gmail thread, or Outlook conversation via Graph `createReply`), tracked by `emailThreadId` on enrollments
-- **Lead Management** — Full lifecycle with pipeline stages, soft-delete, and conversion to contacts
-- **Personal saved lead views** — Named filters per workspace and user, available across devices with explicit apply, versioned edits and private ownership. See the [guide](docs/SAVED_LEAD_VIEWS.md)
-- **Duplicate Detection & Merge** — Detect potential duplicates by email/company and merge leads (activities + contacts transferred)
-- **Cadence Engine** — Multi-step sales sequences with automated task/email creation and email threading
-- **Rhythm Engine** — Priority-scored daily actions based on deal value, urgency, and engagement
-- **Revenue Forecasting** — Pipeline metrics, AI predictions, and commit vs. actual tracking
-- **Email Integration** — Gmail **and Microsoft 365 / Outlook** (Microsoft Graph) with OAuth, personalization tags, inbox sync, threaded replies, and rich HTML emails. Encrypted tokens; cadence email steps work with either provider automatically
-- **Calling** — Bring-your-own **click-to-call**: free `tel:` dialer + call logging out of the box, and optional **in-browser calling via Twilio** (per-org credentials, encrypted at rest; TwiML webhook signature verification). A provider comparison (Twilio/Telnyx/SignalWire/Plivo/Bandwidth) with self-serve setup guides lives in Settings
-- **Automatic mailbox sync** — Five-minute Gmail/Microsoft checks via Inngest, paginated checkpoint recovery, per-mailbox sync health, and failure alerts. Requires registered production background jobs; see the [guide](docs/AUTOMATIC_MAILBOX_SYNC.md)
-- **Receptionist onboarding and preview** — Guide each workspace through its business name, hours, approved knowledge, and a typed browser test before connecting a phone. Preview creates no CRM records; see the [guide](docs/RECEPTIONIST_PREVIEW.md)
-- **Business knowledge library** — Review pricing, services, and FAQ uploads, publish sources for Airish, and separately approve published snapshots for receptionist callers. See the [guide](docs/BUSINESS_KNOWLEDGE.md)
-- **Conversation-based follow-up drafts** — Generate replies from the full source Gmail/Outlook conversation, edit before sending, and reject stale or mismatched mailbox/thread versions. See the [guide](docs/CONVERSATION_DRAFTS.md)
-- **Follow-up inbox** — Review matched sales replies and confirmed callbacks, edit and approve tasks, dismiss suggestions, and open email drafts for explicit sending. Qualifying synced replies stop their cadence; see the [guide](docs/FOLLOW_UP_INBOX.md)
-- **AI receptionist** — Optional inbound Twilio receptionist with approved FAQs, after-hours scheduling, confirmed callback capture, assigned tasks, and call history. Disabled by default; see the [setup guide](docs/AI_RECEPTIONIST.md)
-- **Marketing landing page** — public `/` landing (auth-aware CTAs); the authenticated app lives under `/dashboard`
-- **AI features** — Email generation, account research, and **Airish**, the in-app assistant with source references, tables, and validated bar/line charts. Organization settings support OpenAI, Gemini, and DeepSeek with encrypted keys and daily usage limits. Deployment settings also support compatible endpoints; see [AI provider settings](docs/AI_PROVIDER_SETTINGS.md).
-- **CSV Import/Export** — Bulk lead import with duplicate detection and field mapping
-- **Full-text Search** — PostgreSQL tsvector across leads, contacts, and companies
-- **Audit Logging** — Immutable trail of all CUD operations
-- **Score Decay** — Automated daily score reduction for inactive leads
-- **Deletion Request Workflow** — Non-admin users request deletion; admins approve/reject
-- **Transfer Ownership** — Owner can transfer the OWNER role to another member
-- **Leave Organization** — Members can leave (owners must transfer first)
-
-## Admin API Routes
-
-All routes under `/api/admin/` require `admin:users` or `admin:settings` permission:
-
-| Route | Methods | Description |
-|-------|---------|-------------|
-| `/api/admin/roles` | GET, POST | List roles with permissions; create custom role |
-| `/api/admin/roles/[id]` | PATCH, DELETE | Update role permissions/name; delete custom role |
-| `/api/admin/members` | GET | List organization members |
-| `/api/admin/members/[id]` | PATCH, DELETE | Update member role; remove member |
-| `/api/admin/members/transfer-ownership` | POST | Transfer OWNER role to another member |
-| `/api/admin/members/leave` | POST | Leave the organization |
-| `/api/admin/invite` | POST | Invite a user to the organization |
-| `/api/admin/teams` | GET, POST | List/create teams |
-| `/api/admin/teams/hierarchy` | GET | Get team hierarchy tree |
-| `/api/admin/audit` | GET | Query audit log entries |
-| `/api/admin/assignment-rules` | GET, POST | List/create assignment rules |
-| `/api/admin/assignment-rules/[id]` | PATCH, DELETE | Update/delete assignment rule |
-| `/api/admin/scoring-rules` | GET, POST | List/create lead scoring rules |
-| `/api/admin/scoring-rules/[id]` | PATCH, DELETE | Update/delete scoring rule |
-| `/api/admin/score-decay` | GET, POST | List/create score decay configs |
-| `/api/admin/score-decay/[id]` | PATCH, DELETE | Update/delete score decay config |
-| `/api/admin/ai-prompts` | GET, POST | List/create AI prompt templates |
-| `/api/admin/ai-prompts/[id]` | PATCH, DELETE | Update/delete AI prompt |
-| `/api/admin/voice-provider` | GET, PATCH | Get/set the org's preferred calling provider |
-| `/api/admin/voice-config` | GET, PUT, DELETE | Get (masked) / save / clear the org's encrypted Twilio credentials |
-
-### Other integration routes
-
-| Route | Methods | Description |
-|-------|---------|-------------|
-| `/api/voice/token` | GET | Mint a Twilio Voice access token from the org's own credentials (or `{ configured:false }`) |
-| `/api/voice/twiml` | POST | TwiML webhook Twilio calls to bridge browser→PSTN (signature-verified) |
-| `/api/email/callback` | GET | Gmail OAuth popup callback |
-| `/api/email/microsoft/callback` | GET | Microsoft/Outlook OAuth popup callback |
-| `/api/email/account` | GET, DELETE | Connected mailbox (`?provider=gmail\|microsoft`) |
-| `/api/email/sync` | POST | Trigger inbox sync for the connected mailbox |
-
-## Documentation
-
-Use the [documentation index](docs/README.md) to find feature, contributor, and recovery guides. Internal implementation plans, personal editor automation, and private release evidence are maintained outside the public source tree. Earlier versions can remain in Git history.
-
-- [Setup Guide](docs/SETUP_GUIDE.md) — Full environment setup and deployment
-- [Architecture](docs/ARCHITECTURE.md) — System design, multi-tenancy, RBAC, data flow
-- [User Manual](docs/USER_MANUAL.md) — Feature walkthrough and user flows
-- [Integrations Guide](docs/INTEGRATIONS.md) — Calling (Twilio), email (Gmail + Microsoft/Outlook), and CRM migration setup + how they work
-- [Testing Guide](docs/TESTING.md) — Unit (Vitest) and end-to-end (Playwright) testing, local vs. prod runs
-
-## Deployment
-
-Deployed on Vercel with Supabase Cloud. See [Setup Guide](docs/SETUP_GUIDE.md) for full deployment instructions.
+Forks run validation but do not deploy to Flowrish's services. Configure your own release pipeline; the checked-in production helpers deliberately restrict their targets. See [deployment gates](docs/ops/production-deployment.md).
 
 ## License
 
-Flowrish's original code and documentation are available under the [MIT license](LICENSE). Third-party components retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
+Flowrish's original code and documentation use the [MIT license](LICENSE). Dependencies retain their own licenses and notices; see [third-party notices](THIRD_PARTY_NOTICES.md). The npm `private` flag prevents accidental package publication and does not control GitHub visibility.

@@ -63,4 +63,8 @@ Turn off **Enable AI receptionist** and save. Change the Twilio number's incomin
 
 The [rollback runbook](AI_RECEPTIONIST_ROLLBACK.md) describes scoped disable, code rollback, and database recovery checks.
 
-This release does not include appointment booking, email sequences triggered by calls, streaming voice, live transfers during an AI conversation, holiday exceptions, or overnight opening hours. English speech is used for this first version.
+Date-specific closures and opening hours override the weekly callback calendar. See [business calendar exceptions](ops/business-calendar-exceptions-rollback.md) for their behavior and recovery.
+
+The phone receptionist does not include appointment booking, email sequences triggered by calls, streaming voice, live transfers during an AI conversation, or overnight opening hours. It uses English speech.
+
+[Website receptionist](WEBSITE_RECEPTIONIST.md) · [Browser preview](RECEPTIONIST_PREVIEW.md) · [Data flows](DATA_FLOWS.md) · [Documentation index](README.md)

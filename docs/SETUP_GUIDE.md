@@ -1,352 +1,168 @@
-# Setup Guide
+# Run your own Flowrish installation
 
-## Prerequisites
+This guide starts a development installation using services you control. Use synthetic data while setting it up. The hosted Flowrish application and its credentials are not part of the source license.
 
-- Node.js 22
-- Git and npm, including the committed `package-lock.json`
-- A Supabase project (free tier works)
-- An Upstash Redis database (for rate limiting)
-- An Inngest account (for background jobs)
-- A Google Cloud project (for Google OAuth login + Gmail integration)
-- An LLM API key (for AI features — optional). Any OpenAI-compatible provider works: OpenAI, Anthropic (Claude), DeepSeek, Google Gemini (default), or OpenRouter for open-weight models.
+For the system design, read [architecture](ARCHITECTURE.md). For everyday use, read the [user guide](USER_MANUAL.md).
 
-## 1. Clone and Install
+## Prepare the services
 
-```bash
+Use Node.js 22, npm, and Git.
+
+| Service | Purpose | Configuration |
+|---------|---------|---------------|
+| Supabase Auth | Sign-in and user identity | Project URL, publishable key, server secret |
+| PostgreSQL | CRM records and application settings | Runtime and migration connections |
+| Upstash Redis | Rate limiting | REST URL and token |
+| Inngest | Durable and scheduled jobs | Event/signing keys and registered app endpoint |
+| Google OAuth application | Google login and Gmail connection | Deployment OAuth credentials and allowed URLs |
+| Microsoft OAuth application | Optional Outlook connection | Deployment credentials and redirect URL |
+| AI provider | Optional AI features | Organization settings or deployment fallback |
+| Twilio | Optional browser/phone calling | Per-workspace settings, not shared deployment keys |
+
+The runtime schema currently requires Supabase, database, Redis, Inngest, Google, and encryption variables to be present. An unused feature does not make its required schema fields optional. Synthetic placeholders belong only in isolated verification; they do not connect a service.
+
+The authoritative required/optional list is [`env.schema.ts`](../src/lib/env.schema.ts). Microsoft and AI configuration are described in [integrations](INTEGRATIONS.md).
+
+## Install the source
+
+```sh
 git clone https://github.com/marckengland/flowrish-next.git
 cd flowrish-next
 npm ci
-```
-
-All dependencies (including Tiptap rich text editor packages) are installed automatically via `npm ci`. No additional setup is needed for the editor.
-
-Use your own service accounts and database. The checked-in production release scripts deliberately reject other repositories and deployment targets. Forks must configure their own deployment workflow. Never reuse the hosted Flowrish application’s credentials or database.
-
-For organization AI, configure **Settings → AI provider** after signing in. No deployment-wide AI key is required when an organization key is saved.
-
-## 2. Environment Variables
-
-Copy the example file and fill in your credentials:
-
-```bash
 cp .env.example .env
 ```
 
-### Required Variables
+Edit the private `.env` file with your own development configuration. Do not commit it or use the hosted Flowrish database.
 
-| Variable | Where to get it |
-|----------|----------------|
-| `DATABASE_URL` | Supabase → Project Settings → Database → Connection string (Transaction/Pooler mode, port 6543). Add `?pgbouncer=true` at the end |
-| `DIRECT_URL` | Supabase → Same page → Connection string (Session mode, port 5432). No pgbouncer param |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API → Project URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase → Project Settings → API → Publishable key |
-| `SUPABASE_SECRET_KEY` | Supabase → Project Settings → API → Secret key (server-only) |
-| `UPSTASH_REDIS_REST_URL` | Upstash Console → Your database → REST API → URL |
-| `UPSTASH_REDIS_REST_TOKEN` | Upstash Console → Your database → REST API → Token |
-| `INNGEST_EVENT_KEY` | Inngest Dashboard → Your app → Keys → Event Key |
-| `INNGEST_SIGNING_KEY` | Inngest Dashboard → Your app → Keys → Signing Key |
-| `EMAIL_ENCRYPTION_KEY` | Generate yourself (see below) |
-| `GOOGLE_CLIENT_ID` | Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client |
-| `GOOGLE_CLIENT_SECRET` | Same place as above |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Same as `GOOGLE_CLIENT_ID` — needed client-side for the Gmail connect button in Settings |
+| Variable group | Variables |
+|----------------|-----------|
+| Supabase | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` |
+| Database | `DATABASE_URL`, `DIRECT_URL` |
+| Redis | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` |
+| Background jobs | `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` |
+| Google OAuth | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; Gmail also needs `NEXT_PUBLIC_GOOGLE_CLIENT_ID` |
+| Encryption | `EMAIL_ENCRYPTION_KEY`: 32 random bytes encoded as 64 hexadecimal characters |
+| Public URLs | Set `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_APP_URL` for your installation |
+| Optional Outlook | `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `NEXT_PUBLIC_MICROSOFT_CLIENT_ID` |
 
-### Optional Variables
+Variables prefixed with `NEXT_PUBLIC_` can reach the browser. Do not put a secret in one. Keep the encryption key in a protected secret store; encrypted rows need the same key after recovery.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LLM_PROVIDER` | Pick a provider by name: `gemini` (default) / `openai` / `deepseek` / `anthropic` / `openrouter`. Fills the base URL + a default model. | `gemini` |
-| `AI_API_KEY` | API key for the active provider | — |
-| `AI_API_URL` | Override the OpenAI-compatible base URL (wins over `LLM_PROVIDER`; e.g. a local Ollama) | `https://generativelanguage.googleapis.com/v1beta/openai` |
-| `AI_MODEL` | Override the model (e.g. `gpt-4o-mini`, `deepseek-chat`, `moonshotai/kimi-k2`) | `gemini-3.1-flash-lite` |
-| `NEXT_PUBLIC_SITE_URL` | Canonical site URL for SEO metadata, `sitemap.xml`, and `robots.txt` (`src/lib/site.ts`) | `https://flowrish.marckengland.com` |
-| `NEXT_PUBLIC_APP_URL` | Base URL for organization invite links. Auto-derived from `VERCEL_URL` on Vercel; set explicitly on other hosts | `http://localhost:3000` |
+No deployment-wide AI key is required when an organization supplies its own key through Settings.
 
-### Generating EMAIL_ENCRYPTION_KEY
+## Prepare the database
 
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```mermaid
+flowchart LR
+    config["Check your private datasource configuration"] --> generate["Generate Prisma client"]
+    generate --> migrate["Apply committed migrations"]
+    migrate --> auth["Configure sign-in URLs"]
+    auth --> start["Start the app"]
+    start --> business["Create or join an allowed business"]
 ```
 
-### Important Notes on DATABASE_URL
+Use the connection details from your own project. A Supabase transaction pooler commonly uses port 6543 with `pgbouncer=true` for runtime queries; migrations need the appropriate direct/session connection, commonly port 5432. Match the connection type, TLS requirements, and URL-encoded password to your project.
 
-- Must use the **pooler** URL (goes through `pooler.supabase.com`), NOT the direct `db.xxx.supabase.co` URL
-- Must include `?pgbouncer=true` at the end
-- Do NOT add `&connection_limit=1` (causes timeouts)
-- Port must be `6543` (transaction mode)
+**Check `.env` before running Prisma.** [`prisma.config.ts`](../prisma.config.ts) loads it with override enabled. Shell datasource variables do not override that file.
 
-Example:
-```
-postgresql://postgres.yourproject:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
-```
-
-### Important Notes on DIRECT_URL
-
-- Also uses the pooler URL but with port `5432` (session mode)
-- Do NOT add `?pgbouncer=true`
-- Used only for migrations
-
-Example:
-```
-postgresql://postgres.yourproject:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
-```
-
-### About NEXT_PUBLIC_GOOGLE_CLIENT_ID
-
-This is the same value as `GOOGLE_CLIENT_ID` but exposed to the browser. It's used by the Gmail connect component on the Settings page to initiate the OAuth flow client-side. Without it, the "Connect Gmail" button won't work.
-
-## 3. Database Setup
-
-### Generate Prisma Client
-
-```bash
+```sh
 npx prisma generate
-```
-
-### Create Tables (First Time)
-
-```bash
 npx prisma migrate deploy
 ```
 
-### Deploy Migrations (Production)
+Apply the committed migration history to a new installation. Do not create another initialization or email-thread migration just to start the app. For an upgrade, review pending migrations and compatibility requirements before deploying code.
 
-```bash
-npx prisma migrate deploy
+Disposable database tests use a different procedure in [repository instructions](../AGENTS.md): copy the schema, use explicit loopback-only dummy configuration, generate SQL offline, and apply it inside the owned container. Never run `prisma db push` from this checkout for test setup.
+
+## Configure sign-in URLs
+
+Use the origin where your installation runs, such as `http://localhost:3000` during development. Configure the matching hosted origin before a production deployment.
+
+| Setting | URL or origin to allow |
+|---------|------------------------|
+| Supabase Auth site URL | Your app's origin |
+| Supabase Auth redirect allowlist | `/auth/confirm` for magic links and `/auth/callback` for Google sign-in, on that origin |
+| Google sign-in provider | The Supabase callback URL supplied by your project |
+| Gmail OAuth app | Your app's authorized JavaScript origin and `/api/email/callback` redirect |
+| Outlook OAuth app | Your app's `/api/email/microsoft/callback` redirect |
+
+Enable the authentication providers you intend to use. App sign-in and mailbox connection are separate flows; a Google sign-in does not automatically connect Gmail. See [email connections](INTEGRATIONS.md#connect-a-mailbox).
+
+Configure the Supabase **Magic link** email template to send the token hash to Flowrish's confirmation handler:
+
+```html
+<a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&amp;type=magiclink">Sign in to Flowrish</a>
 ```
 
-### Migration: Email Thread ID
+The login form supplies `/auth/confirm` as `RedirectTo`, without a query string. That handler requires `token_hash` and `type=magiclink`; a bare redirect fails with `invalid_link`. Preserve the fixed app callback and its redirect allowlist. For hosted Supabase, edit the template in its dashboard. Local or self-hosted Supabase uses its own template configuration. See [Supabase's template variables and configuration](https://supabase.com/docs/guides/auth/auth-email-templates).
 
-The email-thread migration is already committed. Apply pending migrations to your own database rather than creating another migration:
+## Start the app
 
-```bash
-npx prisma migrate deploy
-```
-
-This adds the `emailThreadId` field to the `CadenceEnrollment` model, enabling follow-up emails in cadences to be sent as replies in the same Gmail thread.
-
-### Legacy permission names
-
-If upgrading an older installation that stored `users:manage` or `settings:manage`, review the required permission-data migration before deploying code that uses `admin:users` and `admin:settings`. Verify role mappings and recovery in an isolated copy first. Do not run ad hoc update statements against production. New installations use the current onboarding roles.
-
-## 4. Supabase Auth Configuration
-
-In your Supabase dashboard:
-
-1. **Authentication → Providers → Email**: Enable email auth (magic links)
-2. **Authentication → Providers → Google**: Enable and add your OAuth credentials
-3. **Authentication → URL Configuration**:
-   - Site URL: `https://your-app.vercel.app` (or `http://localhost:3000` for dev)
-   - Redirect URLs: Add `https://your-app.vercel.app/auth/callback`
-
-## 5. Google Cloud Setup
-
-1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-2. Create a project → Enable Gmail API
-3. Configure OAuth consent screen (External, add email/profile/gmail scopes)
-4. Create OAuth 2.0 credentials (Web application):
-   - Authorized JavaScript origins: `https://your-app.vercel.app` (and `http://localhost:3000` for dev)
-   - Authorized redirect URIs:
-     - `https://your-supabase-ref.supabase.co/auth/v1/callback`
-     - `https://your-app.vercel.app/auth/callback`
-     - `http://localhost:3000/api/email/callback` (for local Gmail connect)
-5. Copy Client ID and Client Secret to your env vars (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `NEXT_PUBLIC_GOOGLE_CLIENT_ID`)
-6. Add the same credentials to Supabase → Authentication → Providers → Google
-
-## 6. Upstash Redis Setup
-
-1. Go to [console.upstash.com](https://console.upstash.com)
-2. Create a database (pick the region closest to your Vercel deployment)
-3. Copy the REST URL and Token from the database details page
-
-## 7. Inngest Setup
-
-1. Sign up at [inngest.com](https://www.inngest.com)
-2. Create an app, get your Event Key and Signing Key
-3. Set `INNGEST_SIGNING_KEY` as an environment variable (the SDK reads it automatically)
-4. For local development, run the Inngest Dev Server:
-
-```bash
-npx inngest-cli@latest dev
-```
-
-The dev server connects to your app at `http://localhost:3000/api/inngest`.
-
-5. For production, register your app URL in Inngest Cloud:
-   - `https://your-app.vercel.app/api/inngest`
-
-## 8. Running Locally
-
-```bash
+```sh
 npm run dev
 ```
 
-Visit `http://localhost:3000`. You'll be redirected to the login page.
+Open `http://localhost:3000`. The public landing page is `/`; the authenticated app is `/dashboard`. Registration policy determines whether a new user can create a workspace or needs an approved invitation.
 
-Alternatively, run `bash start.sh` on macOS/Linux or `start.bat` in Windows Command Prompt. Both scripts run from their own checkout directory, require Node 22, and copy `.env.example` then stop if `.env` is missing. After you configure your own development services, rerun the script. It installs locked dependencies with `npm ci` only when `node_modules` is absent, regenerates Prisma, applies migrations, and starts the server. Any install, generation, or migration failure stops startup with its diagnostic output. Check the database target first: `prisma.config.ts` gives this checkout's `.env` precedence over shell datasource variables. These launchers apply migrations; they are not test-database setup tools.
+You can also use `bash start.sh` on macOS/Linux or `start.bat` in Windows Command Prompt:
 
-### Seeding demo data (optional)
+| Startup step | Behavior |
+|--------------|----------|
+| Check Node | Requires major version 22 |
+| Find configuration | Creates `.env` from the example and stops when it is missing |
+| Install | Uses `npm ci` when `node_modules` is absent |
+| Generate and migrate | Runs both against this checkout's configuration |
+| Handle a failure | Stops instead of starting with a failed setup |
+| Launch | Runs the development server |
 
-Once you've created an organization, you can fill it with realistic, clearly
-labeled demo data so every data-driven feature has something to show:
+The helpers apply migrations. They are not service-free smoke tests.
 
-```bash
-# Point the seeder at your org (by slug, or by the owner's email), then confirm.
-SEED_ORG_SLUG=your-org-slug SEED_DEMO_CONFIRM=yes npm run seed:demo
+## Connect the optional workflows
 
-# Remove the demo rows again (they're all tagged, e.g. "… (DEMO)"):
-npm run seed:demo:clean
+| Workflow | Next step |
+|----------|-----------|
+| Background jobs | Register your deployed `/api/inngest` endpoint and check actual function runs |
+| Gmail or Outlook | Complete each user's mailbox OAuth connection |
+| AI | Save the organization's provider, available model, key, and limits |
+| Attachments | Run `npm run setup:storage` against your project to create the private bucket |
+| Website receptionist | Save allowed origins and limits, rehearse, then explicitly enable |
+| Phone receptionist | Configure Twilio, incoming routing, and the business callback destination |
+
+See [integrations](INTEGRATIONS.md), [provider settings](AI_PROVIDER_SETTINGS.md), [website reception](WEBSITE_RECEPTIONIST.md), and [phone reception](AI_RECEPTIONIST.md). Keep reception disabled while preparing the setup.
+
+## Test with synthetic data
+
+Start with the service-free checks:
+
+```sh
+npm run test:startup
+npm run test:public-repository
 ```
 
-The seeder (`prisma/seed-demo.ts`) targets a **single** org resolved from
-`SEED_ORG_SLUG`, else `SEED_USER_EMAIL` (which falls back to
-`E2E_TEST_USER_EMAIL`). It can run against production, so it prints the resolved
-org and **refuses to write unless `SEED_DEMO_CONFIRM=yes`**. It's idempotent —
-it cleans existing demo rows first, then recreates them.
+Then follow the [testing guide](TESTING.md) for the full checks. It separates mocked browser tests, disposable database drills, and authenticated application E2E. Live provider tests are optional and require separate authorization and a request budget.
 
-## 9. Running Tests
+If you need demonstration CRM records, the explicit `npm run seed:demo` command targets an organization selected by `SEED_ORG_SLUG` or its supported owner-email selectors. It refuses writes without `SEED_DEMO_CONFIRM=yes`. Use only an installation and organization you control. `npm run seed:demo:clean` removes its tagged demo records and needs the same target and confirmation; it is not a general database reset.
 
-For a service-free first check, run `npm run test:startup` and `npm run test:public-repository`. Then follow the [testing guide](TESTING.md) for unit, isolated browser, and disposable database checks. Authenticated end-to-end tests require your own Supabase test installation.
+## Deploy an installation
 
-### Unit / integration (Vitest)
+Configure your own hosting project, environment secrets, Auth redirects, and Inngest registration. Apply reviewed migrations before promoting code that needs them. The checked-in [Vercel configuration](../vercel.json) runs `prisma generate && npm run build`, uses region `sin1`, and marks API responses `no-store`. Review those choices for your services.
 
-```bash
-npm run test          # run the whole suite once
-npm run test:watch    # re-run on change
-```
+The maintainer's GitHub pipeline runs validation and gates production on successful tests, startup/public-source checks, and migrations. Public forks skip its production jobs and must provide their own pipeline. Do not remove the target guards to deploy a fork.
 
-No database or network needed — these are fully mocked.
+See [deployment gates](ops/production-deployment.md), [recovery](ops/production-deployment-rollback.md), and [public-source policy](OPEN_SOURCE_READINESS.md).
 
-### End-to-end (Playwright)
+## Troubleshooting
 
-```bash
-npm run test:e2e:install   # first time only — installs the Chromium browser
-npm run test:e2e           # local dev server, auto-started on :3100
-npm run test:e2e:prod      # against a deployed URL (read-only smoke)
-```
+| Symptom | Check |
+|---------|-------|
+| Missing environment variable | Compare your private configuration with `env.schema.ts`; the first server access validates the schema |
+| Wrong database target | Inspect the checkout's `.env`; it takes precedence over shell datasource variables |
+| Missing table | Check the intended connection and apply existing pending migrations |
+| Prepared-statement or pool errors | Check the selected pooler mode and its supported connection parameters |
+| OAuth returns to another host | Check site URL, redirect allowlists, and the app's public URL configuration |
+| Magic link returns `invalid_link` | Check that its email template supplies `token_hash` and `type=magiclink` to `/auth/confirm` |
+| Mailbox connect fails after switching business | Start consent again in the intended business |
+| Scheduler configured but no work runs | Check Inngest registration and actual run history |
+| Local E2E cannot sign in | Check the synthetic user, Supabase server key, and a valid encryption key |
+| AI unavailable | Check saved provider status, allowance, model access, and connection independently |
 
-Local e2e boots the real app and signs in through the `/auth/confirm` route, so
-it needs a **valid** `EMAIL_ENCRYPTION_KEY` (a placeholder makes that route 500
-and sign-in fails), plus `SUPABASE_SECRET_KEY` and `E2E_TEST_USER_EMAIL` for an
-existing user. See **[TESTING.md](TESTING.md)** for the full breakdown of how
-the suites work, `test:e2e` vs `test:e2e:prod`, and `@write` gating.
-
-## 10. Production Deployment (Vercel)
-
-1. Push to GitHub
-2. Import the repo in Vercel
-3. Set all environment variables in Vercel's dashboard (Settings → Environment Variables)
-4. Set the function region to match your Supabase region (configured in `vercel.json`)
-5. Deploy
-
-The `vercel.json` configures:
-- Build command: `prisma generate && next build`
-- Function region: `sin1` (Singapore — change to match your Supabase region)
-- API Cache-Control: `no-store`
-
-### After First Deploy
-
-1. Run migrations against production:
-   ```bash
-   DATABASE_URL="your-prod-url" DIRECT_URL="your-prod-direct-url" npx prisma migrate deploy
-   ```
-2. Update Supabase Auth redirect URLs to include your Vercel production URL
-3. Register your Inngest app URL in Inngest Cloud
-4. Run the permission rename SQL if upgrading (see section 3 above)
-
-### CI/CD
-
-The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
-- ESLint (`npm run lint`)
-- TypeScript strict check (`tsc --noEmit`)
-- Full unit suite (`vitest --run`)
-
-Playwright e2e is **not** part of CI (it needs a live Supabase project and a
-seeded test user) — run it locally with `npm run test:e2e`. On merge to `main`,
-a separate job applies Prisma migrations when the `SUPABASE_DB_URL` secret is set.
-
-## 11. Troubleshooting
-
-### "Prepared statement already exists" error
-Your `DATABASE_URL` is missing `?pgbouncer=true`. Add it.
-
-### "Connection pool timeout" error
-Remove `&connection_limit=1` from your `DATABASE_URL` if present.
-
-### "Authentication failed" error
-Check that the password component in the connection URL is percent-encoded. Keep the existing password strong; do not weaken it to avoid URL encoding.
-
-### "Table does not exist" error
-Apply the existing migrations to the intended database with `npx prisma migrate deploy`. Check `.env` first; it overrides shell datasource variables.
-
-### "Query Engine not found" error on Vercel
-The Prisma schema must use `provider = "prisma-client-js"` with `binaryTargets = ["native", "rhel-openssl-3.0.x"]`. Clear Vercel's build cache and redeploy.
-
-### Google OAuth redirects to localhost
-Update your Supabase Site URL (Authentication → URL Configuration) to your production URL.
-
-### Gmail connect button doesn't work
-Make sure `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is set in your environment. This is the same value as `GOOGLE_CLIENT_ID` but must be separately defined for client-side access.
-
-### User stuck on onboarding after login
-The user has an account but no organization. Complete the onboarding form to create or join an org.
-
-### Email threading not working in cadences
-Apply the existing migrations with `npx prisma migrate deploy`; do not generate another email-thread migration. Then verify mailbox/thread matching in your own installation.
-
-### Local `npm run test:e2e` fails at sign-in ("No Supabase auth cookie…")
-The `/auth/confirm` route is returning 500 because env validation failed —
-almost always a placeholder `EMAIL_ENCRYPTION_KEY`. Set a real 64-hex value
-(`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`),
-and make sure the test user exists in your Supabase project. See
-[TESTING.md](TESTING.md#troubleshooting).
-
-### `npm run test:e2e` uses the wrong server / stale code
-Local e2e owns port **`:3100`** and frees it before starting, so it never reuses
-a stale server. Keep your manual `npm run dev` on `:3000` (untouched); don't run
-your own server on `:3100`.
-
-
----
-
-## Integrations & recent additions
-
-See the **[Integrations Guide](INTEGRATIONS.md)** for full, step-by-step setup
-of calling and email providers. Quick notes for deployment:
-
-### Routing change
-
-The public **marketing landing page is now `/`**; the authenticated app lives
-under **`/dashboard`**. Auth redirects (`/auth/confirm`, `/auth/callback`,
-onboarding) send users to `/dashboard`. Middleware treats `/` and static assets
-as public.
-
-### New environment variables
-
-Microsoft 365 / Outlook email (optional — one Azure app per deployment):
-
-```
-MICROSOFT_CLIENT_ID=…
-MICROSOFT_CLIENT_SECRET=…
-NEXT_PUBLIC_MICROSOFT_CLIENT_ID=…    # same client id, for the browser authorize URL
-```
-
-Redirect URI to register in Azure: `https://<your-domain>/api/email/microsoft/callback`
-· Delegated Graph scopes: `offline_access User.Read Mail.Read Mail.Send`.
-
-**Calling has no env vars** — it's bring-your-own **per organization**, entered
-in-app (Settings → Calling & voice) and encrypted at rest with
-`EMAIL_ENCRYPTION_KEY`.
-
-### Database migrations to apply
-
-```bash
-npx prisma migrate deploy
-```
-
-New migrations: `add_voice_provider`, `add_voice_config`, `add_twilio_auth_token`.
-
-### Favicon / branding
-
-The favicon is the emerald Flowrish lily (`src/app/icon.png` + `apple-icon.png`).
-Default theme is **light** (dark mode is opt-in via the toggle; the OS
-`prefers-color-scheme` is intentionally not followed).
+Return to the [documentation index](README.md), [integrations](INTEGRATIONS.md), or [testing](TESTING.md).

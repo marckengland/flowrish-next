@@ -24,4 +24,6 @@ Reservations are not refunded after failures, timeouts, or cancellation, because
 
 Closing an Airish response or aborting its HTTP request closes the upstream transport. Interrupted output without a provider completion marker is reported as an error. Partial knowledge replies retain the existing provenance marker so they cannot become future CRM action instructions.
 
-This release adds no Twilio connection or charges. Automated verification uses synthetic keys and mocked provider transport; a real DeepSeek connection requires the administrator's key and an explicit test.
+Saving AI configuration does not connect Twilio or place a call. Automated verification uses synthetic keys and mocked provider transport. A live provider check requires a saved key and an explicit test.
+
+[Airish](AIRISH.md) · [Integrations](INTEGRATIONS.md) · [Business knowledge](BUSINESS_KNOWLEDGE.md) · [Operations](ops/ORG_AI_PROVIDER_ROLLOUT.md) · [Documentation index](README.md)
