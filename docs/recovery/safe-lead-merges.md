@@ -1,8 +1,6 @@
 # Safe lead merges: release and recovery
 
-## Recorded baseline
-
-Read-only checks on 2026-11-05 confirmed production commit `4272c397b1a4a7a0c9b81ebf288ca2b2680a7c51`, Vercel deployment `dpl_985cGHFGWb6a6U1FBwjEES5Bzt8B`, and project `prj_AFfVtIp4EO7TqUmIzBYDzDPI8zeb`. The database had 36 finished migrations, no `LeadMergeReview` table or `Lead.mergedIntoId` column, and zero enabled website receptionist widgets. No real lead data or credentials were retrieved.
+## Migration compatibility
 
 Migration `20261105020000_add_safe_lead_merges` atomically adds the archive marker/relation, private review table, constraints, and writer guards. RLS and browser-role privilege revocation take effect in the same transaction as table creation. Existing rows have a null merge marker and keep their previous behavior. Guards prevent new links or edits to a merged archive and require an active retained lead in the same business.
 
@@ -24,13 +22,9 @@ Observed checks:
 - Archived merged rows rejected edits and deletion. Applied manifests survived membership removal while the former actor’s API access was denied.
 - Operator undo refused later additions, deletions, and edits without partially restoring anything. With unchanged invented records, it restored the archive and exact transferred rows, removed only copied contact links, wrote two repair audits, and made a second run a no-op. Another organization’s data stayed unchanged.
 
-Final local checks passed: 2,145 unit tests across 317 files, all 82 mocked browser scenarios, ESLint, production build, and strict/fast TypeScript checks. Independent whole-branch review and focused fix review found no remaining material issues. The confirmation-disable tree passed 2,146 tests, including its actual disabled-policy guard, and the fast TypeScript check.
-
-Owned containers, bridge processes, and temporary schema files were removed. Production verification uses anonymous GETs and read-only catalog checks. No production merge, data repair, email, AI request, or widget activation is part of verification.
-
 ## Disable merge confirmation
 
-Signals include incorrect previews, repeated confirmation errors, or an inability to retrieve a confirmed receipt. The prepared local `antidote/safe-lead-merges` branch changes `leadMergeWritesEnabled()` to false and adds a test proving the real disabled policy rejects confirmation before the service runs. It retains archive markers, guards, receipts, audit history, and all data-preservation code. After explicit approval, cherry-pick its tip onto current main, run the repository checks, and push through the normal release gates.
+Signals include incorrect previews, repeated confirmation errors, or an inability to retrieve a confirmed receipt. Prepare a reviewed change setting `leadMergeWritesEnabled()` to false, with a test proving the real disabled policy rejects confirmation before the service runs. Retain archive markers, guards, receipts, audit history, and all data-preservation code. Run the full checks on the recovery branch before explicit approval and deployment through the normal release gates. No private maintainer branch is needed or distributed.
 
 Confirmation and receipt-retry requests are unavailable while this switch is disabled. Previews and read-only lead history remain available. Inspect audit history when investigating an uncertain request. Expect a normal CI/deployment cycle; observe the actual timing.
 

@@ -66,3 +66,7 @@ next-env.d.ts
 # Local agent state; keep it out of public source and artifacts.
 /.serena/
 /.spec-workflow/
+
+# Internal planning and personal editor automation belong outside public source.
+/.kiro/
+/docs/superpowers/

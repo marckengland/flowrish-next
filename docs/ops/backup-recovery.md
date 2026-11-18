@@ -1,20 +1,6 @@
 # Backup and recovery
 
-## Readiness recorded on 4 November 2026
-
-**Synthetic recovery tooling passed. Production recovery is not yet proven.** No production data was exported, restored, or changed during this check.
-
-| Item | Read-only evidence | Status |
-| --- | --- | --- |
-| Supabase project | `ilkfauwpjyrqcowlzwtz`, healthy, `ap-southeast-1`, PostgreSQL 17.6.1.121 | Confirmed |
-| Organization plan | Connected organization metadata reports Free (`tier_free`) | Confirmed |
-| Scheduled daily backups | Free does not include automatic daily backups | Not available on current plan |
-| Manual or paused-project snapshots | The connected tools cannot list backups; the browser console requires sign-in | Unverified |
-| Off-site backup, encryption, retention, latest successful copy | No inventory was available to this check | Unverified |
-| Production recovery point or recovery time | No real backup restore was authorized | Unverified |
-| Receptionist widget | One configuration, zero enabled; aggregate query only | Off |
-
-Supabase recommends regular off-site exports for Free projects. A successful synthetic drill does not establish a production recovery point. Do not describe recovery as ready until there is a verified real backup, its required external assets and keys, and an approved isolated restore test. See [database backups](https://supabase.com/docs/guides/platform/backups), [Free plan backups](https://supabase.com/kb/faqs/platform/free-plan-backups), and the [read-only backup inventory endpoint](https://supabase.com/docs/reference/api/v1-list-all-backups). Platform terms can change; check them when choosing a backup policy.
+Assess backups for your own installation. A synthetic restore does not prove production recovery readiness. Record the backup owner, schedule, retention, encryption, storage objects, required keys, and an approved isolated restore result privately. Verify current backup capabilities with your hosting provider.
 
 ## Run the synthetic drill
 
@@ -40,17 +26,13 @@ The fixture contains two organizations with related users, members, companies, c
 - Rejection of a corrupt archive without target changes, a forced error after earlier tables have been created with complete transaction rollback, and refusal to restore over a populated target.
 - Unchanged source, restored and separate control fingerprints after the probes; removal of the owned container and temporary files before reporting success.
 
-Lead and Task RLS with zero policies, and the knowledge tables' revoked browser-role privileges, were modeled from a catalog-only production read. This does not claim that all live schema drift or application authorization was audited. Rebuilding from Prisma alone would miss this observed Lead/Task RLS state; use a real logical archive for a future real-data recovery test.
+The synthetic fixture models Lead/Task RLS with no policies and revoked browser-role knowledge privileges. It is not an audit of your live schema or application authorization. A real logical archive must retain the installation's own roles, privileges, and schema drift.
 
 Successful reports are written to ignored `test-results/recovery-drill/report.json`. They contain only versions, counts, digests, timings and check names. The synthetic archive is discarded. A new CLI run removes stale success evidence. Cleanup failure prevents success. If the process or Docker daemon is forcibly killed, inspect only the exact `flowrish-recovery-<UUID>` container from that run, verify its matching `flowrish.recovery-drill=<UUID>` label, network `none` and lack of host mounts, and remove that owned container. Never use a Docker prune command or remove another project's container. Temporary directories use the same `flowrish-recovery-` prefix under the OS temporary directory.
 
-## Observed drill result
-
-On 4 November 2026, the cached PostgreSQL 17.11 image restored **67 tables, 27 application rows and 34 migration rows**. All 13 reported checks passed, including corrupt/archive interruption, nonempty-target refusal, data/catalog comparisons and source/control preservation. The archive was about 200 KiB; the measured restore step was 208 ms and the complete drill took about 9 seconds. These are synthetic local timings, not a production recovery-time commitment. The report's exact duration and archive digest vary on rerun because fixture creation times and ledger IDs are generated locally.
-
 ## What a real recovery would still require
 
-Before accepting production records, agree on acceptable data loss (RPO), acceptable downtime (RTO), an owner, and a verified backup schedule. Within the current no-spending constraint, first inventory any existing manual/off-site copies and determine whether an owner-operated encrypted export is feasible. No export, schedule, storage service or upgrade was created here.
+Before accepting production records, agree on acceptable data loss (RPO), acceptable downtime (RTO), an owner, and a verified backup schedule. Inventory existing copies and choose a backup process appropriate to those requirements. This tooling does not create production exports, schedules, or storage services.
 
 Keep these recovery inputs separate and access-controlled:
 

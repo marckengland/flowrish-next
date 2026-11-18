@@ -2,7 +2,7 @@
 
 Baseline application: `7d73c3d4dae574d4f816fc7b02ad9c469438dafd`.
 
-A read-only production check on 6 November 2026 found 41 applied migrations, no `SavedFollowUpView` table, and zero enabled widgets. No open pull requests were using the new migration version. Migration `20261106000000_add_saved_follow_up_views` adds one private preference table, constraints and an index. It changes no existing records or widget settings.
+Migration `20261106000000_add_saved_follow_up_views` adds one private preference table, constraints and an index. It changes no existing records or widget settings.
 
 If the new controls or API cause failures, revert the feature's application changes in a recovery branch while retaining the additive Prisma model and applied migration:
 

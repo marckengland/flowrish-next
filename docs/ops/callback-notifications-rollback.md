@@ -1,6 +1,6 @@
 # Callback notifications rollback
 
-The baseline before release was `3a1f127e04de1b339cb786db92467007f7411127`. A read-only production query on 2026-11-03 found no `CallbackNotification` table, zero website callbacks, zero callback handoffs and zero enabled widgets. The migration creates only the private notification table, its constraints/index and foreign keys; it backfills nothing and changes no existing callback, CRM record, provider setting or widget activation.
+The migration creates only the private notification table, its constraints/index and foreign keys; it backfills nothing and changes no existing callback, CRM record, provider setting or widget activation.
 
 ## Recover
 

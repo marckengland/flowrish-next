@@ -1,73 +1,34 @@
 #!/bin/bash
+# Start the development app using this checkout's own environment.
+set -euo pipefail
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
-# Flowrish CRM — Development Start Script
-# Usage: ./start.sh
-
-set -e
-
-echo "🌱 Flowrish CRM — Starting development environment..."
-echo ""
-
-# Check Node.js
-if ! command -v node &> /dev/null; then
-  echo "❌ Node.js is not installed. Please install Node.js 20+."
+if ! command -v node >/dev/null 2>&1; then
+  echo "Node.js 22 is required. Install it before continuing." >&2
   exit 1
 fi
+NODE_VERSION=$(node -v)
+case "$NODE_VERSION" in
+  v22.*) ;;
+  *) echo "Node.js 22 is required. Current: $NODE_VERSION" >&2; exit 1 ;;
+esac
 
-NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-if [ "$NODE_VERSION" -lt 20 ]; then
-  echo "❌ Node.js 20+ required. Current: $(node -v)"
-  exit 1
-fi
-
-echo "✓ Node.js $(node -v)"
-
-# Check if node_modules exists
-if [ ! -d "node_modules" ]; then
-  echo ""
-  echo "📦 Installing dependencies..."
-  npm install
-else
-  echo "✓ Dependencies installed"
-fi
-
-# Check .env file
-if [ ! -f ".env" ]; then
-  if [ -f ".env.example" ]; then
-    echo ""
-    echo "⚠️  No .env file found. Copying from .env.example..."
+if [ ! -f .env ]; then
+  if [ -f .env.example ]; then
     cp .env.example .env
-    echo "   Please edit .env with your actual credentials before continuing."
-    echo "   See docs/SETUP_GUIDE.md for details."
-    exit 1
+    echo "Created .env from the template. Add your own development credentials, then run this script again."
   else
-    echo "❌ No .env or .env.example file found."
-    exit 1
+    echo "Missing .env and .env.example. See docs/SETUP_GUIDE.md." >&2
   fi
+  exit 1
 fi
 
-echo "✓ Environment file exists"
-
-# Generate Prisma client if needed
-if [ ! -d "src/generated/prisma" ]; then
-  echo ""
-  echo "🔧 Generating Prisma client..."
-  npx prisma generate
-else
-  echo "✓ Prisma client generated"
+if [ ! -d node_modules ]; then
+  npm ci
 fi
 
-# Run migrations
-echo ""
-echo "🗄️  Running database migrations..."
-npx prisma migrate deploy 2>/dev/null || {
-  echo "⚠️  Migration failed — check your DATABASE_URL and DIRECT_URL in .env"
-  echo "   Continuing anyway (database might already be up to date)..."
-}
-
-# Start dev server
-echo ""
-echo "🚀 Starting Next.js development server..."
-echo "   → http://localhost:3000"
-echo ""
+npx prisma generate
+echo "Applying migrations to the database configured in this checkout's .env. Use your own development database."
+npx prisma migrate deploy
+echo "Starting Flowrish at http://localhost:3000"
 npm run dev

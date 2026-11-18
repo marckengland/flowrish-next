@@ -2,9 +2,7 @@
 
 If contact restrictions cannot be verified, keep outreach blocked. Do not redeploy the older unrestricted sender, clear restrictions in SQL, drop the registry, or resume stopped cadences as an availability fix.
 
-## Recorded baseline
-
-Before release on 2026-11-05, main and production were `354b0730d7a3bfbd52c165de650a0b0bc7145649`. A read-only production catalog query confirmed 39 completed migrations, no ContactSuppression table, and zero enabled public widgets. No production business records, credentials, or provider settings were read.
+## Migration compatibility
 
 Migration `20261105060000_add_contact_suppressions` creates one private additive table with a workspace/address unique key, normalization/reason/revision constraints, organization foreign key, RLS, and revoked public/browser grants. It performs no business-data backfill or deletion. The table and recorded migration must remain through recovery.
 

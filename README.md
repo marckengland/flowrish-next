@@ -65,6 +65,8 @@ This repository remains `private: true` in npm metadata to prevent accidental np
 | `npm run typecheck:fast` | Type-check with no emit (`tsgo --noEmit`) |
 | `npm run test` | Run the unit/integration suite once |
 | `npm run test:watch` | Unit tests in watch mode |
+| `npm run test:startup` | Test startup failure handling with synthetic commands; no services or dependencies required |
+| `npm run test:public-repository` | Check public file boundaries, Markdown links, license wording, and documented npm commands |
 | `npm run test:receptionist:integration` | Receptionist migration, concurrency, and rollback checks on disposable PostgreSQL (Docker required) |
 | `npm run test:e2e` | Playwright e2e against a local dev server (auto-started on `:3100`) |
 | `npm run test:e2e:ui` | Playwright e2e in interactive UI mode |
@@ -107,7 +109,7 @@ src/
 ├── stores/                 # Zustand stores (layout, filters, kanban)
 └── types/                  # TypeScript type definitions
 prisma/
-├── schema.prisma           # Database schema (~40 models, 33 tenant-scoped)
+├── schema.prisma           # Database schema and workspace relationships
 └── seed.ts                 # Seed script
 ```
 
@@ -132,7 +134,7 @@ prisma/
 - **Follow-up inbox** — Review matched sales replies and confirmed callbacks, edit and approve tasks, dismiss suggestions, and open email drafts for explicit sending. Qualifying synced replies stop their cadence; see the [guide](docs/FOLLOW_UP_INBOX.md)
 - **AI receptionist** — Optional inbound Twilio receptionist with approved FAQs, after-hours scheduling, confirmed callback capture, assigned tasks, and call history. Disabled by default; see the [setup guide](docs/AI_RECEPTIONIST.md)
 - **Marketing landing page** — public `/` landing (auth-aware CTAs); the authenticated app lives under `/dashboard`
-- **AI Features** — Email generation, account research, and **Airish**, the in-app AI chatbot assistant. Provider-agnostic: runs on any OpenAI-compatible LLM — OpenAI, Anthropic (Claude), DeepSeek, Google Gemini (default), or OpenRouter (open-weight models like Kimi, GLM, Llama, Qwen) — via `LLM_PROVIDER`
+- **AI features** — Email generation, account research, and **Airish**, the in-app assistant with source references, tables, and validated bar/line charts. Organization settings support OpenAI, Gemini, and DeepSeek with encrypted keys and daily usage limits. Deployment settings also support compatible endpoints; see [AI provider settings](docs/AI_PROVIDER_SETTINGS.md).
 - **CSV Import/Export** — Bulk lead import with duplicate detection and field mapping
 - **Full-text Search** — PostgreSQL tsvector across leads, contacts, and companies
 - **Audit Logging** — Immutable trail of all CUD operations
@@ -181,6 +183,8 @@ All routes under `/api/admin/` require `admin:users` or `admin:settings` permiss
 
 ## Documentation
 
+Use the [documentation index](docs/README.md) to find feature, contributor, and recovery guides. Internal implementation plans, personal editor automation, and private release evidence are maintained outside the public source tree. Earlier versions can remain in Git history.
+
 - [Setup Guide](docs/SETUP_GUIDE.md) — Full environment setup and deployment
 - [Architecture](docs/ARCHITECTURE.md) — System design, multi-tenancy, RBAC, data flow
 - [User Manual](docs/USER_MANUAL.md) — Feature walkthrough and user flows
@@ -193,4 +197,4 @@ Deployed on Vercel with Supabase Cloud. See [Setup Guide](docs/SETUP_GUIDE.md) f
 
 ## License
 
-Private — All rights reserved.
+Flowrish's original code and documentation are available under the [MIT license](LICENSE). Third-party components retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).

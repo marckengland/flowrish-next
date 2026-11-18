@@ -1,7 +1,5 @@
 # Callback response targets rollback
 
-The release baseline is `454925467c326d12b23e07422507ea5599f5de42`. A read-only production check on 2026-11-03 found neither new response table, zero callback notifications, zero website callbacks, zero CRM handoffs, and zero enabled website widgets. There were no open pull requests reserving the new migration version.
-
 Migration `20261103060000_add_callback_response_targets` creates two private tables and expands the existing notification-kind constraint. It backfills nothing and changes no business settings, provider credentials, widget activation, callback, or CRM record. Policies are disabled by default.
 
 ## Recover

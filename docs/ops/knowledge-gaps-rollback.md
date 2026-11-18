@@ -1,7 +1,5 @@
 # Knowledge gaps inbox rollback
 
-Before release on 2026-11-03, production main was `43bc9b2d3181d0febaeb34c98492435f08c535a9`. A read-only schema query confirmed that `KnowledgeGapReview` was absent, source reports and FAQ origins existed, and the latest applied migration was `20261102110000_add_rehearsal_faq_drafts`.
-
 This release adds only manual review metadata. There is no migration backfill, report update, FAQ publication, credential change, or customer-data rewrite. Reading the inbox contacts no AI or phone provider.
 
 ## Recover

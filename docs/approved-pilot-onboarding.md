@@ -29,7 +29,7 @@ The suggested next step ends at manual review with the business. Checking progre
 
 ## Verify changes without providers
 
-Run the repository checks in `AGENTS.md`, including `npm run test:receptionist:mocked`. The isolated browser suite covers 33 scenarios using synthetic records and intercepted API calls. It makes no authentication, email, database, or provider requests.
+Run the repository checks in `AGENTS.md`, including `npm run test:receptionist:mocked`. The isolated browser suite covers onboarding and progress workflows using synthetic records and intercepted API calls. Use the runner summary for its current scenario count. It makes no authentication, email, database, or provider requests.
 
 The additional database suite uses `vitest.pilot.config.ts` and requires `PILOT_TEST_DATABASE_URL` with the explicitly checked loopback dummy credentials. Prepare a disposable PostgreSQL container using the copied-schema and offline-SQL procedure in `AGENTS.md`. Never run `prisma db push` from this checkout.
 
@@ -41,7 +41,7 @@ A progress-only release needs a code revert; it changes no schema or stored data
 
 If pilot sign-in or creation fails, stop sharing links. Revert the application changes and redeploy the previous application. Keep the additive `WaitlistPilotInvite` table, its index, the Prisma model, and applied migration. Its restrictive references preserve accepted workspace receipts. The previous application does not read the table.
 
-The tested reverse patch and release evidence are stored privately under `/Users/maki/.codex/flowrish-recovery/2026-11-04-approved-pilot-onboarding/`. Apply the reverse patch to a clean release checkout, review it, and deploy through the normal checks. Recovery takes one build and deployment cycle.
+Prepare and test an application-only recovery patch against your own release in a clean checkout. Retain the additive invitation schema and accepted-workspace receipts, then deploy through the normal checks. Keep operational evidence outside the public repository.
 
 Code rollback does not delete created organizations or undo links already shared. Revoke specific unused invitations through the staff panel before removing it, if needed. Do not drop invitation receipts, restore a whole database snapshot, edit an applied migration, or rewrite main's history.
 

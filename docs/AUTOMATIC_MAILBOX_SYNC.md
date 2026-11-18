@@ -20,8 +20,6 @@ The base commit is `3da118d`. The migration adds health columns to EmailAccount 
 
 Rollback does not undo cadence exits or tasks users approved. Before rollout, record counts and checkpoints without mailbox addresses or tokens. Test code reversal on a disposable archive and migration/concurrency behavior on disposable PostgreSQL.
 
-Before/after migration verification on 2026-11-02: 2 organizations, 10 leads, 7 tasks, 9 activities, 1 mailbox, 0 email messages; counts unchanged. The mailbox's health begins idle. No credentials were changed. Disposable PostgreSQL verified concurrent queue deduplication, failure/checkpoint retention, stale-run guards, auth boundaries, and permission/membership checks.
-
 Verification commands: `npm test`, `npm run lint`, `npm run typecheck:fast`, `npm run build`, and `node_modules/.bin/vitest run --config vitest.mailbox-sync.config.ts`. The existing follow-up and receptionist PostgreSQL suites also remain applicable.
 
 Rollback reverse-patch verification passed on a disposable archive: every tracked file hash returned to the base commit. Final local checks: 1,046 unit tests, 20 PostgreSQL integration tests, lint, both typecheck engines, and production build passed. Browser suite: 26 passed with 4 existing navigation guards skipped; all new sync health cases passed.

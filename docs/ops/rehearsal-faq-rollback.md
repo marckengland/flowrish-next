@@ -1,7 +1,5 @@
 # Rehearsal FAQ drafts rollback
 
-Before release on 2026-11-02, production main was `bde75ef0807368a82d1058549a00b676ab9ad58e`. A read-only schema query confirmed that `RehearsalFaqDraft` was absent, `ReceptionistRehearsal` and `KnowledgeDocument` existed, and the latest applied migration was `20261102100000_add_receptionist_rehearsal_reports`.
-
 The new migration adds one private link table and one unique index. It changes no existing document, report, approval, customer record, credential, or business setting.
 
 ## Recover

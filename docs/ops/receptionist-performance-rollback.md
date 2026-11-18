@@ -2,8 +2,6 @@
 
 Baseline: `28ef742c1ab7d2579842a6e8ac62f44b05bb5534`. This release adds a read-only dashboard and GET API. It adds no schema, migration, dependency, provider call, persistent configuration, or scheduled job. A normal code revert is the antidote; nothing else persists.
 
-A read-only production check on 2026-11-03 found zero callbacks, handoffs, outcomes, notifications, response policies, response targets, and enabled website widgets. Verification must leave these unchanged unless a real user changes them independently.
-
 If counts disagree with their definitions, access fails, or the report cannot load, revert the merge and redeploy through the normal pipeline:
 
 ```sh

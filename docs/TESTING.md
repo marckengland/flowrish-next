@@ -1,100 +1,79 @@
-# Testing Guide
+# Test Flowrish
 
-Flowrish has two independent test layers:
+Use Node.js 22. Install locked dependencies with `npm ci` before application tests. Use synthetic inputs and your own test services. Do not point tests at the hosted Flowrish database.
 
-| Layer | Tool | What it covers | Runs in CI? |
-|-------|------|----------------|-------------|
-| **Unit / integration** | Vitest + fast-check | Services, server actions, validators, hooks, and component logic — with property-based tests for security-sensitive code | ✅ Yes |
-| **End-to-end (e2e)** | Playwright | Real browser walks the authenticated app (route smoke tests, row navigation, create-form flows) | ❌ No (run manually / locally) |
+## Choose the test layer
 
----
+| Layer | Command | External services | CI |
+|-------|---------|-------------------|----|
+| Startup scripts | `npm run test:startup` | None; temporary directories and synthetic commands | Linux and Windows |
+| Public source and docs | `npm run test:public-repository` | None; Git and Node built-ins | Linux and Windows |
+| Unit and property tests | `npm test` | Mocked database, authentication, and provider transports | Yes |
+| Isolated browser rehearsal | `npm run test:receptionist:mocked` | Local fixture server and installed Chromium | Yes |
+| Synthetic database workflows | `npm run test:inbox:performance`, `npm run test:compose-drafts:synthetic`, `npm run test:send-results:synthetic` | Disposable local Docker PostgreSQL | Yes |
+| Authenticated application E2E | `npm run test:e2e` | Your Supabase test project, user, and configured application services | Manual |
 
-## Unit tests (Vitest)
+## Run the full development checks
 
-```bash
-npm run test          # run the whole suite once
-npm run test:watch    # re-run on change
-npx vitest run path/to/file.test.ts   # a single file
+```sh
+npm run test:startup
+npm run test:public-repository
+npm test
+npm run lint
+npm run test:receptionist:mocked
+npm run build
+npx tsc --noEmit
+npm run typecheck:fast
 ```
 
-- Test files live next to the code they cover (`*.test.ts`) or under `__tests__/` folders.
-- **Property-based tests** (`fast-check`) assert invariants over many generated inputs — e.g. `src/server/services/__tests__/ai.property.test.ts` verifies that AI failures never leak API keys and that the admin system prompt is included/excluded correctly. These run 30 iterations each, so that file raises its own timeout (`vi.setConfig({ testTimeout: 15_000 })`) to stay stable on slower CI runners.
-- No database or network is required — Prisma, Supabase, and `fetch` are mocked.
+Install Chromium first with `npm run test:e2e:install` if it is unavailable. Complete both the browser fixture build and main application build before running strict and fast type checks. Next.js replaces generated types during builds, so do not run those checks concurrently.
 
----
+A build requires the configuration described in the [setup guide](SETUP_GUIDE.md). CI uses inert placeholders rather than production credentials. No AI provider is needed for normal verification.
 
-## End-to-end tests (Playwright)
+## Run focused unit tests
 
-Everything is driven by `playwright.config.ts`. `npm run test:e2e` and `npm run test:e2e:prod` are **not** a different tool — they both run `playwright test`; they only differ in **environment and target**.
+```sh
+npx vitest run src/__tests__/production-release.test.ts
+npm run test:watch
+```
 
-### How a run works
+Vitest covers services, actions, validators, hooks, and components. Property tests use fast-check to exercise generated inputs. Tests belong beside the implementation or under `__tests__`. Preserve assertions and behavior when fixing a fixture; do not skip checks to obtain a green run.
 
-1. **Server** — For a local run, Playwright starts the dev server itself on a **dedicated port `3100`** (`webServer` in the config). It frees the port first and never reuses an existing server, so tests always hit fresh code (Next.js does not hot-reload middleware, and `next dev` silently moves to `:3101` if `:3100` is taken — both traps this avoids). For a prod run, `webServer` is skipped and tests hit the deployed URL directly.
-2. **`setup` project** (`e2e/auth.setup.ts`) — signs in **once**. Because auth is passwordless, it asks the Supabase admin API to mint a magic-link token for `E2E_TEST_USER_EMAIL`, drives the app's `/auth/confirm` route to exchange it for a session, and saves the cookies to `e2e/.auth/user.json` (gitignored).
-3. **`chromium` project** — loads that saved `storageState` so every test starts already authenticated, then runs the specs.
+## Verify browser workflows without credentials
 
-### The specs (`e2e/`)
+`npm run test:receptionist:mocked` builds the separate fixture app under `e2e/rehearsal-app`. It imports real client components and intercepts API responses using synthetic records. It needs neither Supabase authentication nor an AI key.
 
-- **`smoke.spec.ts`** — visits every dashboard route (`/leads`, `/admin`, …), asserting HTTP < 400, the expected `<h1>`, and **zero console/page errors**; plus row-click navigation and the "New lead" CTA. Read-only.
-- **`forms.spec.ts`** — tagged **`@write`**. Actually creates a task / cadence step and asserts success. These mutate data.
+The runner removes inherited credentials, blocks private environment-file reads, and restricts server sockets and Chromium traffic to the fixture. Negative probes exercise those guards. Unmocked writes, provider calls, email, phone calls, and widget activation fail the rehearsal. Results are written under ignored `test-results/rehearsal`.
 
-### Local vs. prod
+This suite verifies workflow behavior, including drafts, access changes, confirmations, and recovery. It does not measure live AI quality or physical microphone and telephone behavior. See the [fixture guide](../e2e/rehearsal-app/README.md).
 
-| Command | Target | Server | `@write` specs | Parallelism |
-|---------|--------|--------|----------------|-------------|
-| `npm run test:e2e` | local `:3100` | auto-started | **run** | parallel |
-| `npm run test:e2e:ui` | local `:3100` | auto-started | run | Playwright UI mode |
-| `npm run test:e2e:prod` | deployed URL | none | **skipped** | serialized (1 worker) |
-| `npm run test:e2e:prod:write` | deployed URL | none | run (writes!) | serialized |
+## Verify database behavior in isolation
 
-- A run is treated as **prod** when `PLAYWRIGHT_BASE_URL` is present in the *ambient* environment. `test:e2e:prod` sets it via `node --env-file=.env`; a plain `test:e2e` deliberately drops a value that only lives in `.env`, so it always stays local.
-- Against prod the config serializes (one worker, longer timeouts, 2 retries) to avoid tripping the app's Upstash rate limiter, and **skips `@write` specs** unless `E2E_ALLOW_WRITES=1` — so a prod smoke run never mutates the live database by accident.
+The three synthetic commands in the table own disposable PostgreSQL containers and use synthetic records. They check bounded inbox queries, draft storage, duplicate protection, concurrency, access changes, and rollback. Read the relevant runner's prerequisites before starting Docker; do not substitute a remote database URL.
 
-### Required environment
+Other integration configurations, such as `vitest.knowledge.config.ts` and `vitest.receptionist-preview.config.ts`, require an explicitly validated loopback test datasource. Follow `AGENTS.md`: copy the schema to a temporary directory, generate SQL offline with explicit dummy configuration, and apply it through `docker exec psql` inside the disposable container. Never run `prisma db push` from this checkout. Root Prisma configuration gives `.env` precedence over shell datasource variables.
 
-Read from `.env` (the config loads it into the runner):
+The separate `npm run test:recovery:synthetic` drill verifies synthetic dump/restore behavior. It does not back up production or establish production recovery readiness. See the [recovery guide](ops/backup-recovery.md).
 
-- `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SECRET_KEY` — mint the magic link.
-- `E2E_TEST_USER_EMAIL` — an existing user in the org you want to test.
-- `EMAIL_ENCRYPTION_KEY` — a **valid 64-hex** value. Local runs boot the real app, and `/auth/confirm` validates the whole env schema; a placeholder key makes that route 500 and sign-in fails silently.
+## Run authenticated application tests
 
-### First-time e2e setup
+Use a dedicated test installation and synthetic account. Configure `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `E2E_TEST_USER_EMAIL`, and a valid 64-hex `EMAIL_ENCRYPTION_KEY` in your private environment. The setup project mints a magic-link session and stores browser state in ignored `e2e/.auth`.
 
-```bash
-npm run test:e2e:install   # install the Chromium browser (+ OS deps)
+```sh
+npm run test:e2e:install
 npm run test:e2e
 ```
 
----
+Local E2E owns port 3100 and may create records through write-tagged tests. Do not run an unrelated server on that port. Never commit authentication state, reports, or test traces.
 
-## Receptionist preview checks
+For a deployed test installation, set `PLAYWRIGHT_BASE_URL` and use `npm run test:e2e:prod`. That command skips `@write` tests unless writes are explicitly enabled. Authentication and reads still contact your configured services. `npm run test:e2e:prod:write` explicitly permits writes and belongs only in an authorized test installation.
 
-Run `node_modules/.bin/vitest run --config vitest.receptionist-preview.config.ts` for disposable PostgreSQL checks of the preview's read-only behavior, saved configuration version, current-organization permissions, approved knowledge, and revocation. It mocks the AI provider and creates no external calls.
+## Understand the release gate
 
-`e2e/receptionist-preview.spec.ts` exercises the onboarding and callback preview with synthetic intercepted responses. Readiness, missing-configuration, and authentication checks use the real API without saving settings. Browser read-aloud is optional and does not verify phone audio or speech recognition.
+CI runs on pushes to main and pull requests targeting main. It runs startup/public-source checks, lint, strict types, unit tests, isolated browser workflows, and synthetic database checks.
 
-## Business knowledge checks
+Production jobs run only for main pushes in the maintainer repository. They require successful prerequisites and the configured Production environment, apply reviewed migrations, verify the exact release commit, and check anonymous access after promotion. Public forks run validation without access to Flowrish's deployment secrets. See the [deployment guide](ops/production-deployment.md).
 
-Run `node_modules/.bin/vitest run --config vitest.knowledge.config.ts` for disposable PostgreSQL checks of published snapshots, public approval, revisions, concurrency, tenant isolation, RLS, and rollback preservation. Use Node 22.
+## Keep live tests explicit
 
-`e2e/knowledge.spec.ts` tests management flows with intercepted synthetic responses. Its real PDF and DOCX requests exercise the compiled extraction endpoint without saving documents. The suite checks that library IDs stay unchanged. No test sends customer content to an AI provider or places phone calls.
-
-## What CI runs
-
-`.github/workflows/ci.yml` runs on every push/PR: lint, `tsc --noEmit`, and the full Vitest suite. **Playwright is not run in CI** — it needs a live Supabase project and a seeded test user, so e2e is a local/manual gate. On merge to `main`, a separate job applies Prisma migrations (gated on the `SUPABASE_DB_URL` secret).
-
----
-
-## Troubleshooting
-
-**`auth.setup` fails: "No Supabase auth cookie after confirming the magic link" (local)**
-The `/auth/confirm` route is 500-ing. Almost always a placeholder `EMAIL_ENCRYPTION_KEY` — set a real 64-hex value (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`). Also confirm the test user exists in the Supabase project and `SUPABASE_SECRET_KEY` is the service-role key.
-
-**`RATE_LIMITED` / 429 during a prod run**
-Rate limiting only applies to `/api/*`, but repeated prod runs can still trip the auth/write windows. Runs already serialize; wait for the window to reset, or wire `E2E_BYPASS_TOKEN`.
-
-**Tests hit stale code / a server on the wrong port**
-Local runs own `:3100` and kill anything on it before starting. If you keep a manual `next dev` on `:3000`, that's fine — it's untouched. Don't start your own server on `:3100`.
-
-**Property test times out in CI**
-These run 30 iterations; `ai.property.test.ts` already sets a 15s per-test timeout. If a new property test flakes on CI, give it a generous `testTimeout` or lower `numRuns`.
+Live AI, native speech, mailbox, and phone checks are separate from mocked verification. They require explicit authorization, synthetic inputs, configured accounts, and an agreed request budget. Saving AI settings does not authorize a live test. See the [live AI procedure](ops/RECEPTIONIST_LIVE_AI_TEST.md) and [browser preview guide](RECEPTIONIST_PREVIEW.md).

@@ -2,7 +2,7 @@
 
 Baseline: `3d1207135731fd7ff0004523db92b5b4941b6f08`.
 
-Before rollout on 5 November 2026, a read-only production catalog check found no `SavedLeadView` table, 34 applied migrations and zero enabled widgets. The new migration creates one private preference table, index and constraints. It inserts no rows or changes to leads, tasks, email, providers or widget configuration.
+The new migration creates one private preference table, index and constraints. It inserts no rows or changes to leads, tasks, email, providers or widget configuration.
 
 A catalog check also confirmed default table grants to browser roles. The migration therefore wraps creation and privacy statements in one PostgreSQL transaction. A local injected failure before the RLS statement rolled back the table completely. The successful migration revoked the modeled default grants and passed the ownership, revision and membership-cascade checks.
 

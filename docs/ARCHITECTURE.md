@@ -6,7 +6,7 @@ Flowrish CRM is a single Next.js 15 application using the App Router pattern. Al
 
 ## Multi-Tenancy
 
-Every data model (except User, Organization, and auth-related tables) is scoped to an organization via an `organizationId` foreign key. Of the ~40 models in the schema, 33 are tenant-scoped this way.
+Workspace-owned records use organization identifiers and, where applicable, composite foreign keys. User identities are shared across memberships. The current models and constraints are defined in `prisma/schema.prisma`; avoid assuming that a new model is automatically scoped.
 
 ### Tenant Isolation Middleware
 
@@ -18,14 +18,14 @@ This creates a Prisma client extension that automatically:
 - **Injects `organizationId`** into all `create` operations
 - **Filters by `organizationId`** on all `find`, `update`, `delete`, `count`, and `aggregate` operations
 
-Services never manually add `organizationId` to queries — it's enforced at the data layer.
+This extension scopes only the models listed in `TENANT_SCOPED_MODELS`. Services also use explicit organization filters, permission checks, and transaction-bound guards. Direct Prisma queries and raw SQL must enforce the current workspace themselves; the extension is not an authorization boundary for every query.
 
 ### Organization ID Resolution
 
-The `organizationId` is always resolved **server-side** from the authenticated user's default organization membership. It never comes from client input.
+The server validates the Supabase user and loads current organization memberships. A browser selection identifies a requested business, which must still belong to that user. Without a selection, the session uses a retained default membership or the first retained membership. A revoked selection requires workspace recovery rather than silently redirecting a write to another business.
 
 ```
-Session → OrganizationMember (isDefault: true) → organizationId
+Authenticated user → requested/default retained membership → current organizationId
 ```
 
 ## Authentication Flow
@@ -57,7 +57,7 @@ Session → OrganizationMember (isDefault: true) → organizationId
 interface Session {
   authUser: SupabaseUser       // From Supabase auth.getUser()
   dbUser: SessionUser          // App User with team memberships + role permissions
-  organizationId: string       // Resolved from default org membership
+  organizationId: string       // Current membership validated server-side
 }
 ```
 
@@ -66,6 +66,7 @@ interface Session {
 - User authenticated but no org → redirected to `/onboarding`
 - User on `/onboarding` but already has org → redirected to `/`
 - Incomplete onboarding (org exists but no team membership) → auto-repaired in dashboard layout
+- Requests from stale business tabs are rejected when their expected workspace differs from the current session. Membership and permissions are rechecked at sensitive workflow boundaries.
 
 ## Organization & Team Model
 

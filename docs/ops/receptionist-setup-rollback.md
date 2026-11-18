@@ -1,6 +1,6 @@
 # Guided receptionist setup rollback
 
-The baseline before this code-only release was `6d186c863a1704463eb27d6273189f7fa2e19970`. No schema, migration, dependency, credential, or deployment configuration changes are included. Deploying the guide does not activate reception or modify business settings. A read-only production query before release found zero saved website configurations and zero enabled widgets.
+No schema, migration, dependency, credential, or deployment configuration changes are included. Deploying the guide does not activate reception or modify business settings.
 
 If the guide fails to load or blocks onboarding, remove it through the normal deployment pipeline:
 

@@ -2,10 +2,6 @@
 
 The release adds an isolated table and explicit report actions. No customer records are migrated or changed.
 
-## Before release
-
-On 2026-11-02, production main was `b37cebe720bb6f4176f8b3362fc655dc7913200f`. A read-only schema query confirmed that `ReceptionistRehearsal` was absent and that `ReceptionistCall` and `Organization` existed. The latest applied Prisma migration was `20261102091000_add_org_ai_provider`. There were no open pull requests with a competing migration version.
-
 ## Recover
 
 If report operations fail after deployment, revert the feature merge and deploy the revert:
