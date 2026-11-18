@@ -6,14 +6,14 @@ These diagrams show the main checks and data movement. They omit individual fiel
 
 ```mermaid
 flowchart TD
-    request["Browser request"] --> identity["Validate signed-in identity"]
-    identity --> membership["Resolve current workspace membership"]
+    request["Browser request"] --> identity["Validate identity"]
+    identity --> membership["Resolve workspace membership"]
     membership --> context{"Expected workspace matches?"}
-    context -->|No| recovery["Reject stale request or show workspace recovery"]
-    context -->|Yes| permission["Check permissions and record visibility"]
-    permission --> validation["Validate payload, versions, and workflow state"]
-    validation --> service["Read or commit a scoped transaction"]
-    service --> result["Return data or a confirmed receipt"]
+    context -->|No| recovery["Reject stale context"]
+    context -->|Yes| permission["Check record access"]
+    permission --> validation["Validate input and versions"]
+    validation --> service["Run scoped operation"]
+    service --> result["Return permitted result"]
 ```
 
 Client-supplied workspace and account headers are expectations to compare, not permission grants. Reads and writes can both fail after access changes. An older successful response must not restore private data that a newer access denial removed.
@@ -23,15 +23,14 @@ Read [business switching](workspace-switcher.md) and [follow-up access](follow-u
 ## Business knowledge and AI answers
 
 ```mermaid
-flowchart LR
+flowchart TD
     upload["Upload or enter text"] --> draft["Private Library draft"]
     draft -->|Publish| published["Published revision"]
     published --> internal["Airish retrieval"]
     published -->|Separate approval| approved["Receptionist-approved revision"]
-    approved --> public["Receptionist retrieval"]
-    internal --> context["Bounded source context"]
-    public --> context
-    context --> budget["Select allowed provider and reserve allowance"]
+    approved --> context["Retrieve bounded source context"]
+    internal --> context
+    context --> budget["Select provider and reserve allowance"]
     budget --> answer["Generate and validate reply"]
     answer --> display["Show answer and supplied sources"]
 ```
@@ -54,14 +53,15 @@ See [business knowledge](BUSINESS_KNOWLEDGE.md), [Airish](AIRISH.md), and [provi
 ```mermaid
 flowchart TD
     mailbox["Gmail or Outlook mailbox"] --> sync["Read checkpointed message pages"]
-    sync --> persist["Store mailbox-scoped identity and activity"]
+    sync --> persist["Store mailbox-scoped messages"]
     persist --> match{"Lead and conversation match?"}
-    match -->|Ambiguous| review["Mailbox owner reviews the match"]
+    match -->|Ambiguous| review["Owner reviews match"]
     review --> linked["Confirmed association"]
     match -->|Safe match| linked
-    linked --> qualify["Check whether it is a qualifying reply"]
-    qualify --> stop["Stop matching active cadence when required"]
-    qualify --> inbox["Create or retain follow-up review"]
+    linked --> qualify{"Qualifying reply?"}
+    qualify -->|Yes| stop["Stop matching active cadence"]
+    qualify -->|Yes| inbox["Create or retain follow-up"]
+    qualify -->|No| retained["Keep message without reply actions"]
     inbox --> task["Review and approve CRM task"]
     inbox --> draft["Request contextual email draft"]
     draft --> edit["Edit and explicitly send"]
@@ -77,16 +77,15 @@ See [mailbox sync](AUTOMATIC_MAILBOX_SYNC.md), [merge-aware replies](merge-aware
 
 ```mermaid
 flowchart TD
-    visitor["Visitor on an allowed website"] --> session["Short-lived widget session and quotas"]
-    session --> chat["Questions answered from approved knowledge"]
+    visitor["Visitor on allowed website"] --> session["Session and quota checks"]
+    session --> chat["Approved business answers"]
     chat --> form["Visitor enters callback details"]
-    form --> consent["Visitor reviews details and confirms consent"]
-    consent --> pending["Save one pending callback request"]
-    pending --> staff["Staff reviews matches, owner, and deadline"]
-    staff --> preview["Preview CRM handoff"]
-    preview --> confirm["Explicit staff confirmation"]
-    confirm --> transaction["Create or link lead and task with a durable receipt"]
-    transaction --> outcome["Track staff callback outcome"]
+    form --> consent["Review details and consent"]
+    consent --> pending[("Pending callback request")]
+    pending --> staff["Staff previews CRM handoff"]
+    staff --> confirm["Staff confirms"]
+    confirm --> transaction["Lead, task, and receipt"]
+    transaction --> outcome["Staff records outcome"]
 ```
 
 Saving the visitor's request does not create a CRM lead or task, reserve an appointment, place a call, or send email. Staff must confirm the handoff. A requested time must fit the saved business calendar and still needs staff confirmation.

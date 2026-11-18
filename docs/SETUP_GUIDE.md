@@ -52,8 +52,8 @@ No deployment-wide AI key is required when an organization supplies its own key 
 ## Prepare the database
 
 ```mermaid
-flowchart LR
-    config["Check your private datasource configuration"] --> generate["Generate Prisma client"]
+flowchart TD
+    config["Check datasource target"] --> generate["Generate Prisma client"]
     generate --> migrate["Apply committed migrations"]
     migrate --> auth["Configure sign-in URLs"]
     auth --> start["Start the app"]

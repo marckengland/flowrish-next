@@ -11,7 +11,7 @@ An administrator can manage the library from **Knowledge library** in the sideba
 Airish can now retrieve relevant passages and show their source titles and published revisions. Saving later edits changes the draft only. The previous published snapshot stays live until you publish again, unpublish, or archive it.
 
 ```mermaid
-flowchart LR
+flowchart TD
     input["Type text or extract a file"] --> draft["Review and save draft"]
     draft --> publish["Publish a snapshot"]
     publish --> airish["Available to Airish"]
