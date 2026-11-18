@@ -2,11 +2,9 @@
 
 Use this procedure if email matching creates unexpected associations, stops the wrong cadences, or repeatedly fails sync pages. Preserve the message IDs and audit entries while investigating. Do not send a test email or use an AI provider to diagnose matching.
 
-## Recorded baseline
+## Migration compatibility
 
-Before this change, main and production were at `a39934e062b452835a4b2e2e7b62013ad81fdc46`, with 37 Prisma migrations. Read-only catalog checks showed RLS enabled on EmailAccount, EmailMessage, and Lead; anon/authenticated had table grants but zero policies on those tables. The public receptionist widget was disabled. No message content or credentials were copied into this record.
-
-Migration `20261105030000_add_email_match_review` enables EmailMessage RLS on fresh installs and adds one nullable JSONB column, a size/state constraint, and a partial pending-review index. It does not update existing rows, add grants, or add policies. RLS was already enabled in production. The synthetic drill injects a migration failure to verify transaction rollback before applying all 38 migrations.
+Migration `20261105030000_add_email_match_review` enables EmailMessage RLS on fresh installs and adds one nullable JSONB column, a size/state constraint, and a partial pending-review index. It does not update existing rows, add grants, or add policies. The synthetic drill injects a migration failure to verify transaction rollback before applying all 38 migrations.
 
 ## Pause new routing
 
@@ -24,10 +22,6 @@ For an individual correction, an administrator must inspect the exact EmailMessa
 
 Keep the additive schema and audits. Do not edit the applied migration, drop the column, clear a mailbox checkpoint, restore a whole production snapshot, force-push main, or run `prisma db push` from this checkout. Those actions can lose evidence or repeat unrelated work.
 
-## Local verification record
+## Verification requirements
 
-On 2026-11-05, Node 22 checks passed: 2,182 tests across 324 files, lint, production build, strict TypeScript, and fast TypeScript. All 88 mocked browser scenarios passed with no network/write guard violations; the 82 prior scenarios remained included. Desktop and 390px review screenshots were inspected.
-
-An owned PostgreSQL 17 container applied all 38 migrations. The drill verified failed-DDL rollback, the pending index, JSON constraint, anonymous RLS denial, unique merged-target routing, ambiguity holds, mailbox-owner isolation, concurrent confirmation replay, stale versions, a new conflicting address during a message wait, role/scope revocation during lead and workflow waits, and rollback after a failed final audit. No task or widget activation occurred. The container and its temporary data were removed.
-
-The final alias-recipient regression uses the actual draft preparation and send service with a mocked transport. It checks the archived recipient in the outgoing message, rejects unrelated recipients, and rejects a draft-version change after token refresh. No real provider delivery, DeepSeek request, production message routing, or historical backfill was tested.
+Use disposable PostgreSQL and synthetic browser fixtures to verify failed-DDL rollback, private schema constraints, merged-target routing, ambiguity holds, mailbox-owner isolation, confirmation replay, stale versions, current permissions, and transaction rollback after a failed audit. Test the actual draft preparation/send service with a mocked transport to confirm archived recipients remain bound and that changed recipients or versions are rejected. Run the full repository checks and keep execution records privately.

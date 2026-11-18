@@ -1,58 +1,32 @@
-# Test the browser receptionist with a live AI provider
+# Test the receptionist with a live AI provider
 
-## Before state
+Normal unit tests and `npm run test:receptionist:mocked` use synthetic responses. This optional procedure spends real provider allowance and temporarily saves synthetic setup records. Obtain explicit authorization and agree on a provider and request budget before running it.
 
-On November 2, 2026, base app `e6ebd78` had 10 leads, 7 tasks, 9 activities, zero receptionist configurations, zero receptionist calls, zero voice configurations, and zero knowledge documents. The live test uses only synthetic bike-repair business details and fictional callback numbers.
+## Prepare an isolated installation
 
-The test temporarily saves a disabled sample receptionist and creates sample knowledge documents. No incoming number or Twilio credentials are added. A `finally` cleanup removes only the exact test-owned configuration and document records, checking their business name, content, and saved version. Setup audit entries remain as a record of the actual test actions. Customer records and pre-existing settings are outside cleanup scope.
+Use Node 22, your own database, an authenticated synthetic administrator, and an AI provider configured for that workspace. Keep website and phone reception disabled. Never use another organization's saved credentials or increase its limits to make a test pass.
 
-If the workspace already has saved receptionist settings, the test refuses to overwrite them. If a sample configuration is edited concurrently, cleanup refuses to remove that changed configuration. Check the reported cleanup result before repeating a failed run.
-
-## Run explicitly
-
-Use Node 22 and the existing environment file. Refresh the test user's browser authentication, then opt in to live AI requests and temporary setup writes:
+The harness refuses to overwrite a saved receptionist configuration and expects an empty Library and no voice configuration. Use a dedicated test workspace. Refresh its browser test authentication through the normal E2E setup, then opt in explicitly:
 
 ```sh
-PLAYWRIGHT_BASE_URL=https://flowrish.marckengland.com npm run test:e2e:prod -- --project=setup
-E2E_LIVE_AI=1 PLAYWRIGHT_BASE_URL=https://flowrish.marckengland.com node --env-file=.env --import tsx scripts/test-receptionist-live-ai.ts
+PLAYWRIGHT_BASE_URL=https://your-test-app.example npm run test:e2e:prod -- --project=setup
+E2E_LIVE_AI=1 PLAYWRIGHT_BASE_URL=https://your-test-app.example node --env-file=.env --import tsx scripts/test-receptionist-live-ai.ts
 ```
 
-The script is outside the automatic unit and browser suites. It never runs live AI calls from normal CI or regression commands. Existing AI-provider usage applies. No Twilio call is placed and no phone number is purchased.
+The example host is a placeholder; replace it with your authorized test installation. The harness loads credentials from your private environment. Do not paste credentials into command arguments or public logs.
 
-## Acceptance checks
+## Review the conversation and diagnostics
 
-The real browser saves the sample business details and sends typed turns to the deployed preview endpoint without intercepting responses. Check the business greeting, an approved price, refusal to invent an unknown service or private draft price, removal of a revoked source on the next turn, corrected callback details, and explicit confirmation. A successful confirmation produces a preview summary only.
+Check the business greeting, an approved price, unknown-service handling, private-draft exclusion, revoked-source exclusion, corrected callback details, and explicit confirmation. Conversational turns report AI or fallback mode. A fallback is not a successful live AI answer. Confirmation is deterministic and makes no additional AI request.
 
-The run records synthetic prompts and replies, response times, and before/after CRM counts. It keeps screenshots and a JSON report under `/tmp`. Browser read-aloud does not prove real phone audio or speech recognition, and this test makes no real-phone claim.
+Inspect exact callback name, number, and latest reason. Confirmation produces only a preview summary; it must not create customer calls, leads, tasks, or appointments. Admin diagnostics use bounded error categories rather than raw provider output.
 
-## Safe setup and AI status
+The harness writes a private report and a fixture journal under the operating system's temporary directory. Keep those files and browser authentication out of Git and public artifacts. A successful local run does not establish hosted provider quality, microphone quality, or telephone routing.
 
-The harness requires the settings API's conditional-create capability header and sends `If-None-Match: *` on the real browser save. A database-atomic create returns HTTP 412 if settings already exist. The harness checks that a duplicate conditional save cannot overwrite its sample settings. Cleanup claims a configuration only after validating the disabled sample business and exact save response. Document cleanup also matches its last revision and timestamp, preserving concurrent edits.
+## Verify cleanup
 
-The admin preview now identifies turns that used AI and reports coarse fallback reasons: rate limit, provider unavailable, timeout, invalid JSON, invalid response fields, or service unavailable. Raw provider errors, prompts, keys, and credentials are excluded. Confirmation remains deterministic and does not call AI again. These diagnostics are absent from the public phone response.
+The harness claims only its exact disabled configuration and documents, using their saved versions. If an administrator edits them concurrently, cleanup refuses to remove the changed records. Inspect the reported cleanup result before repeating a run. Setup audit entries remain intentionally.
 
-Two initial deployed-browser attempts answered the approved price but fell back on the next question. They were counted as failures, and both restored the baseline. Direct synthetic provider probes returned valid JSON and also observed an eight-second timeout. The new status makes a future fallback distinguishable from a successful AI answer; it does not claim that every provider error is eliminated.
+Confirm that customer-record counts, provider settings, and disabled reception state are unchanged. Remove only verified test-owned fixtures. Do not restore a whole database, overwrite existing settings, or delete records merely because a previous run created similarly named data.
 
-## Local verification record
-
-The compiled-app browser completed all seven sample turns with the live provider: PHP 750 pricing, unknown battery service, private draft exclusion, source revocation, callback capture, correction to Jordan Preview and +12025550124, and deterministic confirmation. Six turns invoked the real AI. Confirmation produced a preview-only summary, and cleanup restored 10 leads, 7 tasks, 9 activities, zero receptionist calls, zero configurations, zero voice configurations, and zero knowledge documents. Setup audit entries remain intentionally.
-
-Regression checks passed: 1,220 unit tests, 41 disposable PostgreSQL tests, lint, both TypeScript engines, and production build. The browser suite passed 36 checks; five existing navigation guards skipped because their selectors found no eligible targets: contact row, company row, cadence row, task card, and New lead CTA. No existing assertions were changed or skipped for this release.
-
-No telephone call, microphone input, or live phone-audio quality was tested. Run the same opt-in harness after deployment to verify the actual hosted provider path. Keep temporary fixture and report files private and never commit browser authentication or environment files.
-
-## Hosted-response fixes
-
-The hosted run on `157f8d7` identified `invalid_json` on the second conversational turn. The Gemini receptionist adapter now requests a required four-field JSON schema through the documented [OpenAI-compatible structured-output API](https://ai.google.dev/gemini-api/docs/openai#structured-output). Custom providers with unknown schema support retain prompt-based output. Server JSON parsing and phone/text validation remain mandatory.
-
-Reviewing the real replies also exposed an outdated callback reason: an earlier battery/pricing enquiry survived a later explicit request to arrange a tune-up next week. The receptionist instructions and schema description now prefer the latest specific callback request, preserving requested timing without claiming a booking. The live harness requires the corrected callback summary to include the tune-up and next-week request and to exclude the earlier battery enquiry.
-
-The earlier local success record predates this stronger reason check. The strengthened check reproduced that omission before the instruction fix. Production acceptance requires all six conversational turns to report AI mode, then deterministic confirmation with no additional AI request.
-
-The strengthened compiled-app run passed after both fixes: all six AI turns succeeded with valid structured replies, the callback reason remained “arranging a bicycle tune-up next week” through the name/number correction, confirmation used no AI, and cleanup restored the complete baseline. Final unit count is 1,224; all 41 database regressions, both typecheck engines, lint, and the production build passed. The prior full UI regression remains 36 passed with the five documented selector-guard skips.
-
-## Hosted truncation diagnosis
-
-The hosted run on `adde230` returned `invalid_json` with finite administrator diagnostics: provider `gemini`, structured output enabled, model-stage failure, and finish reason `length`. This identifies an incomplete model response rather than an unreadable HTTP envelope. Raw response content, model configuration, credentials, and prompts are excluded from diagnostics.
-
-The Gemini receptionist request now reserves 2,048 total tokens and selects `reasoning_effort: low`, following Google's [OpenAI-compatible thinking controls](https://ai.google.dev/gemini-api/docs/openai#thinking). This leaves room for thinking and the four-field JSON answer. It can increase provider usage compared with the previous 500-token ceiling. The eight-second timeout, extraction validation, and callback fallback remain in place. Other adapters and ordinary AI calls retain their previous token behavior. Rollback is a code revert; no migration or environment change is required.
+For zero-provider workflow testing, use the [mocked rehearsal](../TESTING.md). Native browser dictation and real phone tests have separate requirements in the [preview guide](../RECEPTIONIST_PREVIEW.md).

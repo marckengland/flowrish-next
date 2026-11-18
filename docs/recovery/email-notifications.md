@@ -4,8 +4,6 @@ If counts, focused links, or acknowledgments misbehave, compare the current sour
 
 ## Baseline and data boundary
 
-The read-only production baseline on 2026-11-05 was main `024948858af8acc2bbf6bbcc01d2092783cfcfb2`, 38 completed migrations, no EmailNotificationRead table, and zero enabled public widgets. No credentials or message content were read for this record.
-
 Migration `20261105040000_add_email_notification_reads` adds only EmailNotificationRead, its composite primary key, key-format constraint, membership foreign key, RLS, and browser-role revocations. It does not insert receipts, rewrite business records, or add browser access policies. Receipts are created only by an explicit authenticated acknowledgment. The receipt table can remain when notification code is reverted.
 
 ## Code rollback
@@ -29,7 +27,3 @@ A code rollback removes email notifications from the UI; it does not undo prior 
 ## Verification
 
 The synthetic PostgreSQL 17 drill applied all 39 migrations and verified transactional DDL failure rollback, revoked browser access, key validation, membership cascade, stable source identities, current source/lead/mailbox eligibility, concurrent acknowledgment replay, and rollback when work resolves or permission is revoked during a wait. Its container and temporary database were removed. The drill and provider checks used synthetic data; no production business records were changed.
-
-The rollback procedure was exercised in an owned disposable Git clone without an env file. Its staged tree differed from baseline only in the retained Prisma schema and migration. The 2,182 baseline tests, lint, build, strict and fast types, and all 88 baseline mocked browser scenarios passed. The clone was removed; the source checkout was unchanged.
-
-The feature tree passed Node 22 checks: 2,203 tests across 330 files, lint, build, both type checks, and 94 mocked browser scenarios retaining all 88 prior scenarios. Desktop and 390px screenshots were inspected. A fresh reviewer verified the final fix preserving unsent drafts across equivalent context props. Live AI/email delivery and high-volume mailbox load testing were not performed. No dependency or paid service was added, and the public widget remained disabled.

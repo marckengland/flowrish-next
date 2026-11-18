@@ -1,7 +1,5 @@
 # Website receptionist rollback
 
-Before release on 2026-11-03, production main was `6cd04b1db87f5d769f023fe4261c833439a282b9`. A read-only schema query confirmed that all four `WebsiteReceptionist*` tables were absent. The last applied migration was `20261103010000_add_knowledge_gap_reviews`.
-
 The migration adds four private tables with RLS enabled and browser-role grants revoked. It performs no data backfill or changes to existing settings, credentials, library content, or CRM records. No organization is enabled by the migration. Verification uses mocks and disposable data; it does not use the saved provider key or enable a production widget.
 
 ## Recover

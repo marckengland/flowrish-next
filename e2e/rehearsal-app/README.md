@@ -2,7 +2,7 @@
 
 Run `npm run test:receptionist:mocked` from the repository root. Install the existing browser dependency first if needed: `npx playwright install chromium`.
 
-The command builds this separate fixture application and runs the 124 browser scenarios. It imports the real client components, uses synthetic read data, and runs without authentication or production credentials. It does not import the production middleware, server modules, database, or auth client.
+The command builds this separate fixture application and runs the browser scenarios selected by `playwright.rehearsal.config.ts`. Use the runner's final summary for the current required count. It imports real client components, uses synthetic read data, and runs without authentication or production credentials. It does not import production middleware, server modules, the database, or the auth client.
 
 Workspace scenarios use a synthetic `mock_workspace` cookie only in this fixture app. They exercise the real selector and fetch boundary, full document reloads, stale-context recovery, and notifications to other tabs. The fixture cookie never selects a production organization. Server unit tests separately exercise real middleware/session membership and OAuth boundaries with mocked identities and providers.
 

@@ -1,7 +1,5 @@
 # Visitor feedback rollback
 
-Before release, production main was `8c699358353a3989e93a028db15cc2884e32a068`. Read-only checks on 2026-11-03 found no `WebsiteReceptionistFeedback` table, zero widget configurations/enabled widgets, zero Library documents and zero callback requests. The latest applied Prisma migration was `20261103060000_add_callback_response_targets`.
-
 Migration `20261103070000_add_visitor_feedback` adds a default-false configuration flag, an opaque nullable session receipt ID, and private feedback/daily-counter tables with RLS and revoked PUBLIC/anon/authenticated privileges. The text-free daily counter survives report deletion and is purged after two UTC days. It performs no backfill, opt-in, provider change, publication, CRM write, or customer-data rewrite.
 
 If feedback saving, admin review or draft creation malfunctions, disable the application feature through a normal deployment. Keep the additive schema, retained feedback and the expiry job so previously consented question text continues to be purged:

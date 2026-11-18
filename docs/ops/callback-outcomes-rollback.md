@@ -1,6 +1,6 @@
 # Callback outcomes rollback
 
-Before release on 2026-11-03, main was `f9d25efae16f8a44466009333d6211d0d1507148`. A read-only production query confirmed `CallbackOutcomeEvent` was absent. The migration adds only that private history table and its organization relation, constraints and indexes. It backfills no history and changes no existing callback, receipt, CRM task, provider setting or widget activation.
+The migration adds only that private history table and its organization relation, constraints and indexes. It backfills no history and changes no existing callback, receipt, CRM task, provider setting or widget activation.
 
 ## Recover
 

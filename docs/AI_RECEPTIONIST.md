@@ -61,6 +61,6 @@ Transcripts persist in the call record and, for confirmed callbacks, the lead's 
 
 Turn off **Enable AI receptionist** and save. Change the Twilio number's incoming webhook back to its previous handler if you need to restore the old call flow. To roll back the application code, keep the additive tables so call history and configuration survive. Disabling does not require the saved callback owner or pipeline stage to still exist.
 
-The [rollback runbook](AI_RECEPTIONIST_ROLLBACK.md) records the before state, scoped disable statement, code rollback, and database recovery checks.
+The [rollback runbook](AI_RECEPTIONIST_ROLLBACK.md) describes scoped disable, code rollback, and database recovery checks.
 
 This release does not include appointment booking, email sequences triggered by calls, streaming voice, live transfers during an AI conversation, holiday exceptions, or overnight opening hours. English speech is used for this first version.

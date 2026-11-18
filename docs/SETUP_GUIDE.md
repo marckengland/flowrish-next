@@ -3,6 +3,7 @@
 ## Prerequisites
 
 - Node.js 22
+- Git and npm, including the committed `package-lock.json`
 - A Supabase project (free tier works)
 - An Upstash Redis database (for rate limiting)
 - An Inngest account (for background jobs)
@@ -12,7 +13,7 @@
 ## 1. Clone and Install
 
 ```bash
-git clone <your-repo-url> flowrish-next
+git clone https://github.com/marckengland/flowrish-next.git
 cd flowrish-next
 npm ci
 ```
@@ -181,6 +182,8 @@ npm run dev
 
 Visit `http://localhost:3000`. You'll be redirected to the login page.
 
+Alternatively, run `bash start.sh` on macOS/Linux or `start.bat` in Windows Command Prompt. Both scripts run from their own checkout directory, require Node 22, and copy `.env.example` then stop if `.env` is missing. After you configure your own development services, rerun the script. It installs locked dependencies with `npm ci` only when `node_modules` is absent, regenerates Prisma, applies migrations, and starts the server. Any install, generation, or migration failure stops startup with its diagnostic output. Check the database target first: `prisma.config.ts` gives this checkout's `.env` precedence over shell datasource variables. These launchers apply migrations; they are not test-database setup tools.
+
 ### Seeding demo data (optional)
 
 Once you've created an organization, you can fill it with realistic, clearly
@@ -201,6 +204,8 @@ org and **refuses to write unless `SEED_DEMO_CONFIRM=yes`**. It's idempotent —
 it cleans existing demo rows first, then recreates them.
 
 ## 9. Running Tests
+
+For a service-free first check, run `npm run test:startup` and `npm run test:public-repository`. Then follow the [testing guide](TESTING.md) for unit, isolated browser, and disposable database checks. Authenticated end-to-end tests require your own Supabase test installation.
 
 ### Unit / integration (Vitest)
 

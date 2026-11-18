@@ -1,36 +1,27 @@
-# Open-source readiness
+# Public source and release policy
 
-Preparation snapshot: November 16, 2026. This document is a review record, not a guarantee that no secret or third-party rights issue exists.
+Flowrish's original code and documentation use the [MIT license](../LICENSE). Dependency licenses remain separate; see [third-party notices](../THIRD_PARTY_NOTICES.md). The npm `private` flag prevents accidental package publication and does not control GitHub visibility.
 
-## Prepared changes
+## Keep the public tree useful
 
-- Added the MIT license, package license metadata, contributor guidance, security reporting policy, and third-party notices. npm’s `private` flag remains enabled to prevent accidental npm publication.
-- Ignored local Serena and Spec Workflow state in addition to existing environment, authentication, build, and browser-artifact exclusions.
-- Corrected the example environment’s obsolete domain comment and the quick-start migration command. New installations apply existing migrations to their own database.
-- Restricted migration, production-ready, and production-smoke jobs to the maintainer repository. Forks still run unit, browser, and synthetic database checks; they do not deploy to Flowrish’s services.
+Publish application source, tests, migrations, example configuration, contributor guides, architecture, feature guides, and reusable recovery procedures. Keep internal specifications, implementation plans, session notes, personal editor automation, private release evidence, credentials, customer exports, and browser authentication outside the repository.
 
-## Audit evidence
+Ignore rules prevent new local working files from being added accidentally. They do not remove tracked files or historical copies. Review the complete staged diff before publishing. Removing a file from main does not remove it from Git history, clones, forks, Actions logs, or artifacts. Any history rewrite requires a separate decision and coordination.
 
-The repository had 331 commits across the local refs and 3,480 distinct file blobs. A pattern scan covered approximately 35.9 MB of historical file content and found no unclassified high-confidence provider keys, GitHub tokens, private keys, AWS access identifiers, or credential-bearing database URLs. A second assignment scan found 23 high-entropy occurrences, all in deterministic encryption/environment test fixtures across three test paths. No tracked environment variants, browser authentication stores, or private-key paths were found in the inspected history.
+The repository retains its existing history. No public-tree cleanup guarantees that historical content has disappeared or that every possible credential format has been detected. If a real credential was exposed, rotate it and assess historical copies; a deletion commit alone is insufficient.
 
-The Actions inventory contained 221 runs. Available logs for 162 runs were scanned across 1,045 entries, approximately 50.2 MB, with no unclassified credential-pattern findings. Logs for 59 runs were expired or unavailable and could not be inspected. No Actions artifacts were listed. This is a pattern scan, not a full semantic review of every historical line or binary asset; do not infer that an unrecognized credential format is safe.
+## Validate a release
 
-The dependency lockfile declares optional Sharp/libvips LGPL binaries and other non-MIT licenses. These do not become MIT when Flowrish receives an MIT license. Preserve upstream notices and review binary/container distribution obligations separately; see [third-party notices](../THIRD_PARTY_NOTICES.md).
+Run the checks in the [contributor guide](../CONTRIBUTING.md), including `npm run test:startup` and `npm run test:public-repository`. The public-source check rejects internal planning/editor paths, environment-file variants, personal filesystem paths in Markdown, broken relative links, conflicting README license wording, and unknown documented npm commands.
 
-Existing production repository names, project identifiers, public hostnames and certificate fingerprints remain in deployment and recovery helpers because they enforce the intended release target. They are public identifiers, not credentials. Removing those checks would weaken deployment isolation. Forks must provision their own deployment and review their own allowed targets.
+Review file ownership and third-party notices when adding assets or copied code. Before distributing compiled bundles or containers, review the licenses of the dependencies included in that artifact.
 
-## Owner review before publication
+## Separate source from the hosted service
 
-1. Confirm you own or have permission to release the application code, documentation and logo assets under MIT. Review contribution provenance; a package-license inventory cannot establish ownership of custom assets.
-2. Review the source and available historical Actions logs for private business information beyond credential patterns. Expired/unavailable logs and arbitrary binary content were not fully inspected.
-3. Confirm that publishing the full Git history, commit author metadata, deployment/recovery documentation and Actions history is intended. Removing a file from the latest commit does not hide its historical versions.
-4. Enable GitHub private vulnerability reporting when public, review Actions permissions for outside contributors, and check Vercel’s fork-preview approval and secret policies before accepting external pull requests.
-5. Make the reviewed repository public only after that approval. Do not disable release gates to avoid the private-repository Actions quota.
+The source license grants no access to Flowrish's hosted application, customer data, credentials, API credits, or trademarks. Use your own services. Website and phone reception require explicit activation; tests must not enable them.
 
-Standard GitHub-hosted runner compute is free for public repositories. Larger runners and storage have separate billing rules; changing visibility does not erase past charges or reset another private repository’s usage. See [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions). Publishing also makes Actions history and logs public; see [visibility consequences](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/managing-repository-settings/setting-repository-visibility).
+Production helper repository names, project identifiers, public hostnames, and CA fingerprints identify the intended release target. They are public identifiers, not credentials. Keep their checks intact. Fork maintainers must configure separate services and a reviewed release pipeline.
 
-## Live AI check
+The production workflow is restricted to main pushes in the maintainer repository. Forks run validation and skip hosted production jobs. Follow the [deployment guide](ops/production-deployment.md) and [security policy](../SECURITY.md). Do not bypass release gates to work around an unavailable runner budget.
 
-Six OpenAI provider requests on `gpt-6.1-sol` completed successfully within the authorized eight-request ceiling. Three browser conversations exercised supplied tables/bar charts, missing-data honesty and approved pricing/hours, then a signed/fractional line chart and a two-sentence email draft. Exact values were preserved and no proposed CRM action was executed. The existing daily reservation allowance was nearly reached, so no further requests or live receptionist extraction were attempted. No limit was raised. The tests did not call DeepSeek, send email, enable reception, or create leads/tasks.
-
-Live inspection found duplicate display of knowledge provenance. The display fix hides the raw footer only when a separate structured reference list exists; persisted provenance and history safeguards remain intact. Mocked checks cover both current replies and restored history without spending further provider requests.
+AI-generated answers, mocked rehearsals, and deployment checks provide different evidence. Document which was tested, the request budget, and any unverified paths. A scripted rehearsal does not establish live AI, customer-pilot, phone, or production-backup readiness.

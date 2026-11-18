@@ -26,6 +26,6 @@ The browser supplies its IANA timezone for tomorrow at 9 AM or a custom minute. 
 
 ## Recorded release baseline
 
-Read-only production preflight on 2026-11-05 found 40 completed migrations, no `FollowUpSnooze` table, and zero enabled receptionist widgets. The previous production/main commit was `7ba87b682166f15a57c0a45732271667342ee5d9`. This migration adds only the private snooze table and a parent unique index; it does not update existing business data.
+This migration adds only the private snooze table and a parent unique index; it does not update existing business data.
 
 The tested local pause rejects both mutation actions before database or network access and restores the policy file exactly afterward. If saves fail or controls cannot confirm their result, apply the pause through one normal release and verify the deployed SHA. Retain reminder data and filtering while investigating. Do not restore a whole database snapshot, edit an applied migration, or rewrite main history to undo this feature.

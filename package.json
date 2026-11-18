@@ -14,6 +14,8 @@
     "typecheck:fast": "tsgo --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:startup": "node --test scripts/startup.test.mjs",
+    "test:public-repository": "node --test scripts/public-repository.test.mjs",
     "test:receptionist:integration": "vitest run --config vitest.receptionist.config.ts",
     "test:receptionist:mocked": "node scripts/run-receptionist-rehearsal.mjs",
     "test:send-results:synthetic": "node scripts/run-send-results.mjs",

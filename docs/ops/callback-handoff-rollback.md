@@ -1,6 +1,6 @@
 # Callback handoff rollback
 
-Before release on 2026-11-03, main was `bb95183688beb5f17c159998a2791692bd99f016`. A read-only production query confirmed the receipt table was absent. The migration adds only the private `CallbackCrmHandoff` receipt table and an organization relation. There is no backfill, widget activation, provider change, or existing CRM rewrite.
+The migration adds only the private `CallbackCrmHandoff` receipt table and an organization relation. There is no backfill, widget activation, provider change, or existing CRM rewrite.
 
 ## Recover
 

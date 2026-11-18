@@ -1,8 +1,6 @@
 # Bulk lead updates: release and rollback
 
-## Recorded baseline
-
-On 2026-11-05, production served `1f382a75022758886e816c5623314ca4c18bc26f`, Vercel deployment `dpl_98FWCM1mcC7JR9PgZb4kdbgYyDYY`, project `prj_AFfVtIp4EO7TqUmIzBYDzDPI8zeb`. A read-only database query confirmed 35 finished migrations, no `BulkLeadUpdate` table, and zero enabled website receptionist widgets. No business records or credentials were retrieved.
+## Migration compatibility
 
 Migration `20261105010000_add_bulk_lead_updates` adds a private table and membership relation. Table creation, checks, RLS, and browser-role privilege revocation run in one transaction, including when default privileges otherwise grant access to browser roles. Existing business rows are unchanged by this migration.
 
@@ -18,11 +16,9 @@ An owned, network-isolated PostgreSQL 17 container applied all 36 migrations wit
 - Conditional status undo restores the eligible row, preserves a later-edited row and another organization’s row, and writes exactly one repair audit. Running it again changes nothing.
 - Conditional owner undo restores a current member, is idempotent, and skips a departed former owner.
 
-The container and temporary schema/configuration were removed. No production data-repair command was run. Local checks passed: 2,116 tests across 310 files, ESLint, production build, strict and fast TypeScript checks, and all 76 mocked browser scenarios with no guard violations. Independent review found no remaining material issues. Production verification uses read-only catalog queries and anonymous GET requests.
-
 ## Remove the feature code
 
-Signals: repeated bulk-update errors, incorrect preview rendering, or inability to retrieve a confirmed receipt. Stop new bulk operations while investigating. The local `antidote/bulk-lead-updates` branch contains the prepared code inverse. After explicit approval, cherry-pick its tip onto current main and run the repository checks before pushing. The inverse retains the additive Prisma schema, applied migration, existing previews/receipts, and audit records. It removes the bulk controls, APIs, and browser scenarios while retaining the original saved-view behavior and 70-scenario rehearsal. The prepared inverse restored the baseline code exactly and passed all 2,093 baseline tests and the fast TypeScript check in an isolated checkout.
+Signals: repeated bulk-update errors, incorrect preview rendering, or inability to retrieve a confirmed receipt. Stop new bulk operations while investigating. Prepare a selective application rollback from your current release, retaining the additive Prisma schema, applied migration, previews, receipts, audit records, and existing saved-view behavior. Disable new bulk operations while preserving receipt inspection for uncertain results. Test the recovery branch in a disposable checkout with the full checks before explicit approval and deployment. No private maintainer recovery branch is distributed with this repository.
 
 Do not drop the table, edit the applied migration, force-push main, or restore an entire database snapshot to remove this feature. Code rollback does not reverse completed lead updates. Expect a normal CI/deployment cycle; deployment timing must be observed rather than assumed.
 
@@ -32,4 +28,4 @@ The separate [operator SQL](../../scripts/recovery/undo-bulk-lead-update.sql) is
 
 The SQL locks affected rows and memberships, restores only the reviewed field when both current value and timestamp still match the original batch, skips deleted/later-edited leads and departed former owners, and records each restoration transactionally. A second run is a no-op because restored versions change. The batch receipt remains a historical record of the original operation. Skipped leads require individual review; do not remove the version predicates to force restoration. No tasks, messages, stages, or unrelated rows are repaired by this procedure.
 
-This synthetic drill does not verify an off-site backup or production restore. Backup destination and scheduling remain deferred at the user’s request.
+Synthetic drills do not verify an off-site backup or production restore. Maintain a separate recovery policy for your installation.
