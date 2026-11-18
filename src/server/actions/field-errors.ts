@@ -9,7 +9,7 @@ import type { ZodError } from 'zod'
  */
 export function fieldErrorsFromZod(err: ZodError): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const issue of err.errors) {
+  for (const issue of err.issues) {
     const key = issue.path[0]
     if (typeof key === 'string' && !(key in out)) {
       out[key] = issue.message

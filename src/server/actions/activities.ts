@@ -85,7 +85,7 @@ export async function createActivity(
     return { data: activity }
   } catch (err: unknown) {
     if (err instanceof ZodError) {
-      return { error: err.errors[0]?.message ?? 'Validation failed' }
+      return { error: err.issues[0]?.message ?? 'Validation failed' }
     }
     if (err && typeof err === 'object' && 'statusCode' in err) {
       const appErr = err as { message: string; statusCode: number }

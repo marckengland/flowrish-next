@@ -65,7 +65,7 @@ export async function createOrg(formData: FormData) {
   })
 
   if (!parsed.success) {
-    const firstError = parsed.error.errors[0]?.message ?? 'Invalid input'
+    const firstError = parsed.error.issues[0]?.message ?? 'Invalid input'
     return { error: firstError }
   }
 
@@ -96,7 +96,7 @@ export async function joinOrg(formData: FormData) {
   })
 
   if (!parsed.success) {
-    const firstError = parsed.error.errors[0]?.message ?? 'Invalid input'
+    const firstError = parsed.error.issues[0]?.message ?? 'Invalid input'
     return { error: firstError }
   }
 

@@ -64,7 +64,7 @@ export async function createContact(formData: FormData) {
   } catch (err: unknown) {
     if (err instanceof ZodError) {
       return {
-        error: err.errors[0]?.message ?? 'Validation failed',
+        error: err.issues[0]?.message ?? 'Validation failed',
         fieldErrors: fieldErrorsFromZod(err),
       }
     }
@@ -114,7 +114,7 @@ export async function updateContact(formData: FormData) {
   } catch (err: unknown) {
     if (err instanceof ZodError) {
       return {
-        error: err.errors[0]?.message ?? 'Validation failed',
+        error: err.issues[0]?.message ?? 'Validation failed',
         fieldErrors: fieldErrorsFromZod(err),
       }
     }
@@ -197,7 +197,7 @@ export async function createCompany(formData: FormData) {
   } catch (err: unknown) {
     if (err instanceof ZodError) {
       return {
-        error: err.errors[0]?.message ?? 'Validation failed',
+        error: err.issues[0]?.message ?? 'Validation failed',
         fieldErrors: fieldErrorsFromZod(err),
       }
     }
@@ -247,7 +247,7 @@ export async function updateCompany(formData: FormData) {
   } catch (err: unknown) {
     if (err instanceof ZodError) {
       return {
-        error: err.errors[0]?.message ?? 'Validation failed',
+        error: err.issues[0]?.message ?? 'Validation failed',
         fieldErrors: fieldErrorsFromZod(err),
       }
     }

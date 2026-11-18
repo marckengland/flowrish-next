@@ -59,6 +59,7 @@ Website and phone reception require separate activation. Demo mode is scripted. 
 | Topic | Reference |
 |-------|-----------|
 | Development rules and checks | [Contributing](../CONTRIBUTING.md), [repository instructions](../AGENTS.md), [testing](TESTING.md) |
+| Dependency updates and known tooling limits | [Dependency maintenance](DEPENDENCY_MAINTENANCE.md) |
 | Runtime requests, stored data, and approvals | [Architecture](ARCHITECTURE.md), [data flows](DATA_FLOWS.md) |
 | Release gates and feature recovery | [Operations index](ops/README.md) |
 | Public-source boundaries | [Release policy](OPEN_SOURCE_READINESS.md) |

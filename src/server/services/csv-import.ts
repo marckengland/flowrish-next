@@ -315,7 +315,7 @@ export async function importLeads(
       const parseResult = csvRowSchema.safeParse(mapped)
 
       if (!parseResult.success) {
-        const firstError = parseResult.error.errors[0]
+        const firstError = parseResult.error.issues[0]
         errors.push({
           row: rowNumber,
           message: firstError?.message ?? 'Validation failed',
@@ -560,7 +560,7 @@ export function previewImport(
     const validation = csvRowSchema.safeParse(mapped)
 
     if (!validation.success) {
-      const firstError = validation.error.errors[0]
+      const firstError = validation.error.issues[0]
       return {
         rowNumber: index + 2, // header is row 1, first data row is row 2
         mapped,
@@ -677,7 +677,7 @@ export async function saveFieldMapping(
 
   const validation = fieldMappingSchema.safeParse(mapping)
   if (!validation.success) {
-    const firstError = validation.error.errors[0]
+    const firstError = validation.error.issues[0]
     throw new AppError(
       'VALIDATION_ERROR',
       firstError?.message ?? 'Invalid field mapping',

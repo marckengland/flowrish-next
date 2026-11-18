@@ -64,7 +64,7 @@ export async function createTask(formData: FormData) {
   } catch (err: unknown) {
     if (err instanceof ZodError) {
       return {
-        error: err.errors[0]?.message ?? 'Validation failed',
+        error: err.issues[0]?.message ?? 'Validation failed',
         fieldErrors: fieldErrorsFromZod(err),
       }
     }
@@ -164,7 +164,7 @@ export async function updateTask(formData: FormData) {
   } catch (err: unknown) {
     if (err instanceof ZodError) {
       return {
-        error: err.errors[0]?.message ?? 'Validation failed',
+        error: err.issues[0]?.message ?? 'Validation failed',
         fieldErrors: fieldErrorsFromZod(err),
       }
     }

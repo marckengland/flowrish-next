@@ -13,7 +13,9 @@ export const taskPriorityEnum = z.enum(['LOW', 'MEDIUM', 'HIGH'])
 export const taskCreateSchema = z.object({
   title: sanitizedString.pipe(z.string().min(1, 'Title is required').max(500)),
   description: nullableSanitizedString,
-  dueDate: z.coerce.date({ required_error: 'Due date is required' }),
+  dueDate: z.coerce.date({
+    error: issue => issue.input === undefined ? 'Due date is required' : undefined,
+  }),
   priority: taskPriorityEnum.default('MEDIUM'),
   leadId: z.string().uuid('Invalid lead ID'),
   assigneeId: z.string().uuid('Invalid assignee ID'),

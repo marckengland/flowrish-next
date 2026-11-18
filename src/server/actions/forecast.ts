@@ -97,7 +97,7 @@ export async function submitForecast(
     if (saving) return { error: 'Could not confirm the forecast submission. Reload before submitting again.', uncertain: true }
     if (err instanceof ZodError) {
       return {
-        error: err.errors[0]?.message ?? 'Validation failed',
+        error: err.issues[0]?.message ?? 'Validation failed',
         fieldErrors: fieldErrorsFromZod(err),
       }
     }

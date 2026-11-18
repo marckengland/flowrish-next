@@ -75,6 +75,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit production dependencies for critical and high advisories
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit the full dependency tree for critical advisories
+        run: npm audit --audit-level=critical
+
       - name: Generate Prisma client
         run: npx prisma generate
 

@@ -37,7 +37,7 @@ export function errorResponse(error: unknown): NextResponse<ApiErrorBody> {
 
   if (error instanceof ZodError) {
     return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: error.errors[0].message } },
+      { error: { code: 'VALIDATION_ERROR', message: error.issues[0].message } },
       { status: 400 },
     )
   }
