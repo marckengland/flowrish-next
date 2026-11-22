@@ -12,7 +12,7 @@ npm ls --all
 
 The first command rejects critical/high findings in the production dependency tree. The full audit also includes build, lint, test, and code-generation tools. A finding inherited by several parent packages can represent one underlying advisory. Neither a passing test suite nor an empty audit proves that the application has no security defects.
 
-CI runs the production critical/high gate and a full-tree critical gate. The full audit's high findings still need review against the specific tooling exception below. That exception does not approve unrelated future advisories.
+CI runs the production critical/high gate and a full-tree critical gate. Review every high finding in the full audit. An exception for one advisory does not approve unrelated findings.
 
 `shadcn` is a development dependency. Its CLI generates source components, and the build imports `shadcn/tailwind.css`. Install development dependencies before building. The running app uses the compiled CSS and checked-in components without importing the CLI.
 
@@ -22,6 +22,7 @@ CI runs the production critical/high gate and a full-tree critical gate. The ful
 |----------|--------|--------------------------|
 | `zod` → root version | Keep the patched package throughout the graph | Confirm that application schemas use the patched API and SDK compatibility imports still work |
 | `@prisma/config` → `deepmerge-ts` 8.0.2 | Fix recursive-object handling while retaining Prisma 6 | Run offline config/schema generation and disposable database checks; version 8 changes Map merging |
+| `@prisma/config` → `effect` 3.22.1 | Fix template-literal regex backtracking, [GHSA-7589-6fvf-x4pw](https://github.com/advisories/GHSA-7589-6fvf-x4pw), while retaining Prisma 6.19.3 | Confirm Prisma selects a patched Effect version without the override, then run config/schema generation, the build, and disposable database checks |
 | `next` → `postcss` 8.5.33 | Replace Next 15's pinned parser with the patched version | Run the production build and mocked browser build |
 | `vitest` → `tinypool` 2.2.0 | Fix worker-option prototype-pollution handling | Run the full suite under Node 22, including subprocess tests |
 | `@opentelemetry/propagator-jaeger` → 2.9.0 | Use its security fix with the retained telemetry API generation | Check telemetry peer ranges before choosing a later version |
@@ -29,13 +30,13 @@ CI runs the production critical/high gate and a full-tree critical gate. The ful
 
 The Inngest SDK uses Zod's legacy compatibility entry point for its own schemas. Application request validation uses the patched main API. A package-wide version override does not mean every bundled legacy API acquired the same fixes. In the retained SDK, the constrained legacy array holds developer-owned concurrency configuration; cloud execution parsing follows signature validation. Recheck those boundaries when changing the SDK or exposing development mode.
 
-## Unpatched development-tool finding
+## Withdrawn development-tool advisory
 
-As of November 18, 2026, [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) affects the published Picomatch versions, including latest 4.0.7. The advisory reports excessive regular-expression backtracking for attacker-controlled repeated-extglob patterns. There is no published patched version to select.
+The November 18, 2026 audit reported [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) through development tools that use Picomatch. The maintainer accepted a development-tool exception at that time.
 
-The remaining high findings in this dependency update inherit that advisory through development tools. The production dependency audit excludes those paths after moving the unused runtime CLI to development dependencies. Application source does not import Picomatch or accept glob patterns for these tools; patterns come from repository configuration and developer commands.
+GitHub has since marked the advisory withdrawn on November 18, with its record updated November 19, because the reported behavior is not a security issue. The November 22 audit no longer reports this advisory. This changed advisory status does not mean that a package upgrade fixed it.
 
-The maintainer accepted this development-tool exception on November 18, 2026. The parser finding remains unresolved. Keep untrusted patterns out of local tooling and review changes to build/test configuration before running them with privileged credentials. Do not rename a vulnerable package, suppress the advisory globally, or claim that moving a tool fixes its parser. Recheck the upstream advisory and replace this exception when a verified patch is available.
+The earlier exception is historical and does not approve future findings. Keep audit gates enabled and review changes to build/test configuration before running them with privileged credentials. Do not rename vulnerable packages or suppress advisories globally.
 
 ## Roll back an incompatible update
 
