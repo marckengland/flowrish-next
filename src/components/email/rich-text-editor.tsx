@@ -314,8 +314,9 @@ export function RichTextEditor({
       }
     }
 
-    document.addEventListener('keydown', onKey, true)
-    return () => document.removeEventListener('keydown', onKey, true)
+    const editorElement = editor.view.dom
+    editorElement.addEventListener('keydown', onKey, true)
+    return () => editorElement.removeEventListener('keydown', onKey, true)
   }, [
     enablePersonalization,
     tagState.open,

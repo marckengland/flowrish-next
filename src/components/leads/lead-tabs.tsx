@@ -24,20 +24,8 @@ import { EmailsTab } from './lead-emails'
 import { FileUpload } from '@/components/activities/file-upload'
 import type { ActivityItem } from '@/hooks/use-activities'
 
-/**
- * Tabbed lead detail surface — "Activities" (timeline + composer +
- * email + file upload), "Contacts" (linked contacts list with link /
- * unlink), "Tasks" (per-lead task list with quick-complete), and
- * "Audit Log" (entity-scoped audit history).
- *
- * The tabs share state at the page level so switching tabs is instant
- * and the activity timeline retains its TanStack Query cache. Each tab
- * is rendered eagerly (rather than lazily mounted) so the React Query
- * hooks inside fire once and stay warm — critical for the activity tab
- * which the user will return to frequently.
- *
- * Validates: Requirements 4.1, 4.4, 18.1, 19.4, 20.3, 31.1
- */
+// Keep draft-bearing panes mounted after their first visit. Other panes
+// load on demand. Changing leads resets both the tabs and their local edits.
 
 type TabKey = 'activities' | 'emails' | 'contacts' | 'tasks' | 'audit'
 
@@ -78,7 +66,11 @@ export interface LeadTabsProps {
   canWrite: boolean
 }
 
-export function LeadTabs({
+export function LeadTabs(props: LeadTabsProps): React.JSX.Element {
+  return <LeadTabsContent key={props.leadId} {...props} />
+}
+
+function LeadTabsContent({
   leadId,
   leadName,
   leadEmail,
@@ -88,10 +80,11 @@ export function LeadTabs({
   canWrite,
 }: LeadTabsProps): React.JSX.Element {
   const [active, setActive] = useState<TabKey>('activities')
+  const [emailsVisited, setEmailsVisited] = useState(false)
 
   return (
-    <div className="rounded-lg border bg-card">
-      <div role="tablist" aria-label="Lead detail" className="flex border-b">
+    <div className="min-w-0 rounded-lg border bg-card">
+      <div role="tablist" aria-label="Lead detail" className="flex overflow-x-auto border-b">
         {TABS.map((tab) => {
           const Icon = tab.icon
           const isActive = active === tab.key
@@ -100,9 +93,12 @@ export function LeadTabs({
               key={tab.key}
               role="tab"
               aria-selected={isActive}
-              onClick={() => setActive(tab.key)}
+              onClick={() => {
+                setActive(tab.key)
+                if (tab.key === 'emails') setEmailsVisited(true)
+              }}
               className={cn(
-                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors',
+                'flex shrink-0 items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors',
                 isActive
                   ? 'border-b-2 border-primary text-primary'
                   : 'text-muted-foreground hover:text-foreground',
@@ -115,10 +111,7 @@ export function LeadTabs({
         })}
       </div>
       <div className="p-4">
-        {/* Each tab pane is mounted/unmounted on demand so we don't pay for
-            the unused tabs' fetches. The activity timeline keeps its
-            cache via TanStack Query so re-mounting is cheap. */}
-        {active === 'activities' && (
+        <div hidden={active !== 'activities'}>
           <ActivitiesTab
             leadId={leadId}
             leadName={leadName}
@@ -127,8 +120,8 @@ export function LeadTabs({
             latestThread={latestThread}
             canWrite={canWrite}
           />
-        )}
-        {active === 'emails' && (
+        </div>
+        {emailsVisited && <div hidden={active !== 'emails'}>
           <EmailsTab
             leadId={leadId}
             leadName={leadName}
@@ -136,7 +129,7 @@ export function LeadTabs({
             latestThread={latestThread}
             canWrite={canWrite}
           />
-        )}
+        </div>}
         {active === 'contacts' && (
           <ContactsTab
             leadId={leadId}
