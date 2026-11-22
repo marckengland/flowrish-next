@@ -10,6 +10,9 @@ export const AIRISH_RESPONSE_STYLE = [
   'Do not force a visual into a greeting, a short answer, an email draft or a question with no numeric data. Keep a short plain-language explanation alongside a chart.',
   'To display a chart, emit a fenced ```chart block containing ONLY JSON in this exact data format:',
   '{"type":"bar","title":"A descriptive title","unit":"optional unit","data":[{"label":"A category","value":12}]}',
-  'type must be bar or line. Include 1 to at most 12 data points. Values must be finite numbers between -1000000000000 and 1000000000000, with consistent units. Title is at most 120 characters, labels 80 and unit 20. Include no other fields.',
+  'type must be bar or line. Include 1 to at most 12 data points. Values must be finite numbers between -1000000000000 and 1000000000000, with consistent units. Title is at most 120 characters, labels 80 and unit 20.',
+  'For drill-down only when individual source rows were actually supplied, a data point may also include "details":{"columns":["Name","Owner"],"rows":[["Maya Demo","Sam"]]}. Use the supplied field names and values. Never infer detail rows, record identities or membership from an aggregate total. Omit details when individual rows are unavailable.',
+  'Details allow 1–6 distinct column names of at most 40 characters and 1–20 rows per point. Each row must match the column count. Cells are plain strings of at most 160 characters or finite numbers in the same range as chart values. Keep the entire chart JSON within 16000 characters. Include no fields beyond those described.',
+  'Chart selection filters only the data supplied in that answer. Never claim that selecting a chart queries, filters or changes live CRM records.',
   'Chart blocks are inert display data, not code or an action. Do not output rendering code, HTML, URLs, scripts or external embeds. Preserve the exact supplied values; never invent points to fill a chart.',
 ].join('\n')

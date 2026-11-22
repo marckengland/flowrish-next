@@ -36,6 +36,32 @@ Airish should not invent CRM figures, prices, or guarantees to complete a visual
 
 The interface renders Markdown tables and bounded bar/line charts. Charts also expose exact values in a table. Unsupported or malformed chart data must not become executable page content.
 
+Select a bar, line point, or category in the chart's table to filter that table. Select it again or choose **Show all** to clear the selection. Other plotted points remain visible for comparison. Plot controls and category buttons support the keyboard as well as a pointer or touch.
+
+When the answer includes underlying rows, select a category and choose **View details** to inspect them. A chart with only aggregate figures explains that underlying rows were not supplied. These controls use data already in the answer. They do not query or filter live CRM records, navigate to leads, generate another answer, or approve an action. Selecting a chart preserves your message draft and pending action review.
+
+For a chart with drill-down data, each point can optionally include a detail table:
+
+```json
+{
+  "type": "bar",
+  "title": "Supplied sample pipeline",
+  "unit": "deals",
+  "data": [{
+    "label": "Qualified",
+    "value": 2,
+    "details": {
+      "columns": ["Name", "Next step"],
+      "rows": [["Maya Demo", "Review outline"], ["Luis Example", "Retry call"]]
+    }
+  }]
+}
+```
+
+This example uses fictional data. Details must come from individual rows supplied in the conversation or reference context. An aggregate total does not establish which records belong to it. The schema permits up to six distinct columns and 20 rows per point. Column names have a 40-character limit; text cells have a 160-character limit. Numeric cells use the same finite range as plotted values. Each row must match the column count. The whole chart block retains its 16,000-character limit. Detail cells render as text, with no executable markup, links, or actions.
+
+Selections stay local to each chart. Loading another chart dataset or reopening an answer resets the selection. Existing saved charts without detail rows remain supported.
+
 Streaming can stop before a response finishes. Treat incomplete output as incomplete; retrying a request can consume additional provider allowance. Closing the stream attempts to cancel the upstream transport but cannot undo processing already accepted by the provider.
 
 Published Library passages are retrieved through PostgreSQL full-text search. Drafts are excluded. A citation identifies the document title and revision supplied at that time; it is not a guarantee that an answer is correct or that the document remains published.

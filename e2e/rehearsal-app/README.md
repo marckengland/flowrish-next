@@ -8,7 +8,7 @@ Workspace scenarios use a synthetic `mock_workspace` cookie only in this fixture
 
 The runner removes inherited credentials and URLs. Server sockets can reach only its selected loopback ports; private environment files cannot be read (the checked-in `.env.example` template is permitted). Chromium uses a proxy that permits fixture reads and blocks every other destination or unmocked mutation. Negative probes verify these guards before the workflows run. Any guard violation fails the command even if the UI swallows the error. Results are under the ignored `test-results/rehearsal/` directory.
 
-There is no auth setup, saved browser session, retry, or production base URL. All 124 scenarios must pass without skips. Update the explicit selection and count together when adding coverage. CI runs this command alongside the unit suite; migrations wait for both checks. CI generates the project's Prisma types with dummy URLs and makes no database connection.
+There is no auth setup, saved browser session, retry, or production base URL. All selected scenarios must pass without skips. Use the runner summary for the current required count. Update the explicit selection and count together when adding coverage. CI runs this command alongside the unit suite; migrations wait for both checks. CI generates the project's Prisma types with dummy URLs and makes no database connection.
 
 This fixture checks client workflows. Production authentication and database transactions remain separate coverage. The normal Flowrish app gains no test login mode or fixture routes. Production receptionist/widget settings are never changed.
 
