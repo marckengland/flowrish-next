@@ -505,6 +505,24 @@ async function* callAIStream(
  */
 const CHAT_ACTION_MARKERS = ['[ACTION]', '[NAVIGATE:'] as const
 
+// Keep fenced display data opaque to the action protocol. Spaces retain the
+// original offsets, including while a streamed fence is still incomplete.
+function outsideFencedData(text: string): string {
+  let fenceLength = 0
+  return text.split('\n').map(line => {
+    const fence = /^\s*(`{3,})([^`]*)$/.exec(line)
+    if (fenceLength) {
+      if (fence && fence[1].length >= fenceLength && !fence[2].trim()) fenceLength = 0
+      return ' '.repeat(line.length)
+    }
+    if (fence) {
+      fenceLength = fence[1].length
+      return ' '.repeat(line.length)
+    }
+    return line
+  }).join('\n')
+}
+
 /**
  * Returns the index up to which `text` is safe to reveal to the user —
  * i.e. everything before a started action marker. If a full marker is
@@ -513,16 +531,17 @@ const CHAT_ACTION_MARKERS = ['[ACTION]', '[NAVIGATE:'] as const
  * flashes on screen before the rest of `[ACTION]` arrives).
  */
 function safeStreamBoundary(text: string): number {
+  const outside = outsideFencedData(text)
   let boundary = text.length
   for (const marker of CHAT_ACTION_MARKERS) {
-    const idx = text.indexOf(marker)
+    const idx = outside.indexOf(marker)
     if (idx !== -1 && idx < boundary) boundary = idx
   }
   if (boundary < text.length) return boundary
 
   const maxHold = Math.max(...CHAT_ACTION_MARKERS.map((m) => m.length)) - 1
   for (let hold = Math.min(maxHold, text.length); hold > 0; hold--) {
-    const tail = text.slice(text.length - hold)
+    const tail = outside.slice(text.length - hold)
     if (CHAT_ACTION_MARKERS.some((marker) => marker.startsWith(tail))) {
       return text.length - hold
     }
@@ -1117,13 +1136,14 @@ export function extractActionBlock(text: string): {
   message: string
   action?: ChatAction
 } {
-  const match = text.match(/\[ACTION\]([\s\S]*?)\[\/ACTION\]/)
+  const outside = outsideFencedData(text)
+  const match = outside.match(/\[ACTION\]([\s\S]*?)\[\/ACTION\]/)
   if (!match) {
     // Fall back to the legacy single-line `[NAVIGATE: /path]` marker
     // we shipped in the previous iteration so older deployments still
     // benefit from navigate actions during the transition.
     const legacy = text.match(/\[NAVIGATE:\s*(\/[^\]\s]*)\s*\]\s*$/)
-    if (legacy) {
+    if (legacy && outside.startsWith('[NAVIGATE:', legacy.index)) {
       const path = legacy[1]
       const cleaned = text.slice(0, legacy.index).trim()
       return {
@@ -1138,11 +1158,12 @@ export function extractActionBlock(text: string): {
     return { message: text.trim() }
   }
 
-  const cleaned = text.replace(/\[ACTION\][\s\S]*?\[\/ACTION\]/, '').trim()
+  const start = match.index ?? 0
+  const cleaned = (text.slice(0, start) + text.slice(start + match[0].length)).trim()
 
   let parsed: unknown
   try {
-    parsed = JSON.parse(match[1].trim())
+    parsed = JSON.parse(text.slice(start + '[ACTION]'.length, start + match[0].length - '[/ACTION]'.length).trim())
   } catch {
     return { message: cleaned }
   }
