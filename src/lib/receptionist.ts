@@ -154,7 +154,8 @@ export async function advanceCall(previous: CallState, input: CallInput, config:
   if (state.fullName && phoneSchema.safeParse(state.phone).success && state.reason) {
     state.awaitingConfirmation = true
     state.fallbackField = null
-    return respond(`I have your name as ${state.fullName}, your callback number as ${state.phone.split('').join(' ')}, and your request as: ${state.reason}. Is that correct? Say yes or press 1 to save your callback request, or tell me what to change.`)
+    const request = /[.!?]$/.test(state.reason) ? state.reason : `${state.reason}.`
+    return respond(`I have your name as ${state.fullName}, your callback number as ${state.phone.split('').join(' ')}, and your request as: ${request} Is that correct? Say yes or press 1 to save your callback request, or tell me what to change.`)
   }
   if (state.fallbackField) {
     state.fallbackField = !state.fullName ? 'fullName' : !state.phone ? 'phone' : 'reason'

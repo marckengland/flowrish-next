@@ -65,6 +65,26 @@ describe('receptionist conversation', () => {
     expect(corrected.state.phone).toBe('+639191234567')
   })
 
+  it.each([
+    ['CSV import and a demo.', 'CSV import and a demo.'],
+    ['Can the team help with CSV import?', 'Can the team help with CSV import?'],
+    ['Please call about CSV import!', 'Please call about CSV import!'],
+    ['CSV import and a demo', 'CSV import and a demo.'],
+  ])('reads back a request with natural punctuation: %s', async (reason, sentence) => {
+    const generate = vi.fn().mockResolvedValue({ ...extracted, reason })
+    const result = await advanceCall(initialCallState('+639181234567'), { speech: 'Please call me about CSV import.' }, config, generate)
+
+    expect(result.reply).toContain(`your request as: ${sentence} Is that correct?`)
+    expect(result.state.reason).toBe(reason)
+    expect(result.state.awaitingConfirmation).toBe(true)
+    expect(result.capture).toBe(false)
+
+    const confirmed = await advanceCall(result.state, { speech: 'yes' }, config, generate)
+    expect(confirmed.capture).toBe(true)
+    expect(confirmed.state.reason).toBe(reason)
+    expect(generate).toHaveBeenCalledTimes(1)
+  })
+
   it('ends repeated silence without creating a lead or callback', async () => {
     const generate = vi.fn()
     const first = await advanceCall(initialCallState('anonymous'), {}, config, generate)
