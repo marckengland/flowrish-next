@@ -22,6 +22,8 @@ Before contacting a provider, Flowrish atomically reserves one request and a con
 
 Reservations are not refunded after failures, timeouts, or cancellation, because the provider may already have processed the request. Provider-reported tokens are tracked separately. If reported usage exceeds a reservation, the reserved counter increases by the difference. These are application limits, not an exact provider invoice or a currency spending cap. Check the provider's billing dashboard for actual charges.
 
+OpenAI streaming requests ask for final token usage. An interrupted stream may omit that report; missing usage does not mean the request was free. Flowrish retains the reservation.
+
 Closing an Airish response or aborting its HTTP request closes the upstream transport. Interrupted output without a provider completion marker is reported as an error. Partial knowledge replies retain the existing provenance marker so they cannot become future CRM action instructions.
 
 Saving AI configuration does not connect Twilio or place a call. Automated verification uses synthetic keys and mocked provider transport. A live provider check requires a saved key and an explicit test.

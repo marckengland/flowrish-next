@@ -283,6 +283,7 @@ async function prepareAiRequest(organizationId: string | undefined, messages: Ar
     model: endpoint.model, messages,
     ...(hostname === 'api.openai.com' ? { max_completion_tokens: outputTokens } : { temperature, max_tokens: outputTokens }),
     ...(stream ? { stream: true } : {}),
+    ...(stream && hostname === 'api.openai.com' ? { stream_options: { include_usage: true } } : {}),
     ...(structuredOutput ? { response_format: responseFormat, reasoning_effort: 'low' } : {}),
     ...(hostname === 'api.deepseek.com' ? { thinking: { type: 'disabled' }, ...(responseFormat ? { response_format: { type: 'json_object' } } : {}) } : {}),
   }
