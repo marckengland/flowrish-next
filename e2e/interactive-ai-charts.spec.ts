@@ -1,11 +1,11 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test'
+import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test'
 
 test.use({ storageState: { cookies: [], origins: [] }, serviceWorkers: 'block' })
 const id = '11111111-1111-4111-8111-111111111111'
 const chart = {
   type: 'bar', title: 'Supplied pipeline', unit: 'deals',
   data: [
-    { label: 'Qualified', value: 2, details: { columns: ['Name', 'Next step'], rows: [['Maya Demo', 'Review outline'], ['Luis Example', '<img src=x onerror=alert(1)>']] } },
+    { label: 'Qualified', value: 2, details: { columns: ['Name', 'Owner', 'Next step'], rows: [['Maya Demo', 'Sam', 'Review outline'], ['Luis Example', 'Ari', '<img src=x onerror=alert(1)>']] } },
     { label: 'Won', value: 1 },
   ],
 }
@@ -51,6 +51,30 @@ async function layout(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 }
 
+async function readableChartLabels(plot: Locator) {
+  const metrics = await plot.locator('text').evaluateAll(labels => {
+    const canvas = document.createElement('canvas'), context = canvas.getContext('2d')!
+    const rgb = (color: string) => {
+      context.clearRect(0, 0, 1, 1); context.fillStyle = color; context.fillRect(0, 0, 1, 1)
+      return Array.from(context.getImageData(0, 0, 1, 1).data).slice(0, 3)
+    }
+    const luminance = (channels: number[]) => channels.map(value => { const channel = value / 255; return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4 }).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0)
+    return labels.map(label => {
+      const background = rgb(getComputedStyle(label.closest('figure')!).backgroundColor)
+      let opacity = 1
+      for (let element: Element | null = label; element && element.tagName.toLowerCase() !== 'figure'; element = element.parentElement) opacity *= Number(getComputedStyle(element).opacity)
+      const foreground = rgb(getComputedStyle(label).fill).map((value, index) => value * opacity + background[index] * (1 - opacity))
+      const light = luminance(foreground), dark = luminance(background)
+      return { text: label.textContent, opacity, contrast: (Math.max(light, dark) + 0.05) / (Math.min(light, dark) + 0.05) }
+    })
+  })
+  expect(metrics.length).toBeGreaterThan(0)
+  for (const metric of metrics) {
+    expect.soft(metric.opacity, `Label ${metric.text} must not fade with another point`).toBe(1)
+    expect.soft(metric.contrast, `Label ${metric.text} contrast`).toBeGreaterThanOrEqual(4.5)
+  }
+}
+
 for (const width of [1280, 390]) {
   test(`airish interactive bar filters and drills into supplied rows at ${width}px`, async ({ page, context, baseURL }, info) => {
     await page.setViewportSize({ width, height: 900 })
@@ -64,6 +88,12 @@ for (const width of [1280, 390]) {
     const details = panel.getByRole('table', { name: 'Qualified supplied rows', exact: true })
     await expect(details.getByRole('cell', { name: 'Maya Demo', exact: true })).toBeVisible()
     await expect(details.getByRole('cell', { name: '<img src=x onerror=alert(1)>', exact: true })).toBeVisible()
+    await readableChartLabels(panel.getByRole('img', { name: 'Supplied pipeline', exact: true }))
+    const headerLines = await details.getByRole('columnheader', { name: 'Owner', exact: true }).evaluate(header => {
+      const range = document.createRange(); range.selectNodeContents(header)
+      return new Set(Array.from(range.getClientRects(), rect => Math.round(rect.top))).size
+    })
+    expect.soft(headerLines, 'The short Owner header must stay on one line').toBe(1)
     await expect(panel.locator('img, script, iframe, a')).toHaveCount(0)
     await layout(page); await page.screenshot({ path: info.outputPath('supplied-details.png') })
     await panel.getByRole('button', { name: 'Show all', exact: true }).click()
@@ -84,6 +114,7 @@ for (const width of [1280, 390]) {
     await first.press('Tab'); await expect(second).toBeFocused(); await second.press('Enter')
     await expect(second).toHaveAttribute('aria-pressed', 'true')
     await expect(table.getByRole('row').nth(1).getByRole('cell').nth(2)).toHaveText('-2.5')
+    await readableChartLabels(panel.getByRole('img', { name: 'Supplied changes', exact: true }))
     await second.press('Enter'); await expect(table.getByRole('row')).toHaveCount(3)
     await layout(page); expect(state.chats).toBe(1); expect(state.unexpected).toEqual([])
   })
